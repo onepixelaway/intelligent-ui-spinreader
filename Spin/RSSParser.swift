@@ -13,6 +13,7 @@ final class RSSParser: NSObject, XMLParserDelegate {
         var content: String = ""
         var pubDate: String?
         var author: String?
+        var category: String?
         var guid: String?
     }
 
@@ -45,10 +46,10 @@ final class RSSParser: NSObject, XMLParserDelegate {
     ) {
         let name = elementName.lowercased()
         elementStack.append(name)
+        currentText = ""
 
         if name == "item" || name == "entry" {
             currentItem = ParsedItem()
-            currentText = ""
             return
         }
 
@@ -59,6 +60,13 @@ final class RSSParser: NSObject, XMLParserDelegate {
             } else if currentItem?.link == nil {
                 currentItem?.link = href
             }
+        }
+
+        if name == "category", currentItem != nil,
+           (currentItem?.category?.isEmpty ?? true),
+           let term = attributeDict["term"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !term.isEmpty {
+            currentItem?.category = decodeHTMLEntities(term)
         }
     }
 
@@ -93,10 +101,9 @@ final class RSSParser: NSObject, XMLParserDelegate {
         }
 
         if currentItem != nil {
-            var consumed = true
             switch name {
             case "title":
-                currentItem?.title = trimmed
+                currentItem?.title = decodeHTMLEntities(trimmed)
             case "link":
                 if (currentItem?.link?.isEmpty ?? true), !trimmed.isEmpty {
                     currentItem?.link = trimmed
@@ -111,28 +118,30 @@ final class RSSParser: NSObject, XMLParserDelegate {
                 if currentItem?.pubDate == nil { currentItem?.pubDate = trimmed }
             case "author", "dc:creator", "creator":
                 if (currentItem?.author?.isEmpty ?? true), !trimmed.isEmpty {
-                    currentItem?.author = trimmed
+                    currentItem?.author = decodeHTMLEntities(trimmed)
                 }
             case "name":
                 if (currentItem?.author?.isEmpty ?? true),
                    !trimmed.isEmpty,
                    elementStack.dropLast().last == "author" {
-                    currentItem?.author = trimmed
+                    currentItem?.author = decodeHTMLEntities(trimmed)
+                }
+            case "category":
+                if (currentItem?.category?.isEmpty ?? true), !trimmed.isEmpty {
+                    currentItem?.category = decodeHTMLEntities(trimmed)
                 }
             case "guid", "id":
                 if currentItem?.guid == nil { currentItem?.guid = trimmed }
             default:
-                consumed = false
+                break
             }
-            if consumed { currentText = "" }
             return
         }
 
         if name == "title", feedTitle.isEmpty {
             let parents = elementStack.dropLast()
             if parents.contains(where: { $0 == "channel" || $0 == "feed" }) {
-                feedTitle = trimmed
-                currentText = ""
+                feedTitle = decodeHTMLEntities(trimmed)
             }
         }
     }
@@ -156,26 +165,7 @@ func stripHTML(_ html: String) -> String {
         )
     }
     text = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-
-    let entities: [(String, String)] = [
-        ("&nbsp;", " "),
-        ("&amp;", "&"),
-        ("&lt;", "<"),
-        ("&gt;", ">"),
-        ("&quot;", "\""),
-        ("&#39;", "'"),
-        ("&apos;", "'"),
-        ("&hellip;", "…"),
-        ("&mdash;", "—"),
-        ("&ndash;", "–"),
-        ("&rsquo;", "’"),
-        ("&lsquo;", "‘"),
-        ("&rdquo;", "”"),
-        ("&ldquo;", "“"),
-    ]
-    for (pattern, replacement) in entities {
-        text = text.replacingOccurrences(of: pattern, with: replacement)
-    }
+    text = decodeHTMLEntities(text)
 
     text = text.replacingOccurrences(
         of: "\\n[ \\t]*\\n([ \\t]*\\n)+",
@@ -183,6 +173,81 @@ func stripHTML(_ html: String) -> String {
         options: .regularExpression
     )
     return text.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+private let htmlNamedEntities: [String: String] = [
+    "nbsp": "\u{00A0}",
+    "amp": "&",
+    "lt": "<",
+    "gt": ">",
+    "quot": "\"",
+    "apos": "'",
+    "hellip": "…",
+    "mdash": "—",
+    "ndash": "–",
+    "rsquo": "\u{2019}",
+    "lsquo": "\u{2018}",
+    "rdquo": "\u{201D}",
+    "ldquo": "\u{201C}",
+    "sbquo": "\u{201A}",
+    "bdquo": "\u{201E}",
+    "copy": "©",
+    "reg": "®",
+    "trade": "™",
+    "middot": "·",
+    "bull": "•",
+    "laquo": "«",
+    "raquo": "»",
+    "deg": "°",
+    "times": "×",
+    "divide": "÷",
+    "pound": "£",
+    "euro": "€",
+    "yen": "¥",
+    "cent": "¢",
+]
+
+func decodeHTMLEntities(_ input: String) -> String {
+    guard input.contains("&") else { return input }
+
+    var result = ""
+    result.reserveCapacity(input.count)
+    var cursor = input.startIndex
+
+    while let ampIndex = input[cursor...].firstIndex(of: "&") {
+        result.append(contentsOf: input[cursor..<ampIndex])
+        let afterAmp = input.index(after: ampIndex)
+        let searchEnd = input.index(afterAmp, offsetBy: 10, limitedBy: input.endIndex) ?? input.endIndex
+
+        if let semiIndex = input[afterAmp..<searchEnd].firstIndex(of: ";"),
+           let replacement = decodeEntityBody(input[afterAmp..<semiIndex]) {
+            result.append(replacement)
+            cursor = input.index(after: semiIndex)
+        } else {
+            result.append("&")
+            cursor = afterAmp
+        }
+    }
+
+    result.append(contentsOf: input[cursor...])
+    return result
+}
+
+private func decodeEntityBody(_ body: Substring) -> String? {
+    guard !body.isEmpty else { return nil }
+    if body.first == "#" {
+        let numeric = body.dropFirst()
+        guard !numeric.isEmpty else { return nil }
+        let code: UInt32?
+        if let first = numeric.first, first == "x" || first == "X" {
+            code = UInt32(numeric.dropFirst(), radix: 16)
+        } else {
+            code = UInt32(numeric)
+        }
+        guard let code, let scalar = Unicode.Scalar(code) else { return nil }
+        return String(Character(scalar))
+    }
+    return htmlNamedEntities[String(body)]
 }
 
 nonisolated(unsafe) private let rfc822Formatters: [DateFormatter] = {

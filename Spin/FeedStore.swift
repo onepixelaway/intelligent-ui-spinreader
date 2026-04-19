@@ -25,7 +25,7 @@ final class FeedStore: ObservableObject {
     @Published private(set) var isRefreshing: Bool = false
 
     private let feedsKey = "spin.feeds.v1"
-    private let articlesKey = "spin.articles.v1"
+    private let articlesKey = "spin.articles.v2"
 
     init() {
         loadFeeds()
@@ -155,6 +155,7 @@ private func makeArticles(from parsed: RSSParser.ParsedFeed, feedID: UUID) -> [A
             feedID: feedID,
             title: item.title.trimmingCharacters(in: .whitespacesAndNewlines),
             author: item.author?.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: item.category?.trimmingCharacters(in: .whitespacesAndNewlines),
             publishedDate: parseFeedDate(item.pubDate),
             link: link,
             body: body

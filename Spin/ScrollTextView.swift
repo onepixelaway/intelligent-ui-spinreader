@@ -185,7 +185,7 @@ struct ScrollTextView: View {
     @State private var visibleParagraphs: [Int] = []
     @State private var spinCount: Int = 0
     @State private var lastAnalyzedText: String = ""
-    @State private var tags: [String] = ["Tag 1", "Tag 2", "Tag 3", "Tag 4", "Tag 5"]
+    @State private var tags: [String] = []
     @State private var currentQuestion: String = ""
     @State private var isLoadingQuestion: Bool = false
     @State private var explainerURL: IdentifiableURL?
@@ -195,6 +195,7 @@ struct ScrollTextView: View {
     private let headerCount: Int
     private let showsBackButton: Bool
     private let topPadding: CGFloat = 20
+    private let backButtonTopPadding: CGFloat = 64
     private let maxTags = 5
     private let topGradientThreshold: CGFloat = 200
 
@@ -209,9 +210,17 @@ struct ScrollTextView: View {
         let trimmedTitle = article.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedTitle.isEmpty { paras.append(trimmedTitle) }
 
+        var bylineParts: [String] = []
+        if let category = article.category?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !category.isEmpty {
+            bylineParts.append(category)
+        }
         if let author = article.author?.trimmingCharacters(in: .whitespacesAndNewlines),
            !author.isEmpty {
-            paras.append(author)
+            bylineParts.append(author)
+        }
+        if !bylineParts.isEmpty {
+            paras.append(bylineParts.joined(separator: " · "))
         }
         let headers = paras.count
 
@@ -277,7 +286,7 @@ struct ScrollTextView: View {
                                     )
                             }
                         }
-                        .padding(.top, topPadding)
+                        .padding(.top, showsBackButton ? backButtonTopPadding : topPadding)
                         .padding(.bottom, 100)
                         .offset(y: scrollState.offset)
                     }
@@ -325,13 +334,15 @@ struct ScrollTextView: View {
             VStack {
                 Spacer()
 
-                FlowLayout(spacing: 6) {
-                    ForEach(tags.prefix(maxTags), id: \.self) { tag in
-                        TagView(text: tag)
+                if !tags.isEmpty {
+                    FlowLayout(spacing: 6) {
+                        ForEach(tags.prefix(maxTags), id: \.self) { tag in
+                            TagView(text: tag)
+                        }
                     }
+                    .frame(maxHeight: 70)
+                    .padding(.horizontal, 16)
                 }
-                .frame(maxHeight: 70)
-                .padding(.horizontal, 16)
 
                 Text(currentQuestion)
                     .font(.system(size: 14, weight: .medium))
@@ -428,9 +439,7 @@ struct ScrollTextView: View {
         await MainActor.run {
             var merged = tags
             for entity in extracted where !merged.contains(entity) {
-                if let placeholderIndex = merged.firstIndex(where: { $0.hasPrefix("Tag ") }) {
-                    merged[placeholderIndex] = entity
-                } else if merged.count < maxTags {
+                if merged.count < maxTags {
                     merged.append(entity)
                 }
             }

@@ -17,6 +17,7 @@ struct Article: Identifiable, Codable, Hashable, Sendable {
     var feedID: UUID
     var title: String
     var author: String?
+    var category: String?
     var publishedDate: Date?
     var link: URL?
     var body: String
