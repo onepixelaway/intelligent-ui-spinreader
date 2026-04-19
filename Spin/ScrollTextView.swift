@@ -113,6 +113,20 @@ enum ReaderMargins: String, CaseIterable, Identifiable {
     }
 }
 
+enum ReaderScrollMode: String, CaseIterable, Identifiable {
+    case fluid
+    case paginated
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .fluid: return "Fluid"
+        case .paginated: return "Chunked"
+        }
+    }
+}
+
 @MainActor
 final class ReaderSettings: ObservableObject {
     private enum Keys {
@@ -121,6 +135,7 @@ final class ReaderSettings: ObservableObject {
         static let fontFamily = "reader.fontFamily"
         static let margins = "reader.margins"
         static let dimLevel = "reader.dimLevel"
+        static let scrollMode = "reader.scrollMode"
     }
 
     @Published var fontSize: Double {
@@ -153,6 +168,12 @@ final class ReaderSettings: ObservableObject {
             UserDefaults.standard.set(dimLevel, forKey: Keys.dimLevel)
         }
     }
+    @Published var scrollMode: ReaderScrollMode {
+        didSet {
+            guard scrollMode != oldValue else { return }
+            UserDefaults.standard.set(scrollMode.rawValue, forKey: Keys.scrollMode)
+        }
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -162,6 +183,7 @@ final class ReaderSettings: ObservableObject {
         self.fontFamily = defaults.string(forKey: Keys.fontFamily).flatMap(ReaderFontFamily.init(rawValue:)) ?? .system
         self.margins = defaults.string(forKey: Keys.margins).flatMap(ReaderMargins.init(rawValue:)) ?? .normal
         self.dimLevel = min(max(defaults.double(forKey: Keys.dimLevel), 0), 0.7)
+        self.scrollMode = defaults.string(forKey: Keys.scrollMode).flatMap(ReaderScrollMode.init(rawValue:)) ?? .fluid
     }
 
     var titleSize: CGFloat { CGFloat(fontSize) + 9 }
@@ -173,6 +195,14 @@ final class ReaderSettings: ObservableObject {
 
     func lineSpacingPt(for size: CGFloat) -> CGFloat {
         size * (lineSpacing.multiplier - 1.0) / 2
+    }
+
+    var paginatedChunkHeight: CGFloat {
+        let size = paragraphSize
+        let systemFontLineHeightRatio: CGFloat = 1.2
+        let linesPerChunk: CGFloat = 5
+        let lineToLine = size * systemFontLineHeightRatio + lineSpacingPt(for: size)
+        return lineToLine * linesPerChunk
     }
 }
 
@@ -470,10 +500,10 @@ struct ScrollTextView: View {
                         .offset(y: scrollState.offset)
                     }
                     .coordinateSpace(name: "scroll")
-                    .frame(maxWidth: .infinity, maxHeight: geometry.size.height * 0.65, alignment: .top)
+                    .frame(maxWidth: .infinity, maxHeight: geometry.size.height * 0.58, alignment: .top)
                     .scrollDisabled(true)
                     .onPreferenceChange(ParagraphPositionKey.self) { positions in
-                        let visibleHeight = geometry.size.height * 0.65 * 0.60
+                        let visibleHeight = geometry.size.height * 0.58 * 0.60
                         let viewport = CGRect(x: 0, y: 0, width: geometry.size.width, height: visibleHeight)
                         visibleParagraphs = positions
                             .filter { $0.value.intersects(viewport) }
@@ -489,7 +519,7 @@ struct ScrollTextView: View {
                             startPoint: .top,
                             endPoint: .bottom
                         )
-                        .frame(height: geometry.size.height * 0.65 * 0.4)
+                        .frame(height: geometry.size.height * 0.58 * 0.4)
                         .allowsHitTesting(false)
                     }
                 }
@@ -510,9 +540,21 @@ struct ScrollTextView: View {
                 .position(x: geometry.size.width / 2, y: geometry.size.height * 0.075)
             }
 
-            VStack {
-                Spacer()
+            ScrollWheel { direction in
+                showTopGradient = abs(scrollState.offset) > topGradientThreshold
+                let chunk: CGFloat? = readerSettings.scrollMode == .paginated ? readerSettings.paginatedChunkHeight : nil
+                scrollState.handleScroll(direction: direction, paginatedChunk: chunk)
 
+                spinCount += 1
+                if spinCount >= 2 {
+                    spinCount = 0
+                    handleAnalysisRequest()
+                }
+            }
+            .frame(width: geometry.size.width * 0.3, height: geometry.size.width * 0.3)
+            .position(x: geometry.size.width / 2, y: geometry.size.height * 0.68)
+
+            VStack(spacing: 4) {
                 if !tags.isEmpty {
                     FlowLayout(spacing: 6) {
                         ForEach(tags.prefix(maxTags), id: \.self) { tag in
@@ -539,29 +581,8 @@ struct ScrollTextView: View {
                     .sheet(item: $explainerURL) { item in
                         SafariView(url: item.url)
                     }
-
-                VStack(spacing: 0) {
-                    Spacer()
-                        .frame(height: 60)
-
-                    HStack {
-                        Spacer()
-                        ScrollWheel { direction in
-                            showTopGradient = abs(scrollState.offset) > topGradientThreshold
-                            scrollState.handleScroll(direction: direction)
-
-                            spinCount += 1
-                            if spinCount >= 2 {
-                                spinCount = 0
-                                handleAnalysisRequest()
-                            }
-                        }
-                        .frame(width: geometry.size.width * 0.25, height: geometry.size.width * 0.25)
-                        Spacer()
-                    }
-                }
-                .padding(.bottom, 35)
             }
+            .position(x: geometry.size.width / 2, y: geometry.size.height * 0.88)
 
             if showsBackButton {
                 Button {
@@ -759,15 +780,28 @@ final class ScrollState: ObservableObject {
     private let activeFrameNanos: UInt64 = 8_333_333
     private let idleFrameNanos: UInt64 = 50_000_000
     private let momentumSpring = Animation.interpolatingSpring(stiffness: 170, damping: 25)
+    private let paginatedSnapSpring = Animation.spring(response: 0.35, dampingFraction: 0.85)
 
     init() {
         startMomentumTimer()
     }
 
-    func handleScroll(direction: Double) {
+    func handleScroll(direction: Double, paginatedChunk: CGFloat? = nil) {
         let now = CACurrentMediaTime()
         let timeDelta = now - lastScrollTime
         lastScrollTime = now
+
+        if let chunk = paginatedChunk, chunk > 0 {
+            velocity = 0
+            let step = direction * Double(chunk)
+            let target = offset + step
+            let snapped = (target / Double(chunk)).rounded() * Double(chunk)
+            guard snapped != offset else { return }
+            withAnimation(paginatedSnapSpring) {
+                offset = snapped
+            }
+            return
+        }
 
         if direction * velocity > 0 && timeDelta < 0.5 {
             velocity = (velocity + direction * baseScrollSpeed) * acceleration
@@ -1158,6 +1192,7 @@ struct ReaderSettingsSheet: View {
             optionSection("Font", options: ReaderFontFamily.allCases, selection: $settings.fontFamily, label: \.label)
             optionSection("Line spacing", options: ReaderLineSpacing.allCases, selection: $settings.lineSpacing, label: \.label)
             optionSection("Margins", options: ReaderMargins.allCases, selection: $settings.margins, label: \.label)
+            optionSection("Scroll", options: ReaderScrollMode.allCases, selection: $settings.scrollMode, label: \.label)
             brightnessSection
 
             Spacer(minLength: 0)
@@ -1167,7 +1202,7 @@ struct ReaderSettingsSheet: View {
         .padding(.bottom, 28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.black.ignoresSafeArea())
-        .presentationDetents([.height(480)])
+        .presentationDetents([.height(540)])
         .presentationBackground(Color.black)
         .presentationDragIndicator(.visible)
         .preferredColorScheme(.dark)
