@@ -178,6 +178,8 @@ struct ScrollWheel: View {
 }
 
 struct ScrollTextView: View {
+    @Environment(\.dismiss) private var dismiss
+
     @StateObject private var scrollState = ScrollState()
     @State private var showTopGradient: Bool = false
     @State private var visibleParagraphs: [Int] = []
@@ -189,10 +191,41 @@ struct ScrollTextView: View {
     @State private var explainerURL: IdentifiableURL?
     @State private var analysisTask: Task<Void, Never>?
 
-    private let paragraphs: [String] = StoryText.content.components(separatedBy: "\n\n")
+    private let paragraphs: [String]
+    private let headerCount: Int
+    private let showsBackButton: Bool
     private let topPadding: CGFloat = 20
     private let maxTags = 5
     private let topGradientThreshold: CGFloat = 200
+
+    init() {
+        self.paragraphs = StoryText.content.components(separatedBy: "\n\n")
+        self.headerCount = 2
+        self.showsBackButton = false
+    }
+
+    init(article: Article) {
+        var paras: [String] = []
+        let trimmedTitle = article.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty { paras.append(trimmedTitle) }
+
+        var headers = paras.count
+        if let author = article.author?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !author.isEmpty {
+            paras.append(author)
+            headers += 1
+        }
+
+        let bodyParas = article.body
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        paras.append(contentsOf: bodyParas)
+
+        self.paragraphs = paras
+        self.headerCount = max(headers, 1)
+        self.showsBackButton = true
+    }
 
     struct TagView: View {
         let text: String
@@ -340,7 +373,21 @@ struct ScrollTextView: View {
                 }
                 .padding(.bottom, 35)
             }
+
+            if showsBackButton {
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.55))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .position(x: 30, y: 30)
+            }
         }
+        .background(Color.black)
         .portraitOnly()
     }
 
@@ -361,7 +408,7 @@ struct ScrollTextView: View {
         var attributed = AttributedString(paragraph)
         let range = attributed.startIndex..<attributed.endIndex
 
-        let isHeader = index < 2
+        let isHeader = index < headerCount
         if isHeader {
             let isFirstParagraph = index == 0
             let size: CGFloat = isFirstParagraph ? 28 : 22

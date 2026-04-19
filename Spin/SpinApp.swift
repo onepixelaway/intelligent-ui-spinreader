@@ -6,7 +6,7 @@ struct SpinApp: App {
     
     var body: some Scene {
         WindowGroup {
-            ScrollTextView()
+            ArticlePickerView()
         }
     }
 }
