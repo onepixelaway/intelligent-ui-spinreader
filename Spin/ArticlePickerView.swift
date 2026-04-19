@@ -106,11 +106,14 @@ struct ArticlePickerView: View {
                         }
                     }
                 } header: {
-                    Text(feed.title.uppercased())
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(1.2)
-                        .foregroundColor(.gray.opacity(0.55))
-                        .padding(.vertical, 4)
+                    HStack(spacing: 10) {
+                        FaviconView(feedURL: feed.url)
+                        Text(feed.title.uppercased())
+                            .font(.system(size: 11, weight: .semibold))
+                            .tracking(1.2)
+                            .foregroundColor(.gray.opacity(0.55))
+                    }
+                    .padding(.vertical, 4)
                 }
             }
         }
@@ -158,6 +161,37 @@ private struct ArticleRow: View {
             parts.append(Self.dateFormatter.string(from: date))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
+private struct FaviconView: View {
+    let feedURL: URL
+    var size: CGFloat = 26
+
+    var body: some View {
+        AsyncImage(url: Self.faviconURL(for: feedURL), transaction: Transaction(animation: .easeIn(duration: 0.15))) { phase in
+            switch phase {
+            case .success(let image):
+                image
+                    .resizable()
+                    .interpolation(.medium)
+                    .scaledToFill()
+            default:
+                Image(systemName: "globe")
+                    .font(.system(size: size * 0.55, weight: .regular))
+                    .foregroundColor(.gray.opacity(0.5))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .frame(width: size, height: size)
+        .background(Color.white.opacity(0.04))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+
+    private static func faviconURL(for url: URL) -> URL? {
+        guard let host = url.host, !host.isEmpty else { return nil }
+        let domain = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
+        return URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=128")
     }
 }
 
