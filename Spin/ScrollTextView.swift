@@ -209,12 +209,11 @@ struct ScrollTextView: View {
         let trimmedTitle = article.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedTitle.isEmpty { paras.append(trimmedTitle) }
 
-        var headers = paras.count
         if let author = article.author?.trimmingCharacters(in: .whitespacesAndNewlines),
            !author.isEmpty {
             paras.append(author)
-            headers += 1
         }
+        let headers = paras.count
 
         let bodyParas = article.body
             .components(separatedBy: "\n\n")
@@ -223,7 +222,7 @@ struct ScrollTextView: View {
         paras.append(contentsOf: bodyParas)
 
         self.paragraphs = paras
-        self.headerCount = max(headers, 1)
+        self.headerCount = headers
         self.showsBackButton = true
     }
 

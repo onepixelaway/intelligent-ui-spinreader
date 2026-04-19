@@ -8,6 +8,10 @@ struct FeedManagerView: View {
     @State private var isAdding: Bool = false
     @State private var addError: String?
 
+    private var trimmedURL: String {
+        draftURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -73,13 +77,9 @@ struct FeedManagerView: View {
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: 22))
-                        .foregroundColor(
-                            draftURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                ? .gray.opacity(0.4)
-                                : .white
-                        )
+                        .foregroundColor(trimmedURL.isEmpty ? .gray.opacity(0.4) : .white)
                 }
-                .disabled(draftURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .disabled(trimmedURL.isEmpty)
             }
         }
         .padding(.horizontal, 20)
@@ -135,7 +135,7 @@ struct FeedManagerView: View {
     }
 
     private func submit() async {
-        let raw = draftURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = trimmedURL
         guard !raw.isEmpty else { return }
         isAdding = true
         addError = nil

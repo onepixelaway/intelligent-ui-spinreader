@@ -123,7 +123,7 @@ final class FeedStore: ObservableObject {
     }
 }
 
-func fetchFeed(url: URL) async throws -> RSSParser.ParsedFeed {
+private func fetchFeed(url: URL) async throws -> RSSParser.ParsedFeed {
     var request = URLRequest(url: url)
     request.setValue("Spin Reader/1.0", forHTTPHeaderField: "User-Agent")
     request.setValue(
@@ -140,7 +140,7 @@ func fetchFeed(url: URL) async throws -> RSSParser.ParsedFeed {
     return parsed
 }
 
-func makeArticles(from parsed: RSSParser.ParsedFeed, feedID: UUID) -> [Article] {
+private func makeArticles(from parsed: RSSParser.ParsedFeed, feedID: UUID) -> [Article] {
     parsed.items.enumerated().map { offset, item in
         let rawBody = !item.content.isEmpty ? item.content : item.description
         let body = stripHTML(rawBody)
