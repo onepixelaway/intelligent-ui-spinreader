@@ -41,6 +41,141 @@ struct IdentifiableURL: Identifiable {
     var id: URL { url }
 }
 
+enum ReaderFontFamily: String, CaseIterable, Identifiable {
+    case system
+    case serif
+    case monospaced
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .system: return "System"
+        case .serif: return "Serif"
+        case .monospaced: return "Mono"
+        }
+    }
+
+    var design: Font.Design {
+        switch self {
+        case .system: return .default
+        case .serif: return .serif
+        case .monospaced: return .monospaced
+        }
+    }
+}
+
+enum ReaderLineSpacing: String, CaseIterable, Identifiable {
+    case compact
+    case normal
+    case relaxed
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .compact: return "Compact"
+        case .normal: return "Normal"
+        case .relaxed: return "Relaxed"
+        }
+    }
+
+    var multiplier: CGFloat {
+        switch self {
+        case .compact: return 1.2
+        case .normal: return 1.5
+        case .relaxed: return 1.8
+        }
+    }
+}
+
+enum ReaderMargins: String, CaseIterable, Identifiable {
+    case narrow
+    case normal
+    case wide
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .narrow: return "Narrow"
+        case .normal: return "Normal"
+        case .wide: return "Wide"
+        }
+    }
+
+    var horizontalPadding: CGFloat {
+        switch self {
+        case .narrow: return 16
+        case .normal: return 32
+        case .wide: return 48
+        }
+    }
+}
+
+@MainActor
+final class ReaderSettings: ObservableObject {
+    private enum Keys {
+        static let fontSize = "reader.fontSize"
+        static let lineSpacing = "reader.lineSpacing"
+        static let fontFamily = "reader.fontFamily"
+        static let margins = "reader.margins"
+        static let dimLevel = "reader.dimLevel"
+    }
+
+    @Published var fontSize: Double {
+        didSet {
+            guard fontSize != oldValue else { return }
+            UserDefaults.standard.set(fontSize, forKey: Keys.fontSize)
+        }
+    }
+    @Published var lineSpacing: ReaderLineSpacing {
+        didSet {
+            guard lineSpacing != oldValue else { return }
+            UserDefaults.standard.set(lineSpacing.rawValue, forKey: Keys.lineSpacing)
+        }
+    }
+    @Published var fontFamily: ReaderFontFamily {
+        didSet {
+            guard fontFamily != oldValue else { return }
+            UserDefaults.standard.set(fontFamily.rawValue, forKey: Keys.fontFamily)
+        }
+    }
+    @Published var margins: ReaderMargins {
+        didSet {
+            guard margins != oldValue else { return }
+            UserDefaults.standard.set(margins.rawValue, forKey: Keys.margins)
+        }
+    }
+    @Published var dimLevel: Double {
+        didSet {
+            guard dimLevel != oldValue else { return }
+            UserDefaults.standard.set(dimLevel, forKey: Keys.dimLevel)
+        }
+    }
+
+    init() {
+        let defaults = UserDefaults.standard
+        let storedSize = defaults.object(forKey: Keys.fontSize) as? Double
+        self.fontSize = storedSize.map { min(max($0, 14), 28) } ?? 18
+        self.lineSpacing = defaults.string(forKey: Keys.lineSpacing).flatMap(ReaderLineSpacing.init(rawValue:)) ?? .normal
+        self.fontFamily = defaults.string(forKey: Keys.fontFamily).flatMap(ReaderFontFamily.init(rawValue:)) ?? .system
+        self.margins = defaults.string(forKey: Keys.margins).flatMap(ReaderMargins.init(rawValue:)) ?? .normal
+        self.dimLevel = min(max(defaults.double(forKey: Keys.dimLevel), 0), 0.7)
+    }
+
+    var titleSize: CGFloat { CGFloat(fontSize) + 9 }
+    var bylineSize: CGFloat { CGFloat(fontSize) + 3 }
+    var paragraphSize: CGFloat { CGFloat(fontSize) }
+    var blockquoteSize: CGFloat { max(12, CGFloat(fontSize) - 1) }
+    var codeSize: CGFloat { max(10, CGFloat(fontSize) - 5) }
+    var captionSize: CGFloat { max(10, CGFloat(fontSize) - 6) }
+
+    func lineSpacingPt(for size: CGFloat) -> CGFloat {
+        size * (lineSpacing.multiplier - 1.0) / 2
+    }
+}
+
 struct ScrollWheel: View {
     let onScrolled: (Double) -> Void
 
@@ -181,6 +316,7 @@ struct ScrollTextView: View {
     @Environment(\.dismiss) private var dismiss
 
     @StateObject private var scrollState = ScrollState()
+    @StateObject private var readerSettings = ReaderSettings()
     @State private var showTopGradient: Bool = false
     @State private var visibleParagraphs: [Int] = []
     @State private var spinCount: Int = 0
@@ -190,6 +326,7 @@ struct ScrollTextView: View {
     @State private var isLoadingQuestion: Bool = false
     @State private var explainerURL: IdentifiableURL?
     @State private var analysisTask: Task<Void, Never>?
+    @State private var showReaderSettings: Bool = false
 
     enum ReadableItem: Hashable {
         case title(String)
@@ -319,7 +456,7 @@ struct ScrollTextView: View {
                             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                                 readableItemView(item)
                                     .id(index)
-                                    .padding(.horizontal, item.usesWideHorizontalPadding ? 20 : 32)
+                                    .padding(.horizontal, horizontalPadding(for: item))
                                     .background(
                                         GeometryReader { geo in
                                             Color.clear
@@ -438,14 +575,36 @@ struct ScrollTextView: View {
                 }
                 .position(x: 30, y: 30)
 
+                Button {
+                    showReaderSettings = true
+                } label: {
+                    Image(systemName: "textformat.size")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.55))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .position(x: geometry.size.width - (article != nil ? 74 : 30), y: 30)
+
                 if let article {
                     ShareButton(article: article)
                         .position(x: geometry.size.width - 30, y: 30)
                 }
             }
+
+            if readerSettings.dimLevel > 0 {
+                Color.black
+                    .opacity(readerSettings.dimLevel)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
+            }
         }
         .background(Color.black)
         .portraitOnly()
+        .environmentObject(readerSettings)
+        .sheet(isPresented: $showReaderSettings) {
+            ReaderSettingsSheet(settings: readerSettings)
+        }
     }
 
     private func handleAnalysisRequest() {
@@ -468,22 +627,22 @@ struct ScrollTextView: View {
     private func readableItemView(_ item: ReadableItem) -> some View {
         switch item {
         case .title(let text):
-            Text(styledText(text, size: 28, weight: .bold))
-                .lineSpacing(3)
+            Text(styledText(text, size: readerSettings.titleSize, weight: .bold))
+                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.titleSize))
                 .fixedSize(horizontal: false, vertical: true)
                 .lineLimit(nil)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .byline(let text):
-            Text(styledText(text, size: 22, weight: .semibold))
-                .lineSpacing(3)
+            Text(styledText(text, size: readerSettings.bylineSize, weight: .semibold))
+                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.bylineSize))
                 .fixedSize(horizontal: false, vertical: true)
                 .lineLimit(nil)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .paragraph(let text):
-            Text(styledText(text, size: 19, weight: .regular))
-                .lineSpacing(3)
+            Text(styledText(text, size: readerSettings.paragraphSize, weight: .regular))
+                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
                 .fixedSize(horizontal: false, vertical: true)
                 .lineLimit(nil)
                 .multilineTextAlignment(.leading)
@@ -499,10 +658,15 @@ struct ScrollTextView: View {
         }
     }
 
+    private func horizontalPadding(for item: ReadableItem) -> CGFloat {
+        let base = readerSettings.margins.horizontalPadding
+        return item.usesWideHorizontalPadding ? max(8, base - 12) : base
+    }
+
     private func styledText(_ text: String, size: CGFloat, weight: Font.Weight) -> AttributedString {
         var attributed = AttributedString(text)
         let range = attributed.startIndex..<attributed.endIndex
-        attributed[range].font = .system(size: size, weight: weight)
+        attributed[range].font = .system(size: size, weight: weight, design: readerSettings.fontFamily.design)
         attributed[range].foregroundColor = Color(white: 0.92, opacity: 1.0)
         return attributed
     }
@@ -662,6 +826,8 @@ struct ArticleImageView: View {
     let alt: String?
     let caption: String?
 
+    @EnvironmentObject private var settings: ReaderSettings
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             AsyncImage(url: url, transaction: Transaction(animation: .easeIn(duration: 0.2))) { phase in
@@ -688,7 +854,7 @@ struct ArticleImageView: View {
 
             if let caption, !caption.isEmpty {
                 Text(caption)
-                    .font(.system(size: 13, weight: .regular))
+                    .font(.system(size: settings.captionSize, weight: .regular, design: settings.fontFamily.design))
                     .foregroundColor(.gray.opacity(0.65))
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -816,6 +982,8 @@ struct SafariView: UIViewControllerRepresentable {
 struct BlockquoteView: View {
     let text: String
 
+    @EnvironmentObject private var settings: ReaderSettings
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             RoundedRectangle(cornerRadius: 1.5, style: .continuous)
@@ -823,9 +991,9 @@ struct BlockquoteView: View {
                 .frame(width: 3)
 
             Text(text)
-                .font(.system(size: 18, weight: .regular).italic())
+                .font(.system(size: settings.blockquoteSize, weight: .regular, design: settings.fontFamily.design).italic())
                 .foregroundColor(Color(white: 0.78))
-                .lineSpacing(3)
+                .lineSpacing(settings.lineSpacingPt(for: settings.blockquoteSize))
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -837,10 +1005,12 @@ struct BlockquoteView: View {
 struct CodeBlockView: View {
     let text: String
 
+    @EnvironmentObject private var settings: ReaderSettings
+
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             Text(text)
-                .font(.system(size: 14, design: .monospaced))
+                .font(.system(size: settings.codeSize, design: .monospaced))
                 .foregroundColor(Color(white: 0.88))
                 .padding(14)
                 .fixedSize(horizontal: true, vertical: false)
@@ -960,6 +1130,134 @@ struct ShareButton: View {
         var top = root
         while let presented = top.presentedViewController { top = presented }
         top.present(activity, animated: true)
+    }
+}
+
+struct ReaderSettingsSheet: View {
+    @ObservedObject var settings: ReaderSettings
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            HStack {
+                Text("Reader")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.white)
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 22))
+                        .foregroundColor(.white.opacity(0.35))
+                }
+                .buttonStyle(.plain)
+            }
+
+            sizeSection
+            optionSection("Font", options: ReaderFontFamily.allCases, selection: $settings.fontFamily, label: \.label)
+            optionSection("Line spacing", options: ReaderLineSpacing.allCases, selection: $settings.lineSpacing, label: \.label)
+            optionSection("Margins", options: ReaderMargins.allCases, selection: $settings.margins, label: \.label)
+            brightnessSection
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+        .padding(.bottom, 28)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(Color.black.ignoresSafeArea())
+        .presentationDetents([.height(480)])
+        .presentationBackground(Color.black)
+        .presentationDragIndicator(.visible)
+        .preferredColorScheme(.dark)
+    }
+
+    private var sizeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("Size", trailing: "\(Int(settings.fontSize))pt")
+            HStack(spacing: 12) {
+                Text("A")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.45))
+                Slider(value: $settings.fontSize, in: 14...28, step: 1)
+                    .tint(.white.opacity(0.9))
+                Text("A")
+                    .font(.system(size: 22))
+                    .foregroundColor(.white.opacity(0.45))
+            }
+        }
+    }
+
+    private func optionSection<Option: Hashable & Identifiable>(
+        _ title: String,
+        options: [Option],
+        selection: Binding<Option>,
+        label: KeyPath<Option, String>
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader(title)
+            segmentedControl(options: options, selection: selection, label: label)
+        }
+    }
+
+    private var brightnessSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader("Brightness")
+            HStack(spacing: 12) {
+                Image(systemName: "sun.max.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.45))
+                Slider(value: $settings.dimLevel, in: 0...0.7)
+                    .tint(.white.opacity(0.9))
+                Image(systemName: "moon.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.white.opacity(0.45))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func sectionHeader(_ title: String, trailing: String? = nil) -> some View {
+        HStack {
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white.opacity(0.45))
+                .textCase(.uppercase)
+                .tracking(0.5)
+            Spacer()
+            if let trailing {
+                Text(trailing)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.55))
+            }
+        }
+    }
+
+    private func segmentedControl<Option: Hashable & Identifiable>(
+        options: [Option],
+        selection: Binding<Option>,
+        label: KeyPath<Option, String>
+    ) -> some View {
+        HStack(spacing: 6) {
+            ForEach(options) { option in
+                let isSelected = selection.wrappedValue == option
+                Button {
+                    selection.wrappedValue = option
+                } label: {
+                    Text(option[keyPath: label])
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(isSelected ? .black : .white.opacity(0.75))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 36)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.08))
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
     }
 }
 
