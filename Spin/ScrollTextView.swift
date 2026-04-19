@@ -196,10 +196,14 @@ struct ScrollTextView: View {
         case byline(String)
         case paragraph(String)
         case image(url: URL, alt: String?, caption: String?)
+        case blockquote(String)
+        case code(String)
+        case video(videoURL: URL, thumbnailURL: URL?, provider: VideoProvider)
     }
 
     private let items: [ReadableItem]
     private let showsBackButton: Bool
+    private let article: Article?
     private let topPadding: CGFloat = 20
     private let backButtonTopPadding: CGFloat = 64
     private let maxTags = 5
@@ -222,6 +226,7 @@ struct ScrollTextView: View {
 
         self.items = built
         self.showsBackButton = false
+        self.article = nil
     }
 
     init(article: Article) {
@@ -249,19 +254,30 @@ struct ScrollTextView: View {
                 if !trimmed.isEmpty { built.append(.paragraph(trimmed)) }
             case .image(let url, let alt, let caption):
                 built.append(.image(url: url, alt: alt, caption: caption))
+            case .blockquote(let text):
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { built.append(.blockquote(trimmed)) }
+            case .code(let text):
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { built.append(.code(trimmed)) }
+            case .video(let videoURL, let thumbnailURL, let provider):
+                built.append(.video(videoURL: videoURL, thumbnailURL: thumbnailURL, provider: provider))
             }
         }
 
         self.items = built
         self.showsBackButton = true
+        self.article = article
     }
 
     private func textForAnalysis(_ item: ReadableItem) -> String {
         switch item {
-        case .title(let text), .byline(let text), .paragraph(let text):
+        case .title(let text), .byline(let text), .paragraph(let text), .blockquote(let text), .code(let text):
             return text
         case .image(_, let alt, let caption):
             return [alt, caption].compactMap { $0 }.joined(separator: " ")
+        case .video:
+            return ""
         }
     }
 
@@ -303,7 +319,7 @@ struct ScrollTextView: View {
                             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
                                 readableItemView(item)
                                     .id(index)
-                                    .padding(.horizontal, item.isImage ? 20 : 32)
+                                    .padding(.horizontal, item.usesWideHorizontalPadding ? 20 : 32)
                                     .background(
                                         GeometryReader { geo in
                                             Color.clear
@@ -421,6 +437,11 @@ struct ScrollTextView: View {
                         .contentShape(Rectangle())
                 }
                 .position(x: 30, y: 30)
+
+                if let article {
+                    ShareButton(article: article)
+                        .position(x: geometry.size.width - 30, y: 30)
+                }
             }
         }
         .background(Color.black)
@@ -469,6 +490,12 @@ struct ScrollTextView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         case .image(let url, let alt, let caption):
             ArticleImageView(url: url, alt: alt, caption: caption)
+        case .blockquote(let text):
+            BlockquoteView(text: text)
+        case .code(let text):
+            CodeBlockView(text: text)
+        case .video(let videoURL, let thumbnailURL, let provider):
+            VideoEmbedView(videoURL: videoURL, thumbnailURL: thumbnailURL, provider: provider)
         }
     }
 
@@ -620,9 +647,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 extension ScrollTextView.ReadableItem {
-    var isImage: Bool {
-        if case .image = self { return true }
-        return false
+    var usesWideHorizontalPadding: Bool {
+        switch self {
+        case .image, .video, .code:
+            return true
+        default:
+            return false
+        }
     }
 }
 
@@ -780,6 +811,156 @@ struct SafariView: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+struct BlockquoteView: View {
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(Color.white.opacity(0.25))
+                .frame(width: 3)
+
+            Text(text)
+                .font(.system(size: 18, weight: .regular).italic())
+                .foregroundColor(Color(white: 0.78))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct CodeBlockView: View {
+    let text: String
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            Text(text)
+                .font(.system(size: 14, design: .monospaced))
+                .foregroundColor(Color(white: 0.88))
+                .padding(14)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color(red: 0.10, green: 0.10, blue: 0.10))
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct VideoEmbedView: View {
+    let videoURL: URL
+    let thumbnailURL: URL?
+    let provider: VideoProvider
+
+    @State private var sheetURL: IdentifiableURL?
+
+    var body: some View {
+        Button {
+            sheetURL = IdentifiableURL(url: videoURL)
+        } label: {
+            ZStack {
+                Group {
+                    if let thumbnailURL {
+                        AsyncImage(url: thumbnailURL, transaction: Transaction(animation: .easeIn(duration: 0.2))) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                            default:
+                                placeholder
+                            }
+                        }
+                        .clipped()
+                    } else {
+                        placeholder
+                    }
+                }
+                .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                .frame(maxWidth: .infinity)
+
+                LinearGradient(
+                    colors: [.black.opacity(0.0), .black.opacity(0.35)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+                .allowsHitTesting(false)
+
+                Image(systemName: "play.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(18)
+                    .background(Circle().fill(Color.black.opacity(0.55)))
+                    .overlay(Circle().stroke(Color.white.opacity(0.25), lineWidth: 1))
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .accessibilityLabel(provider == .youtube ? "Play YouTube video" : "Play video")
+        }
+        .buttonStyle(.plain)
+        .sheet(item: $sheetURL) { item in
+            SafariView(url: item.url)
+        }
+    }
+
+    private var placeholder: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.04))
+            .overlay {
+                Image(systemName: "video")
+                    .font(.system(size: 24, weight: .light))
+                    .foregroundColor(.gray.opacity(0.4))
+            }
+    }
+}
+
+struct ShareButton: View {
+    let article: Article
+
+    var body: some View {
+        Button {
+            presentShareSheet()
+        } label: {
+            Image(systemName: "square.and.arrow.up")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(.white.opacity(0.55))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+    }
+
+    private func presentShareSheet() {
+        var items: [Any] = []
+        let trimmedTitle = article.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedTitle.isEmpty { items.append(trimmedTitle) }
+        if let url = article.link { items.append(url) }
+        guard !items.isEmpty else { return }
+
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let activeScene = scenes.first(where: { $0.activationState == .foregroundActive }) ?? scenes.first
+        guard let scene = activeScene,
+              let window = scene.windows.first(where: { $0.isKeyWindow }) ?? scene.windows.first,
+              let root = window.rootViewController else { return }
+
+        let activity = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        activity.popoverPresentationController?.sourceView = root.view
+        activity.popoverPresentationController?.sourceRect = CGRect(
+            x: root.view.bounds.midX,
+            y: root.view.bounds.midY,
+            width: 0,
+            height: 0
+        )
+        activity.popoverPresentationController?.permittedArrowDirections = []
+
+        var top = root
+        while let presented = top.presentedViewController { top = presented }
+        top.present(activity, animated: true)
+    }
 }
 
 #Preview {

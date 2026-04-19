@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct ArticlePickerView: View {
     @StateObject private var store = FeedStore()
@@ -121,6 +122,7 @@ struct ArticlePickerView: View {
         .scrollContentBackground(.hidden)
         .background(Color.black)
         .refreshable {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             await store.refresh()
         }
     }
@@ -129,26 +131,26 @@ struct ArticlePickerView: View {
 private struct ArticleRow: View {
     let article: Article
 
-    private static let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }()
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(article.title)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white.opacity(0.95))
-                .lineLimit(3)
-                .multilineTextAlignment(.leading)
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(article.title)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.white.opacity(0.95))
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
 
-            if let meta = metaLine {
-                Text(meta)
-                    .font(.system(size: 12))
-                    .foregroundColor(.gray.opacity(0.6))
-                    .lineLimit(1)
+                if let meta = metaLine {
+                    Text(meta)
+                        .font(.system(size: 12))
+                        .foregroundColor(.gray.opacity(0.6))
+                        .lineLimit(1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let thumbnail = article.heroImageURL {
+                ArticleThumbnail(url: thumbnail)
             }
         }
         .padding(.vertical, 6)
@@ -158,10 +160,41 @@ private struct ArticleRow: View {
         var parts: [String] = []
         if let author = article.author, !author.isEmpty { parts.append(author) }
         if let date = article.publishedDate {
-            parts.append(Self.dateFormatter.string(from: date))
+            parts.append(relativeTimeString(from: date))
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
+}
+
+private struct ArticleThumbnail: View {
+    let url: URL
+    var size: CGFloat = 52
+
+    var body: some View {
+        AsyncImage(url: url, transaction: Transaction(animation: .easeIn(duration: 0.15))) { phase in
+            switch phase {
+            case .success(let image):
+                image
+                    .resizable()
+                    .interpolation(.medium)
+                    .aspectRatio(contentMode: .fill)
+            default:
+                Color.white.opacity(0.04)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+}
+
+nonisolated(unsafe) private let relativeTimeFormatter: RelativeDateTimeFormatter = {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .abbreviated
+    return formatter
+}()
+
+private func relativeTimeString(from date: Date) -> String {
+    relativeTimeFormatter.localizedString(for: date, relativeTo: Date())
 }
 
 private struct FaviconView: View {

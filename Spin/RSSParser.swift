@@ -167,17 +167,33 @@ final class RSSParser: NSObject, XMLParserDelegate {
     }
 }
 
+private let contentBlockRegex = try! NSRegularExpression(
+    pattern: #"<figure\b[^>]*>[\s\S]*?</figure>|<blockquote\b[^>]*>[\s\S]*?</blockquote>|<pre\b[^>]*>[\s\S]*?</pre>|<iframe\b[^>]*>[\s\S]*?</iframe>|<iframe\b[^>]*/?>|<img\b[^>]*/?>"#,
+    options: .caseInsensitive
+)
+private let blockquoteRegex = try! NSRegularExpression(
+    pattern: #"<blockquote\b[^>]*>([\s\S]*?)</blockquote>"#,
+    options: .caseInsensitive
+)
+private let preRegex = try! NSRegularExpression(
+    pattern: #"<pre\b[^>]*>([\s\S]*?)</pre>"#,
+    options: .caseInsensitive
+)
+private let youtubeIDRegex = try! NSRegularExpression(
+    pattern: #"(?:youtube\.com/watch\?(?:[^&]+&)*v=|youtube\.com/embed/|youtube\.com/v/|youtu\.be/|youtube-nocookie\.com/embed/)([A-Za-z0-9_-]{11})"#,
+    options: .caseInsensitive
+)
+private let vimeoIDRegex = try! NSRegularExpression(
+    pattern: #"(?:vimeo\.com/(?:video/|channels/[^/]+/|groups/[^/]+/videos/)?|player\.vimeo\.com/video/)(\d+)"#,
+    options: .caseInsensitive
+)
+
 func parseContentBlocks(_ html: String) -> [ContentBlock] {
     guard !html.isEmpty else { return [] }
 
-    let pattern = #"<figure\b[^>]*>[\s\S]*?</figure>|<img\b[^>]*/?>"#
-    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
-        return textBlocks(from: html)
-    }
-
     let nsString = html as NSString
     let fullRange = NSRange(location: 0, length: nsString.length)
-    let matches = regex.matches(in: html, range: fullRange)
+    let matches = contentBlockRegex.matches(in: html, range: fullRange)
 
     guard !matches.isEmpty else { return textBlocks(from: html) }
 
@@ -191,7 +207,7 @@ func parseContentBlocks(_ html: String) -> [ContentBlock] {
             blocks.append(contentsOf: textBlocks(from: chunk))
         }
         let fragment = nsString.substring(with: range)
-        if let block = parseMediaFragment(fragment) {
+        if let block = parseFragmentBlock(fragment) {
             blocks.append(block)
         }
         cursor = range.location + range.length
@@ -205,6 +221,59 @@ func parseContentBlocks(_ html: String) -> [ContentBlock] {
     return blocks
 }
 
+private func parseFragmentBlock(_ fragment: String) -> ContentBlock? {
+    let lower = fragment.lowercased()
+    if lower.hasPrefix("<blockquote") {
+        return parseBlockquoteFragment(fragment)
+    }
+    if lower.hasPrefix("<pre") {
+        return parseCodeFragment(fragment)
+    }
+    if lower.hasPrefix("<iframe") {
+        return parseIframeFragment(fragment)
+    }
+    return parseMediaFragment(fragment)
+}
+
+private func firstCaptureGroup(_ regex: NSRegularExpression, in string: String) -> String? {
+    let ns = string as NSString
+    guard let match = regex.firstMatch(in: string, range: NSRange(location: 0, length: ns.length)),
+          match.numberOfRanges > 1 else { return nil }
+    return ns.substring(with: match.range(at: 1))
+}
+
+private func parseBlockquoteFragment(_ fragment: String) -> ContentBlock? {
+    guard let inner = firstCaptureGroup(blockquoteRegex, in: fragment) else { return nil }
+    let text = stripHTML(inner)
+    return text.isEmpty ? nil : .blockquote(text)
+}
+
+private func parseCodeFragment(_ fragment: String) -> ContentBlock? {
+    guard let inner = firstCaptureGroup(preRegex, in: fragment) else { return nil }
+    let trimmed = stripHTML(inner)
+    return trimmed.isEmpty ? nil : .code(trimmed)
+}
+
+private func parseIframeFragment(_ fragment: String) -> ContentBlock? {
+    guard let src = firstHTMLAttribute(fragment, name: "src") else { return nil }
+    let decoded = decodeHTMLEntities(src)
+    return videoBlock(from: decoded)
+}
+
+func videoBlock(from urlString: String) -> ContentBlock? {
+    guard let url = URL(string: urlString) else { return nil }
+    if let id = firstCaptureGroup(youtubeIDRegex, in: urlString) {
+        let target = URL(string: "https://www.youtube.com/watch?v=\(id)") ?? url
+        let thumb = URL(string: "https://img.youtube.com/vi/\(id)/hqdefault.jpg")
+        return .video(videoURL: target, thumbnailURL: thumb, provider: .youtube)
+    }
+    if let id = firstCaptureGroup(vimeoIDRegex, in: urlString) {
+        let target = URL(string: "https://vimeo.com/\(id)") ?? url
+        return .video(videoURL: target, thumbnailURL: nil, provider: .vimeo)
+    }
+    return nil
+}
+
 private func textBlocks(from html: String) -> [ContentBlock] {
     let stripped = stripHTML(html)
     guard !stripped.isEmpty else { return [] }
@@ -212,7 +281,17 @@ private func textBlocks(from html: String) -> [ContentBlock] {
         .components(separatedBy: "\n\n")
         .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .filter { !$0.isEmpty }
-        .map { .text($0) }
+        .map { paragraph -> ContentBlock in
+            if let video = videoBlockFromParagraph(paragraph) { return video }
+            return .text(paragraph)
+        }
+}
+
+private func videoBlockFromParagraph(_ paragraph: String) -> ContentBlock? {
+    let trimmed = paragraph.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.contains(where: \.isWhitespace) else { return nil }
+    guard trimmed.lowercased().hasPrefix("http") else { return nil }
+    return videoBlock(from: trimmed)
 }
 
 private func parseMediaFragment(_ fragment: String) -> ContentBlock? {
