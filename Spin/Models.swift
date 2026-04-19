@@ -12,6 +12,11 @@ struct Feed: Identifiable, Codable, Hashable, Sendable {
     }
 }
 
+enum ContentBlock: Codable, Hashable, Sendable {
+    case text(String)
+    case image(url: URL, alt: String?, caption: String?)
+}
+
 struct Article: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var feedID: UUID
@@ -20,5 +25,5 @@ struct Article: Identifiable, Codable, Hashable, Sendable {
     var category: String?
     var publishedDate: Date?
     var link: URL?
-    var body: String
+    var blocks: [ContentBlock]
 }

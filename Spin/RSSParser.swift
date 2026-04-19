@@ -15,6 +15,7 @@ final class RSSParser: NSObject, XMLParserDelegate {
         var author: String?
         var category: String?
         var guid: String?
+        var mediaContent: String?
     }
 
     private var feedTitle: String = ""
@@ -67,6 +68,25 @@ final class RSSParser: NSObject, XMLParserDelegate {
            let term = attributeDict["term"]?.trimmingCharacters(in: .whitespacesAndNewlines),
            !term.isEmpty {
             currentItem?.category = decodeHTMLEntities(term)
+        }
+
+        if currentItem != nil,
+           currentItem?.mediaContent == nil,
+           name == "media:content" || name == "media:thumbnail",
+           let href = attributeDict["url"], !href.isEmpty {
+            let medium = attributeDict["medium"]?.lowercased()
+            let typeAttr = attributeDict["type"]?.lowercased() ?? ""
+            if medium == nil || medium == "image" || typeAttr.hasPrefix("image/") {
+                currentItem?.mediaContent = href
+            }
+        }
+
+        if currentItem != nil,
+           currentItem?.mediaContent == nil,
+           name == "enclosure",
+           let href = attributeDict["url"], !href.isEmpty,
+           (attributeDict["type"]?.lowercased() ?? "").hasPrefix("image/") {
+            currentItem?.mediaContent = href
         }
     }
 
@@ -145,6 +165,95 @@ final class RSSParser: NSObject, XMLParserDelegate {
             }
         }
     }
+}
+
+func parseContentBlocks(_ html: String) -> [ContentBlock] {
+    guard !html.isEmpty else { return [] }
+
+    let pattern = #"<figure\b[^>]*>[\s\S]*?</figure>|<img\b[^>]*/?>"#
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else {
+        return textBlocks(from: html)
+    }
+
+    let nsString = html as NSString
+    let fullRange = NSRange(location: 0, length: nsString.length)
+    let matches = regex.matches(in: html, range: fullRange)
+
+    guard !matches.isEmpty else { return textBlocks(from: html) }
+
+    var blocks: [ContentBlock] = []
+    var cursor = 0
+
+    for match in matches {
+        let range = match.range
+        if range.location > cursor {
+            let chunk = nsString.substring(with: NSRange(location: cursor, length: range.location - cursor))
+            blocks.append(contentsOf: textBlocks(from: chunk))
+        }
+        let fragment = nsString.substring(with: range)
+        if let block = parseMediaFragment(fragment) {
+            blocks.append(block)
+        }
+        cursor = range.location + range.length
+    }
+
+    if cursor < nsString.length {
+        let trailing = nsString.substring(from: cursor)
+        blocks.append(contentsOf: textBlocks(from: trailing))
+    }
+
+    return blocks
+}
+
+private func textBlocks(from html: String) -> [ContentBlock] {
+    let stripped = stripHTML(html)
+    guard !stripped.isEmpty else { return [] }
+    return stripped
+        .components(separatedBy: "\n\n")
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
+        .map { .text($0) }
+}
+
+private func parseMediaFragment(_ fragment: String) -> ContentBlock? {
+    guard let src = firstHTMLAttribute(fragment, name: "src"),
+          let url = URL(string: decodeHTMLEntities(src)) else { return nil }
+
+    let alt = firstHTMLAttribute(fragment, name: "alt").map { decodeHTMLEntities($0) }
+    let caption = firstFigcaption(fragment)
+
+    let trimmedAlt = alt?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedCaption = caption?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    return .image(
+        url: url,
+        alt: (trimmedAlt?.isEmpty == false) ? trimmedAlt : nil,
+        caption: (trimmedCaption?.isEmpty == false) ? trimmedCaption : nil
+    )
+}
+
+private func firstHTMLAttribute(_ html: String, name: String) -> String? {
+    let pattern = "\\b\(name)\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'>]+))"
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
+    let nsString = html as NSString
+    let range = NSRange(location: 0, length: nsString.length)
+    guard let match = regex.firstMatch(in: html, range: range) else { return nil }
+    for index in 1...3 {
+        let r = match.range(at: index)
+        if r.location != NSNotFound { return nsString.substring(with: r) }
+    }
+    return nil
+}
+
+private func firstFigcaption(_ html: String) -> String? {
+    let pattern = #"<figcaption\b[^>]*>([\s\S]*?)</figcaption>"#
+    guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return nil }
+    let nsString = html as NSString
+    let range = NSRange(location: 0, length: nsString.length)
+    guard let match = regex.firstMatch(in: html, range: range), match.numberOfRanges > 1 else { return nil }
+    let inner = nsString.substring(with: match.range(at: 1))
+    let text = stripHTML(inner)
+    return text.isEmpty ? nil : text
 }
 
 func stripHTML(_ html: String) -> String {

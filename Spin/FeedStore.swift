@@ -25,7 +25,7 @@ final class FeedStore: ObservableObject {
     @Published private(set) var isRefreshing: Bool = false
 
     private let feedsKey = "spin.feeds.v1"
-    private let articlesKey = "spin.articles.v2"
+    private let articlesKey = "spin.articles.v3"
 
     init() {
         loadFeeds()
@@ -143,7 +143,18 @@ private func fetchFeed(url: URL) async throws -> RSSParser.ParsedFeed {
 private func makeArticles(from parsed: RSSParser.ParsedFeed, feedID: UUID) -> [Article] {
     parsed.items.enumerated().map { offset, item in
         let rawBody = !item.content.isEmpty ? item.content : item.description
-        let body = stripHTML(rawBody)
+        var blocks = parseContentBlocks(rawBody)
+
+        let hasInlineImage = blocks.contains {
+            if case .image = $0 { return true }
+            return false
+        }
+        if !hasInlineImage,
+           let heroRaw = item.mediaContent,
+           let heroURL = URL(string: heroRaw) {
+            blocks.insert(.image(url: heroURL, alt: nil, caption: nil), at: 0)
+        }
+
         let link = item.link.flatMap { URL(string: $0) }
         let identifier: String = {
             if let guid = item.guid, !guid.isEmpty { return guid }
@@ -158,7 +169,7 @@ private func makeArticles(from parsed: RSSParser.ParsedFeed, feedID: UUID) -> [A
             category: item.category?.trimmingCharacters(in: .whitespacesAndNewlines),
             publishedDate: parseFeedDate(item.pubDate),
             link: link,
-            body: body
+            blocks: blocks
         )
     }
 }

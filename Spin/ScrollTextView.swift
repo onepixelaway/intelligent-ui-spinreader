@@ -191,8 +191,14 @@ struct ScrollTextView: View {
     @State private var explainerURL: IdentifiableURL?
     @State private var analysisTask: Task<Void, Never>?
 
-    private let paragraphs: [String]
-    private let headerCount: Int
+    enum ReadableItem: Hashable {
+        case title(String)
+        case byline(String)
+        case paragraph(String)
+        case image(url: URL, alt: String?, caption: String?)
+    }
+
+    private let items: [ReadableItem]
     private let showsBackButton: Bool
     private let topPadding: CGFloat = 20
     private let backButtonTopPadding: CGFloat = 64
@@ -200,15 +206,28 @@ struct ScrollTextView: View {
     private let topGradientThreshold: CGFloat = 200
 
     init() {
-        self.paragraphs = StoryText.content.components(separatedBy: "\n\n")
-        self.headerCount = 2
+        let paragraphs = StoryText.content
+            .components(separatedBy: "\n\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        var built: [ReadableItem] = []
+        if paragraphs.count >= 1 { built.append(.title(paragraphs[0])) }
+        if paragraphs.count >= 2 { built.append(.byline(paragraphs[1])) }
+        if paragraphs.count > 2 {
+            for paragraph in paragraphs[2...] {
+                built.append(.paragraph(paragraph))
+            }
+        }
+
+        self.items = built
         self.showsBackButton = false
     }
 
     init(article: Article) {
-        var paras: [String] = []
+        var built: [ReadableItem] = []
         let trimmedTitle = article.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedTitle.isEmpty { paras.append(trimmedTitle) }
+        if !trimmedTitle.isEmpty { built.append(.title(trimmedTitle)) }
 
         var bylineParts: [String] = []
         if let category = article.category?.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -220,19 +239,30 @@ struct ScrollTextView: View {
             bylineParts.append(author)
         }
         if !bylineParts.isEmpty {
-            paras.append(bylineParts.joined(separator: " · "))
+            built.append(.byline(bylineParts.joined(separator: " · ")))
         }
-        let headers = paras.count
 
-        let bodyParas = article.body
-            .components(separatedBy: "\n\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-        paras.append(contentsOf: bodyParas)
+        for block in article.blocks {
+            switch block {
+            case .text(let text):
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty { built.append(.paragraph(trimmed)) }
+            case .image(let url, let alt, let caption):
+                built.append(.image(url: url, alt: alt, caption: caption))
+            }
+        }
 
-        self.paragraphs = paras
-        self.headerCount = headers
+        self.items = built
         self.showsBackButton = true
+    }
+
+    private func textForAnalysis(_ item: ReadableItem) -> String {
+        switch item {
+        case .title(let text), .byline(let text), .paragraph(let text):
+            return text
+        case .image(_, let alt, let caption):
+            return [alt, caption].compactMap { $0 }.joined(separator: " ")
+        }
     }
 
     struct TagView: View {
@@ -270,14 +300,10 @@ struct ScrollTextView: View {
                 ScrollViewReader { _ in
                     ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
-                            ForEach(Array(paragraphs.enumerated()), id: \.offset) { index, paragraph in
-                                Text(attributedParagraph(paragraph, index: index))
+                            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                                readableItemView(item)
                                     .id(index)
-                                    .lineSpacing(3)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .lineLimit(nil)
-                                    .multilineTextAlignment(.leading)
-                                    .padding(.horizontal, 32)
+                                    .padding(.horizontal, item.isImage ? 20 : 32)
                                     .background(
                                         GeometryReader { geo in
                                             Color.clear
@@ -402,7 +428,10 @@ struct ScrollTextView: View {
     }
 
     private func handleAnalysisRequest() {
-        let visibleText = visibleParagraphs.map { paragraphs[$0] }.joined(separator: " ")
+        let visibleText = visibleParagraphs
+            .compactMap { items.indices.contains($0) ? textForAnalysis(items[$0]) : nil }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
         guard !visibleText.isEmpty, visibleText != lastAnalyzedText else { return }
         lastAnalyzedText = visibleText
 
@@ -414,20 +443,39 @@ struct ScrollTextView: View {
         }
     }
 
-    private func attributedParagraph(_ paragraph: String, index: Int) -> AttributedString {
-        var attributed = AttributedString(paragraph)
-        let range = attributed.startIndex..<attributed.endIndex
-
-        let isHeader = index < headerCount
-        if isHeader {
-            let isFirstParagraph = index == 0
-            let size: CGFloat = isFirstParagraph ? 28 : 22
-            let weight: Font.Weight = isFirstParagraph ? .bold : .semibold
-            attributed[range].font = .system(size: size, weight: weight)
-        } else {
-            attributed[range].font = .system(size: 19, weight: .regular)
+    @ViewBuilder
+    private func readableItemView(_ item: ReadableItem) -> some View {
+        switch item {
+        case .title(let text):
+            Text(styledText(text, size: 28, weight: .bold))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .byline(let text):
+            Text(styledText(text, size: 22, weight: .semibold))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .paragraph(let text):
+            Text(styledText(text, size: 19, weight: .regular))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .image(let url, let alt, let caption):
+            ArticleImageView(url: url, alt: alt, caption: caption)
         }
+    }
 
+    private func styledText(_ text: String, size: CGFloat, weight: Font.Weight) -> AttributedString {
+        var attributed = AttributedString(text)
+        let range = attributed.startIndex..<attributed.endIndex
+        attributed[range].font = .system(size: size, weight: weight)
         attributed[range].foregroundColor = Color(white: 0.92, opacity: 1.0)
         return attributed
     }
@@ -568,6 +616,62 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
     func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
         AppDelegate.orientationLock
+    }
+}
+
+extension ScrollTextView.ReadableItem {
+    var isImage: Bool {
+        if case .image = self { return true }
+        return false
+    }
+}
+
+struct ArticleImageView: View {
+    let url: URL
+    let alt: String?
+    let caption: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            AsyncImage(url: url, transaction: Transaction(animation: .easeIn(duration: 0.2))) { phase in
+                switch phase {
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                case .failure:
+                    placeholder
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                        .overlay {
+                            Image(systemName: "photo")
+                                .font(.system(size: 24, weight: .light))
+                                .foregroundColor(.gray.opacity(0.4))
+                        }
+                default:
+                    placeholder
+                        .aspectRatio(16.0 / 9.0, contentMode: .fit)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            if let caption, !caption.isEmpty {
+                Text(caption)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(.gray.opacity(0.65))
+                    .lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+            }
+        }
+        .accessibilityLabel(alt ?? caption ?? "Image")
+    }
+
+    private var placeholder: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.04))
     }
 }
 
