@@ -1,0 +1,38 @@
+name: intelligent-ui-spinreader
+options:
+  bundleIdPrefix: indivisible.spin
+  deploymentTarget:
+    iOS: 18.1.1
+  xcodeVersion: "16.2"
+  generateEmptyDirectories: true
+  createIntermediateGroups: true
+
+targets:
+  Spin:
+    type: application
+    platform: iOS
+    sources: [Spin]
+    settings:
+      base:
+        SWIFT_VERSION: 6.0.3
+        ENABLE_TESTABILITY: YES
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        UILaunchStoryboardName: LaunchScreen
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+
+schemes:
+  Spin:
+    build:
+      targets:
+        Spin: all
+    run:
+      config: Debug
+
+configs:
+  Debug: debug
+  Release: release
