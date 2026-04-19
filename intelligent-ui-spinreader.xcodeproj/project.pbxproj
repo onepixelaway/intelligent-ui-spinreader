@@ -12,12 +12,11 @@
 		22EEFB9A94BF60E40F37EDBA /* SpinApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD732CE59931E7E3D90ABCAB /* SpinApp.swift */; };
 		4AD9B6E7AB7C36B8F8171E75 /* ScrollTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE51FD8E9926EB5664C50A54 /* ScrollTextView.swift */; };
 		8D97D9B12D32392700FBE934 /* StoryText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D97D9B02D32392700FBE934 /* StoryText.swift */; };
+		8D97D9B32D37180200FBE934 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D97D9B22D37180200FBE934 /* Config.swift */; };
 		8D97D9BE2D3B763200FBE934 /* OpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = 8D97D9BD2D3B763200FBE934 /* OpenAI */; };
-		B5833295EA3E42FD6C8AABCF /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41BB1D228F3597BD8BBD8472 /* ContentView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		41BB1D228F3597BD8BBD8472 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		57E78C933539E3E604572E6D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		7E5024065E21DCAEEDE430B8 /* Preview Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = "Preview Assets.xcassets"; sourceTree = "<group>"; };
 		8D97D9B02D32392700FBE934 /* StoryText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoryText.swift; sourceTree = "<group>"; };
@@ -44,7 +43,6 @@
 			children = (
 				57E78C933539E3E604572E6D /* Assets.xcassets */,
 				8D97D9B22D37180200FBE934 /* Config.swift */,
-				41BB1D228F3597BD8BBD8472 /* ContentView.swift */,
 				DD732CE59931E7E3D90ABCAB /* SpinApp.swift */,
 				BE51FD8E9926EB5664C50A54 /* ScrollTextView.swift */,
 				8D97D9B02D32392700FBE934 /* StoryText.swift */,
@@ -152,7 +150,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				8D97D9B12D32392700FBE934 /* StoryText.swift in Sources */,
-				B5833295EA3E42FD6C8AABCF /* ContentView.swift in Sources */,
+				8D97D9B32D37180200FBE934 /* Config.swift in Sources */,
 				22EEFB9A94BF60E40F37EDBA /* SpinApp.swift in Sources */,
 				4AD9B6E7AB7C36B8F8171E75 /* ScrollTextView.swift in Sources */,
 			);

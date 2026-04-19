@@ -107,5 +107,4 @@ struct StoryText {
     
     As he sits on a rock with his phone in his hand, Kahle says the US legal system is broken. He says he doesn’t think this is the end of the lawsuits. “I think the copyright cartel is on a roll,” he says. He frets that copycat cases could be on the way. He’s the most bummed-out guy I’ve ever seen on vacation in the south of France. But he’s also defiant. There’s no inkling of regret, only a renewed sense that what he’s doing is righteous. “We have such an opportunity here. It’s the dream of the internet,” he says. “It’s ours to lose.” It sounds less like a statement and more like a prayer.
     """
-    static let apiKey = "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"
 }

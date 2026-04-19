@@ -25,5 +25,7 @@
 	</dict>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
+	<key>OpenAIAPIKey</key>
+	<string>$(OPENAI_API_KEY)</string>
 </dict>
 </plist>

@@ -20,3 +20,8 @@ Pods/
 
 # Carthage
 Carthage/Build/
+
+# Secrets
+Secrets.xcconfig
+Secrets.plist
+.env
