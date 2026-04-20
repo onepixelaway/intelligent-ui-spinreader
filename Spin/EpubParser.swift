@@ -809,6 +809,12 @@ private enum EpubHTMLExtractor {
             figcaptionBuffer = ""
         }
 
+        func resetFigureState() {
+            pendingFigureImage = nil
+            figcaptionParts = []
+            figcaptionBuffer = ""
+        }
+
         func flush() {
             flushTextBuffer()
 
@@ -911,9 +917,7 @@ private enum EpubHTMLExtractor {
                     flush()
                     if !isClose {
                         inFigure = true
-                        pendingFigureImage = nil
-                        figcaptionParts = []
-                        figcaptionBuffer = ""
+                        resetFigureState()
                     } else {
                         if let pending = pendingFigureImage {
                             let caption = figcaptionParts.joined(separator: "\n")
@@ -924,9 +928,7 @@ private enum EpubHTMLExtractor {
                             ))
                         }
                         inFigure = false
-                        pendingFigureImage = nil
-                        figcaptionParts = []
-                        figcaptionBuffer = ""
+                        resetFigureState()
                     }
                 case "figcaption":
                     if !isClose {
