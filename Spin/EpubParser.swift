@@ -106,7 +106,7 @@ enum EpubParser {
         )
     }
 
-    private static func normalize(_ path: String) -> String {
+    fileprivate static func normalize(_ path: String) -> String {
         var components: [String] = []
         for part in path.split(separator: "/", omittingEmptySubsequences: false) {
             if part == ".." {
@@ -387,6 +387,41 @@ private enum EpubHTMLExtractor {
         let italic: Bool
     }
 
+    private static let sceneBreakPatterns: Set<String> = ["* * *", "***", "---", "· · ·", "⁂"]
+
+    private static let calloutKeywords = ["callout", "pull-quote", "pullquote", "sidebar", "note", "tip", "warning", "admonition", "aside"]
+    private static let dropCapClasses = ["dropcap", "drop-cap", "drop_cap", "initial"]
+
+    private static let footnoteOpenRegexes: [(regex: NSRegularExpression, close: String)] = {
+        let patterns: [(open: String, close: String)] = [
+            ("<aside[^>]*epub:type\\s*=\\s*[\"'][^\"']*footnote[^\"']*[\"'][^>]*>", "</aside>"),
+            ("<aside[^>]*epub:type\\s*=\\s*[\"'][^\"']*endnote[^\"']*[\"'][^>]*>", "</aside>"),
+            ("<div[^>]*class\\s*=\\s*[\"'][^\"']*footnote[^\"']*[\"'][^>]*>", "</div>"),
+            ("<section[^>]*epub:type\\s*=\\s*[\"'][^\"']*footnotes[^\"']*[\"'][^>]*>", "</section>"),
+            ("<section[^>]*epub:type\\s*=\\s*[\"'][^\"']*endnotes[^\"']*[\"'][^>]*>", "</section>"),
+        ]
+        return patterns.compactMap { p in
+            (try? NSRegularExpression(pattern: p.open, options: [.caseInsensitive, .dotMatchesLineSeparators])).map { ($0, p.close) }
+        }
+    }()
+    private static let idRegex = try! NSRegularExpression(pattern: "id\\s*=\\s*[\"']([^\"']+)[\"']", options: .caseInsensitive)
+    private static let tagStripRegex = try! NSRegularExpression(pattern: "<[^>]+>")
+    private static let liFootnoteRegex = try! NSRegularExpression(pattern: "<li[^>]*id\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>", options: .caseInsensitive)
+
+    private static let fontRegular: UIFont = UIFont.systemFont(ofSize: 17)
+    private static let fontBold: UIFont = {
+        let desc = UIFont.systemFont(ofSize: 17).fontDescriptor
+        return UIFont(descriptor: desc.withSymbolicTraits(.traitBold) ?? desc, size: 17)
+    }()
+    private static let fontItalic: UIFont = {
+        let desc = UIFont.systemFont(ofSize: 17).fontDescriptor
+        return UIFont(descriptor: desc.withSymbolicTraits(.traitItalic) ?? desc, size: 17)
+    }()
+    private static let fontBoldItalic: UIFont = {
+        let desc = UIFont.systemFont(ofSize: 17).fontDescriptor
+        return UIFont(descriptor: desc.withSymbolicTraits([.traitBold, .traitItalic]) ?? desc, size: 17)
+    }()
+
     static func extractItems(
         from xhtml: String,
         xhtmlPath: String = "",
@@ -428,7 +463,7 @@ private enum EpubHTMLExtractor {
         var footnoteCounter = 0
         var insideFootnoteAnchor = false
 
-        let sceneBreakPatterns: Set<String> = ["* * *", "***", "---", "· · ·", "⁂"]
+        let sceneBreakPatterns = Self.sceneBreakPatterns
 
         func flushTextBuffer() {
             if !textBuffer.isEmpty {
@@ -532,7 +567,7 @@ private enum EpubHTMLExtractor {
                     if !isClose, let extractor = imageExtractor,
                        let src = extractAttribute("src", from: raw) {
                         flush()
-                        let resolvedPath = normalizePath(xhtmlDir + src)
+                        let resolvedPath = EpubParser.normalize(xhtmlDir + src)
                         if let imageData = extractor(resolvedPath) {
                             let filename = URL(string: src.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? src)?.lastPathComponent ?? "image.png"
                             let fileURL = imageDir.appendingPathComponent(filename)
@@ -630,7 +665,7 @@ private enum EpubHTMLExtractor {
                     }
                 case "span":
                     if !isClose, let cls = extractAttribute("class", from: raw)?.lowercased(),
-                       cls.contains("dropcap") || cls.contains("drop-cap") || cls.contains("drop_cap") || cls.contains("initial") {
+                       dropCapClasses.contains(where: { cls.contains($0) }) {
                         justEmittedHeading = true
                     }
                 case "aside", "section":
@@ -678,24 +713,13 @@ private enum EpubHTMLExtractor {
 
     private static func collectFootnotes(from xhtml: String) -> [String: String] {
         var result: [String: String] = [:]
-        let patterns: [(open: String, close: String)] = [
-            ("<aside[^>]*epub:type\\s*=\\s*[\"'][^\"']*footnote[^\"']*[\"'][^>]*>", "</aside>"),
-            ("<aside[^>]*epub:type\\s*=\\s*[\"'][^\"']*endnote[^\"']*[\"'][^>]*>", "</aside>"),
-            ("<div[^>]*class\\s*=\\s*[\"'][^\"']*footnote[^\"']*[\"'][^>]*>", "</div>"),
-            ("<section[^>]*epub:type\\s*=\\s*[\"'][^\"']*footnotes[^\"']*[\"'][^>]*>", "</section>"),
-            ("<section[^>]*epub:type\\s*=\\s*[\"'][^\"']*endnotes[^\"']*[\"'][^>]*>", "</section>"),
-        ]
-        let idPattern = "id\\s*=\\s*[\"']([^\"']+)[\"']"
-        let idRegex = try? NSRegularExpression(pattern: idPattern, options: .caseInsensitive)
-        let tagStrip = try? NSRegularExpression(pattern: "<[^>]+>")
 
-        for (openPattern, _) in patterns {
-            guard let openRegex = try? NSRegularExpression(pattern: openPattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { continue }
+        for (openRegex, _) in footnoteOpenRegexes {
             let ns = xhtml as NSString
             let matches = openRegex.matches(in: xhtml, range: NSRange(location: 0, length: ns.length))
             for match in matches {
                 let openTag = ns.substring(with: match.range)
-                guard let idMatch = idRegex?.firstMatch(in: openTag, range: NSRange(location: 0, length: openTag.count)),
+                guard let idMatch = idRegex.firstMatch(in: openTag, range: NSRange(location: 0, length: openTag.count)),
                       let idRange = Range(idMatch.range(at: 1), in: openTag) else { continue }
                 let footnoteID = String(openTag[idRange])
 
@@ -711,7 +735,7 @@ private enum EpubHTMLExtractor {
                 }
                 let innerHTML = String(remaining.prefix(endPos))
                 let nsInner = innerHTML as NSString
-                let stripped = tagStrip?.stringByReplacingMatches(in: innerHTML, range: NSRange(location: 0, length: nsInner.length), withTemplate: "") ?? innerHTML
+                let stripped = tagStripRegex.stringByReplacingMatches(in: innerHTML, range: NSRange(location: 0, length: nsInner.length), withTemplate: "")
                 let text = decodeEntities(collapseWhitespace(stripped).trimmingCharacters(in: .whitespacesAndNewlines))
                 if !text.isEmpty {
                     result[footnoteID] = text
@@ -719,26 +743,22 @@ private enum EpubHTMLExtractor {
             }
         }
 
-        let liFootnotePattern = "<li[^>]*id\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>"
-        if let liRegex = try? NSRegularExpression(pattern: liFootnotePattern, options: [.caseInsensitive]) {
-            let ns = xhtml as NSString
-            let liMatches = liRegex.matches(in: xhtml, range: NSRange(location: 0, length: ns.length))
-            for match in liMatches {
-                guard let idRange = Range(match.range(at: 1), in: xhtml) else { continue }
-                let liID = String(xhtml[idRange])
-                if result[liID] != nil { continue }
-                let afterOpen = match.range.location + match.range.length
-                let remaining = ns.substring(from: afterOpen)
-                if let closeRange = remaining.range(of: "</li>", options: .caseInsensitive) {
-                    let inner = String(remaining[remaining.startIndex..<closeRange.lowerBound])
-                    let nsInner = inner as NSString
-                    let stripped = tagStrip?.stringByReplacingMatches(in: inner, range: NSRange(location: 0, length: nsInner.length), withTemplate: "") ?? inner
-                    var text = decodeEntities(collapseWhitespace(stripped).trimmingCharacters(in: .whitespacesAndNewlines))
-                    // Remove back-reference arrows
-                    text = text.replacingOccurrences(of: "\u{21A9}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !text.isEmpty {
-                        result[liID] = text
-                    }
+        let ns = xhtml as NSString
+        let liMatches = liFootnoteRegex.matches(in: xhtml, range: NSRange(location: 0, length: ns.length))
+        for match in liMatches {
+            guard let idRange = Range(match.range(at: 1), in: xhtml) else { continue }
+            let liID = String(xhtml[idRange])
+            if result[liID] != nil { continue }
+            let afterOpen = match.range.location + match.range.length
+            let remaining = ns.substring(from: afterOpen)
+            if let closeRange = remaining.range(of: "</li>", options: .caseInsensitive) {
+                let inner = String(remaining[remaining.startIndex..<closeRange.lowerBound])
+                let nsInner = inner as NSString
+                let stripped = tagStripRegex.stringByReplacingMatches(in: inner, range: NSRange(location: 0, length: nsInner.length), withTemplate: "")
+                var text = decodeEntities(collapseWhitespace(stripped).trimmingCharacters(in: .whitespacesAndNewlines))
+                text = text.replacingOccurrences(of: "\u{21A9}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty {
+                    result[liID] = text
                 }
             }
         }
@@ -750,41 +770,35 @@ private enum EpubHTMLExtractor {
         let result = NSMutableAttributedString()
         for span in spans {
             let decoded = decodeEntities(span.text)
-            var traits: UIFontDescriptor.SymbolicTraits = []
-            if span.bold { traits.insert(.traitBold) }
-            if span.italic { traits.insert(.traitItalic) }
-            let baseDescriptor = UIFont.systemFont(ofSize: 17).fontDescriptor
-            let descriptor = baseDescriptor.withSymbolicTraits(traits) ?? baseDescriptor
-            let font = UIFont(descriptor: descriptor, size: 17)
-            let attrs: [NSAttributedString.Key: Any] = [.font: font]
-            result.append(NSAttributedString(string: decoded, attributes: attrs))
+            let font: UIFont
+            switch (span.bold, span.italic) {
+            case (true, true): font = fontBoldItalic
+            case (true, false): font = fontBold
+            case (false, true): font = fontItalic
+            case (false, false): font = fontRegular
+            }
+            result.append(NSAttributedString(string: decoded, attributes: [.font: font]))
         }
         return result
     }
 
     private static func extractAttribute(_ name: String, from tagContent: String) -> String? {
-        let pattern = name + "\\s*=\\s*[\"']([^\"']*)[\"']"
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
-              let match = regex.firstMatch(in: tagContent, range: NSRange(tagContent.startIndex..., in: tagContent)),
-              let range = Range(match.range(at: 1), in: tagContent) else { return nil }
-        return String(tagContent[range])
+        guard let nameRange = tagContent.range(of: name, options: .caseInsensitive) else { return nil }
+        var i = nameRange.upperBound
+        while i < tagContent.endIndex && tagContent[i].isWhitespace { i = tagContent.index(after: i) }
+        guard i < tagContent.endIndex, tagContent[i] == "=" else { return nil }
+        i = tagContent.index(after: i)
+        while i < tagContent.endIndex && tagContent[i].isWhitespace { i = tagContent.index(after: i) }
+        guard i < tagContent.endIndex else { return nil }
+        let quote = tagContent[i]
+        guard quote == "\"" || quote == "'" else { return nil }
+        i = tagContent.index(after: i)
+        guard let closeQuote = tagContent[i...].firstIndex(of: quote) else { return nil }
+        return String(tagContent[i..<closeQuote])
     }
 
     private static func hasCalloutClass(_ cls: String) -> Bool {
-        let keywords = ["callout", "pull-quote", "pullquote", "sidebar", "note", "tip", "warning", "admonition", "aside"]
-        return keywords.contains(where: { cls.contains($0) })
-    }
-
-    private static func normalizePath(_ path: String) -> String {
-        var components: [String] = []
-        for part in path.split(separator: "/", omittingEmptySubsequences: false) {
-            if part == ".." {
-                if !components.isEmpty { components.removeLast() }
-            } else if part != "." && !part.isEmpty {
-                components.append(String(part))
-            }
-        }
-        return components.joined(separator: "/")
+        calloutKeywords.contains(where: { cls.contains($0) })
     }
 
     private static func extractBody(_ html: String) -> String {
