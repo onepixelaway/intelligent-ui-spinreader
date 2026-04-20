@@ -22,6 +22,7 @@
 		EB1A0001000000000000B001 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1A0001000000000000A001 /* HomeView.swift */; };
 		EB1A0001000000000000B002 /* EpubParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1A0001000000000000A002 /* EpubParser.swift */; };
 		EB1A0001000000000000B003 /* EpubLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1A0001000000000000A003 /* EpubLibraryView.swift */; };
+		EB1A0001000000000000B004 /* UXTeamofOne.epub in Resources */ = {isa = PBXBuildFile; fileRef = EB1A0001000000000000A004 /* UXTeamofOne.epub */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +41,7 @@
 		EB1A0001000000000000A001 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		EB1A0001000000000000A002 /* EpubParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubParser.swift; sourceTree = "<group>"; };
 		EB1A0001000000000000A003 /* EpubLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubLibraryView.swift; sourceTree = "<group>"; };
+		EB1A0001000000000000A004 /* UXTeamofOne.epub */ = {isa = PBXFileReference; lastKnownFileType = file; path = UXTeamofOne.epub; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -70,9 +72,18 @@
 				EB1A0001000000000000A003 /* EpubLibraryView.swift */,
 				BE51FD8E9926EB5664C50A54 /* ScrollTextView.swift */,
 				8D97D9B02D32392700FBE934 /* StoryText.swift */,
+				EB1A0001000000000000C001 /* Resources */,
 				EAFAF9A97D25123168059BCF /* Preview Content */,
 			);
 			path = Spin;
+			sourceTree = "<group>";
+		};
+		EB1A0001000000000000C001 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				EB1A0001000000000000A004 /* UXTeamofOne.epub */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 		4DB8148CCA9E8FBE374B4DBF /* Products */ = {
@@ -163,6 +174,7 @@
 			files = (
 				069D8A8BD04C0C32A1FC4892 /* Assets.xcassets in Resources */,
 				04C8828A2D6E7787035701B5 /* Preview Assets.xcassets in Resources */,
+				EB1A0001000000000000B004 /* UXTeamofOne.epub in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

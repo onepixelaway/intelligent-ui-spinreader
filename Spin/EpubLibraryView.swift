@@ -56,6 +56,7 @@ struct EpubLibraryView: View {
         }
         .preferredColorScheme(.dark)
         .task {
+            await library.seedDefaultEpubs()
             if library.books.isEmpty {
                 await library.loadFromDisk()
             }
@@ -222,6 +223,19 @@ final class EpubLibrary: ObservableObject {
             try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
         }
         return dir
+    }
+
+    func seedDefaultEpubs() async {
+        let dest = booksDirectory.appendingPathComponent("UXTeamofOne.epub")
+        let fm = FileManager.default
+        guard !fm.fileExists(atPath: dest.path) else { return }
+        guard let bundleURL = Bundle.main.url(forResource: "UXTeamofOne", withExtension: "epub") else { return }
+        do {
+            try fm.copyItem(at: bundleURL, to: dest)
+            await loadFromDisk()
+        } catch {
+            // seeding is best-effort; ignore failures
+        }
     }
 
     func loadFromDisk() async {
