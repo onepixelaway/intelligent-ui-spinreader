@@ -717,7 +717,6 @@ private enum EpubHTMLExtractor {
     private static let sceneBreakPatterns: Set<String> = ["* * *", "***", "---", "· · ·", "⁂"]
 
     private static let calloutKeywords = ["callout", "pull-quote", "pullquote", "sidebar", "note", "tip", "warning", "admonition", "aside"]
-    private static let dropCapClasses = ["dropcap", "drop-cap", "drop_cap", "initial"]
 
     private static let footnoteOpenRegexes: [(regex: NSRegularExpression, close: String)] = {
         let patterns: [(open: String, close: String)] = [
@@ -781,7 +780,6 @@ private enum EpubHTMLExtractor {
         var italicDepth = 0
         var hasFormatting = false
         var hadFirstHeading = false
-        var justEmittedHeading = false
         var blockquoteDepth = 0
         var isCallout = false
 
@@ -822,27 +820,23 @@ private enum EpubHTMLExtractor {
                 } else {
                     items.append(.subheading(decoded))
                 }
-                justEmittedHeading = true
                 return
             }
 
             if !listStack.isEmpty, let last = listStack.last {
                 let decoded = decodeEntities(trimmed)
                 items.append(.listItem(decoded, ordered: last.ordered, index: last.index))
-                justEmittedHeading = false
                 return
             }
 
             if sceneBreakPatterns.contains(trimmed) {
                 items.append(.divider)
-                justEmittedHeading = false
                 return
             }
 
             if isCallout || blockquoteDepth > 1 {
                 let decoded = decodeEntities(trimmed)
                 items.append(.callout(decoded))
-                justEmittedHeading = false
                 return
             }
 
@@ -855,20 +849,12 @@ private enum EpubHTMLExtractor {
             } else {
                 let decoded = decodeEntities(trimmed)
                 switch currentType {
-                case .paragraph:
-                    if justEmittedHeading && decoded.count > 1 {
-                        let first = String(decoded.prefix(1))
-                        let rest = String(decoded.dropFirst())
-                        items.append(.dropCapParagraph(firstLetter: first, rest: rest))
-                    } else {
-                        items.append(.paragraph(decoded))
-                    }
+                case .paragraph: items.append(.paragraph(decoded))
                 case .blockquote: items.append(.blockquote(decoded))
                 case .code: items.append(.code(decoded))
                 case .title, .subheading: break
                 }
             }
-            justEmittedHeading = false
         }
 
         let chars = Array(cleaned)
@@ -989,11 +975,6 @@ private enum EpubHTMLExtractor {
                             pendingFootnotes.append(ScrollTextView.FootnoteRef(marker: marker, content: content))
                             textBuffer.append("[\(marker)]")
                         }
-                    }
-                case "span":
-                    if !isClose, let cls = extractAttribute("class", from: raw)?.lowercased(),
-                       dropCapClasses.contains(where: { cls.contains($0) }) {
-                        justEmittedHeading = true
                     }
                 case "aside", "section":
                     if !isClose {

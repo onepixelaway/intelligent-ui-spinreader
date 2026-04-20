@@ -465,7 +465,6 @@ struct ScrollTextView: View {
         case code(String)
         case video(videoURL: URL, thumbnailURL: URL?, provider: VideoProvider)
         case divider
-        case dropCapParagraph(firstLetter: String, rest: String)
         case callout(String)
         case paragraphWithFootnotes(text: String, footnotes: [FootnoteRef])
     }
@@ -568,8 +567,6 @@ struct ScrollTextView: View {
             return ""
         case .divider:
             return ""
-        case .dropCapParagraph(let firstLetter, let rest):
-            return firstLetter + rest
         case .paragraphWithFootnotes(let text, _):
             return text
         }
@@ -887,8 +884,6 @@ struct ScrollTextView: View {
                 .foregroundColor(Color(white: 0.6, opacity: 0.6))
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 12)
-        case .dropCapParagraph(let firstLetter, let rest):
-            DropCapView(firstLetter: firstLetter, rest: rest)
         case .callout(let text):
             CalloutView(text: text)
         case .paragraphWithFootnotes(let text, let footnotes):
@@ -1126,7 +1121,7 @@ extension ScrollTextView.ReadableItem {
         switch self {
         case .image, .video, .code:
             return true
-        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .divider, .dropCapParagraph, .callout, .paragraphWithFootnotes:
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .divider, .callout, .paragraphWithFootnotes:
             return false
         }
     }
@@ -1315,41 +1310,6 @@ struct BlockquoteView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-struct DropCapView: View {
-    let firstLetter: String
-    let rest: String
-
-    @EnvironmentObject private var settings: ReaderSettings
-
-    var body: some View {
-        let dropSize = settings.paragraphSize * 3
-        let bodySize = settings.paragraphSize
-        HStack(alignment: .top, spacing: 0) {
-            Text(firstLetter)
-                .font(.system(size: dropSize, weight: .bold, design: settings.fontFamily.design))
-                .foregroundColor(Color(white: 0.92))
-                .frame(width: dropSize * 0.75, height: dropSize * 0.85, alignment: .topLeading)
-                .padding(.trailing, 4)
-                .padding(.top, 4)
-            Text(styledRest(rest, size: bodySize))
-                .lineSpacing(settings.lineSpacingPt(for: bodySize))
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func styledRest(_ text: String, size: CGFloat) -> AttributedString {
-        var attributed = AttributedString(text)
-        let range = attributed.startIndex..<attributed.endIndex
-        attributed[range].font = .system(size: size, weight: .regular, design: settings.fontFamily.design)
-        attributed[range].foregroundColor = Color(white: 0.92, opacity: 1.0)
-        return attributed
     }
 }
 
