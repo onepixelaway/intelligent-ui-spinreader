@@ -393,6 +393,7 @@ private enum EpubHTMLExtractor {
         bookTitle: String = "",
         imageExtractor: ((String) -> Data?)? = nil
     ) -> [ScrollTextView.ReadableItem] {
+        let footnoteContent = collectFootnotes(from: xhtml)
         let body = extractBody(xhtml)
         let cleaned = stripScriptsAndStyles(body)
 
@@ -423,6 +424,9 @@ private enum EpubHTMLExtractor {
         var isCallout = false
 
         var listStack: [(ordered: Bool, index: Int)] = []
+        var pendingFootnotes: [ScrollTextView.FootnoteRef] = []
+        var footnoteCounter = 0
+        var insideFootnoteAnchor = false
 
         let sceneBreakPatterns: Set<String> = ["* * *", "***", "---", "· · ·", "⁂"]
 
@@ -443,6 +447,7 @@ private enum EpubHTMLExtractor {
             defer {
                 spans = []
                 hasFormatting = false
+                pendingFootnotes = []
             }
 
             guard !trimmed.isEmpty else { return }
@@ -479,7 +484,10 @@ private enum EpubHTMLExtractor {
                 return
             }
 
-            if hasFormatting {
+            if !pendingFootnotes.isEmpty && currentType == .paragraph && !hasFormatting {
+                let decoded = decodeEntities(trimmed)
+                items.append(.paragraphWithFootnotes(text: decoded, footnotes: pendingFootnotes))
+            } else if hasFormatting {
                 let attrStr = buildAttributedString(from: spans)
                 items.append(.richParagraph(ScrollTextView.RichText(attributedString: attrStr)))
             } else {
@@ -606,22 +614,136 @@ private enum EpubHTMLExtractor {
                     if !isClose, !listStack.isEmpty {
                         listStack[listStack.count - 1].index += 1
                     }
+                case "a":
+                    if isClose {
+                        insideFootnoteAnchor = false
+                    } else if let href = extractAttribute("href", from: raw),
+                              href.hasPrefix("#") {
+                        let targetID = String(href.dropFirst())
+                        if let content = footnoteContent[targetID] {
+                            insideFootnoteAnchor = true
+                            footnoteCounter += 1
+                            let marker = "\(footnoteCounter)"
+                            pendingFootnotes.append(ScrollTextView.FootnoteRef(marker: marker, content: content))
+                            textBuffer.append("[\(marker)]")
+                        }
+                    }
                 case "span":
                     if !isClose, let cls = extractAttribute("class", from: raw)?.lowercased(),
                        cls.contains("dropcap") || cls.contains("drop-cap") || cls.contains("drop_cap") || cls.contains("initial") {
                         justEmittedHeading = true
                     }
+                case "aside", "section":
+                    if !isClose {
+                        let epubType = extractAttribute("epub:type", from: raw)?.lowercased() ?? ""
+                        let cls = extractAttribute("class", from: raw)?.lowercased() ?? ""
+                        let id = extractAttribute("id", from: raw) ?? ""
+                        if epubType.contains("footnote") || epubType.contains("endnote")
+                            || cls.contains("footnote") || cls.contains("endnote")
+                            || footnoteContent[id] != nil {
+                            var depth = 1
+                            while i < chars.count && depth > 0 {
+                                if chars[i] == "<" {
+                                    var te = i + 1
+                                    while te < chars.count && chars[te] != ">" { te += 1 }
+                                    let inner = String(chars[(i+1)..<min(te, chars.count)])
+                                    let innerName = inner.hasPrefix("/") ? String(inner.dropFirst()) : inner
+                                    let nameEnd = innerName.firstIndex(where: { $0.isWhitespace || $0 == "/" }) ?? innerName.endIndex
+                                    let tn = innerName[innerName.startIndex..<nameEnd].lowercased()
+                                    if tn == tagName {
+                                        if inner.hasPrefix("/") { depth -= 1 } else { depth += 1 }
+                                    }
+                                    i = te + 1
+                                } else {
+                                    i += 1
+                                }
+                            }
+                            continue
+                        }
+                    }
                 default:
                     break
                 }
             } else {
-                textBuffer.append(c)
+                if !insideFootnoteAnchor {
+                    textBuffer.append(c)
+                }
                 i += 1
             }
         }
         flush()
 
         return items
+    }
+
+    private static func collectFootnotes(from xhtml: String) -> [String: String] {
+        var result: [String: String] = [:]
+        let patterns: [(open: String, close: String)] = [
+            ("<aside[^>]*epub:type\\s*=\\s*[\"'][^\"']*footnote[^\"']*[\"'][^>]*>", "</aside>"),
+            ("<aside[^>]*epub:type\\s*=\\s*[\"'][^\"']*endnote[^\"']*[\"'][^>]*>", "</aside>"),
+            ("<div[^>]*class\\s*=\\s*[\"'][^\"']*footnote[^\"']*[\"'][^>]*>", "</div>"),
+            ("<section[^>]*epub:type\\s*=\\s*[\"'][^\"']*footnotes[^\"']*[\"'][^>]*>", "</section>"),
+            ("<section[^>]*epub:type\\s*=\\s*[\"'][^\"']*endnotes[^\"']*[\"'][^>]*>", "</section>"),
+        ]
+        let idPattern = "id\\s*=\\s*[\"']([^\"']+)[\"']"
+        let idRegex = try? NSRegularExpression(pattern: idPattern, options: .caseInsensitive)
+        let tagStrip = try? NSRegularExpression(pattern: "<[^>]+>")
+
+        for (openPattern, _) in patterns {
+            guard let openRegex = try? NSRegularExpression(pattern: openPattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { continue }
+            let ns = xhtml as NSString
+            let matches = openRegex.matches(in: xhtml, range: NSRange(location: 0, length: ns.length))
+            for match in matches {
+                let openTag = ns.substring(with: match.range)
+                guard let idMatch = idRegex?.firstMatch(in: openTag, range: NSRange(location: 0, length: openTag.count)),
+                      let idRange = Range(idMatch.range(at: 1), in: openTag) else { continue }
+                let footnoteID = String(openTag[idRange])
+
+                let afterOpen = match.range.location + match.range.length
+                let remaining = ns.substring(from: afterOpen)
+                let closingTags = ["</aside>", "</div>", "</section>"]
+                var endPos = remaining.count
+                for ct in closingTags {
+                    if let r = remaining.range(of: ct, options: .caseInsensitive) {
+                        let pos = remaining.distance(from: remaining.startIndex, to: r.lowerBound)
+                        if pos < endPos { endPos = pos }
+                    }
+                }
+                let innerHTML = String(remaining.prefix(endPos))
+                let nsInner = innerHTML as NSString
+                let stripped = tagStrip?.stringByReplacingMatches(in: innerHTML, range: NSRange(location: 0, length: nsInner.length), withTemplate: "") ?? innerHTML
+                let text = decodeEntities(collapseWhitespace(stripped).trimmingCharacters(in: .whitespacesAndNewlines))
+                if !text.isEmpty {
+                    result[footnoteID] = text
+                }
+            }
+        }
+
+        let liFootnotePattern = "<li[^>]*id\\s*=\\s*[\"']([^\"']+)[\"'][^>]*>"
+        if let liRegex = try? NSRegularExpression(pattern: liFootnotePattern, options: [.caseInsensitive]) {
+            let ns = xhtml as NSString
+            let liMatches = liRegex.matches(in: xhtml, range: NSRange(location: 0, length: ns.length))
+            for match in liMatches {
+                guard let idRange = Range(match.range(at: 1), in: xhtml) else { continue }
+                let liID = String(xhtml[idRange])
+                if result[liID] != nil { continue }
+                let afterOpen = match.range.location + match.range.length
+                let remaining = ns.substring(from: afterOpen)
+                if let closeRange = remaining.range(of: "</li>", options: .caseInsensitive) {
+                    let inner = String(remaining[remaining.startIndex..<closeRange.lowerBound])
+                    let nsInner = inner as NSString
+                    let stripped = tagStrip?.stringByReplacingMatches(in: inner, range: NSRange(location: 0, length: nsInner.length), withTemplate: "") ?? inner
+                    var text = decodeEntities(collapseWhitespace(stripped).trimmingCharacters(in: .whitespacesAndNewlines))
+                    // Remove back-reference arrows
+                    text = text.replacingOccurrences(of: "\u{21A9}", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !text.isEmpty {
+                        result[liID] = text
+                    }
+                }
+            }
+        }
+
+        return result
     }
 
     private static func buildAttributedString(from spans: [TextSpan]) -> NSAttributedString {

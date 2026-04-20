@@ -434,6 +434,7 @@ struct ScrollTextView: View {
     @State private var explainerURL: IdentifiableURL?
     @State private var analysisTask: Task<Void, Never>?
     @State private var showReaderSettings: Bool = false
+    @State private var activeFootnote: String? = nil
 
     struct RichText: Hashable, @unchecked Sendable {
         let attributedString: NSAttributedString
@@ -445,6 +446,11 @@ struct ScrollTextView: View {
         static func == (lhs: RichText, rhs: RichText) -> Bool {
             lhs.attributedString.isEqual(to: rhs.attributedString)
         }
+    }
+
+    struct FootnoteRef: Hashable, Sendable {
+        let marker: String
+        let content: String
     }
 
     enum ReadableItem: Hashable, Sendable {
@@ -461,6 +467,7 @@ struct ScrollTextView: View {
         case divider
         case dropCapParagraph(firstLetter: String, rest: String)
         case callout(String)
+        case paragraphWithFootnotes(text: String, footnotes: [FootnoteRef])
     }
 
     private let items: [ReadableItem]
@@ -563,6 +570,8 @@ struct ScrollTextView: View {
             return ""
         case .dropCapParagraph(let firstLetter, let rest):
             return firstLetter + rest
+        case .paragraphWithFootnotes(let text, _):
+            return text
         }
     }
 
@@ -790,6 +799,15 @@ struct ScrollTextView: View {
         .sheet(isPresented: $showReaderSettings) {
             ReaderSettingsSheet(settings: readerSettings)
         }
+        .overlay(alignment: .bottom) {
+            if let footnote = activeFootnote {
+                FootnoteOverlay(text: footnote) {
+                    activeFootnote = nil
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: activeFootnote)
     }
 
     private func handleAnalysisRequest() {
@@ -873,6 +891,8 @@ struct ScrollTextView: View {
             DropCapView(firstLetter: firstLetter, rest: rest)
         case .callout(let text):
             CalloutView(text: text)
+        case .paragraphWithFootnotes(let text, let footnotes):
+            FootnoteParagraphView(text: text, footnotes: footnotes, activeFootnote: $activeFootnote)
         }
     }
 
@@ -1106,7 +1126,7 @@ extension ScrollTextView.ReadableItem {
         switch self {
         case .image, .video, .code:
             return true
-        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .divider, .dropCapParagraph, .callout:
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .divider, .dropCapParagraph, .callout, .paragraphWithFootnotes:
             return false
         }
     }
@@ -1359,6 +1379,126 @@ struct CalloutView: View {
                 .fill(Color.white.opacity(0.06))
         )
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct FootnoteParagraphView: View {
+    let text: String
+    let footnotes: [ScrollTextView.FootnoteRef]
+    @Binding var activeFootnote: String?
+
+    @EnvironmentObject private var settings: ReaderSettings
+
+    var body: some View {
+        Text(buildAttributedString())
+            .lineSpacing(settings.lineSpacingPt(for: settings.paragraphSize))
+            .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(nil)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .environment(\.openURL, OpenURLAction { url in
+                if url.scheme == "footnote", let marker = url.host() {
+                    if let fn = footnotes.first(where: { $0.marker == marker }) {
+                        activeFootnote = fn.content
+                    }
+                }
+                return .handled
+            })
+    }
+
+    private func buildAttributedString() -> AttributedString {
+        let footnoteMarkers = Set(footnotes.map { $0.marker })
+        let pattern = "\\[(\\d+)\\]"
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return styledPlain(text)
+        }
+
+        let nsText = text as NSString
+        let matches = regex.matches(in: text, range: NSRange(location: 0, length: nsText.length))
+
+        if matches.isEmpty {
+            return styledPlain(text)
+        }
+
+        var result = AttributedString()
+        var lastEnd = 0
+
+        for match in matches {
+            let matchRange = match.range
+            let markerRange = match.range(at: 1)
+            let marker = nsText.substring(with: markerRange)
+
+            if matchRange.location > lastEnd {
+                let before = nsText.substring(with: NSRange(location: lastEnd, length: matchRange.location - lastEnd))
+                result.append(styledPlain(before))
+            }
+
+            if footnoteMarkers.contains(marker) {
+                var markerStr = AttributedString("[\(marker)]")
+                markerStr.font = .system(size: settings.paragraphSize * 0.7, weight: .medium, design: settings.fontFamily.design)
+                markerStr.foregroundColor = Color(red: 0.55, green: 0.7, blue: 0.9)
+                markerStr.baselineOffset = settings.paragraphSize * 0.3
+                markerStr.link = URL(string: "footnote://\(marker)")
+                result.append(markerStr)
+            } else {
+                result.append(styledPlain("[\(marker)]"))
+            }
+
+            lastEnd = matchRange.location + matchRange.length
+        }
+
+        if lastEnd < nsText.length {
+            let remaining = nsText.substring(from: lastEnd)
+            result.append(styledPlain(remaining))
+        }
+
+        return result
+    }
+
+    private func styledPlain(_ str: String) -> AttributedString {
+        var attr = AttributedString(str)
+        attr.font = .system(size: settings.paragraphSize, weight: .regular, design: settings.fontFamily.design)
+        attr.foregroundColor = Color(white: 0.92)
+        return attr
+    }
+}
+
+struct FootnoteOverlay: View {
+    let text: String
+    let onDismiss: () -> Void
+
+    @EnvironmentObject private var settings: ReaderSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Footnote")
+                    .font(.system(size: settings.paragraphSize - 2, weight: .semibold, design: settings.fontFamily.design))
+                    .foregroundColor(Color(white: 0.7))
+                Spacer()
+                Button(action: onDismiss) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundColor(Color(white: 0.5))
+                }
+            }
+            Text(text)
+                .font(.system(size: settings.paragraphSize - 1, weight: .regular, design: settings.fontFamily.design))
+                .foregroundColor(Color(white: 0.88))
+                .lineSpacing(settings.lineSpacingPt(for: settings.paragraphSize - 1))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color(white: 0.15))
+                .shadow(color: .black.opacity(0.5), radius: 10, y: -4)
+        )
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+        .onTapGesture {
+            onDismiss()
+        }
     }
 }
 
