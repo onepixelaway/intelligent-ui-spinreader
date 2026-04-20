@@ -910,7 +910,7 @@ final class ScrollState: ObservableObject {
 
     private var contentHeight: Double = 0
     private var viewportHeight: Double = 0
-    private var minOffset: Double { guard contentHeight > viewportHeight else { return 0 }; return -(contentHeight - viewportHeight) }
+    private var minOffset: Double { guard contentHeight > viewportHeight else { return 0 }; return -(contentHeight - viewportHeight) - 120 }
     private var maxOffset: Double { 0 }
 
     func setScrollBounds(contentHeight: Double, viewportHeight: Double) {

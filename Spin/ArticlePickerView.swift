@@ -115,6 +115,9 @@ struct ArticlePickerView: View {
                             .foregroundColor(.gray.opacity(0.55))
                     }
                     .padding(.vertical, 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.black)
+                    .listRowInsets(EdgeInsets())
                 }
             }
         }
