@@ -1160,12 +1160,13 @@ struct ArticleImageView: View {
 
             if let caption, !caption.isEmpty {
                 Text(caption)
-                    .font(.system(size: settings.captionSize, weight: .regular, design: settings.fontFamily.design))
+                    .font(.system(size: settings.captionSize, weight: .regular, design: settings.fontFamily.design).italic())
                     .foregroundColor(.gray.opacity(0.65))
                     .lineSpacing(2)
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 2)
                     .padding(.horizontal, 4)
             }
         }

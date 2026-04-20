@@ -788,6 +788,12 @@ private enum EpubHTMLExtractor {
         var footnoteCounter = 0
         var insideFootnoteAnchor = false
 
+        var inFigure = false
+        var inFigcaption = false
+        var pendingFigureImage: (url: URL, alt: String?)?
+        var figcaptionBuffer = ""
+        var figcaptionParts: [String] = []
+
         let sceneBreakPatterns = Self.sceneBreakPatterns
 
         func flushTextBuffer() {
@@ -795,6 +801,12 @@ private enum EpubHTMLExtractor {
                 spans.append(TextSpan(text: textBuffer, bold: boldDepth > 0, italic: italicDepth > 0))
                 textBuffer = ""
             }
+        }
+
+        func finishFigcaptionPart() {
+            let trimmed = collapseWhitespace(decodeEntities(figcaptionBuffer)).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty { figcaptionParts.append(trimmed) }
+            figcaptionBuffer = ""
         }
 
         func flush() {
@@ -875,7 +887,53 @@ private enum EpubHTMLExtractor {
                 let nameEndIdx = nameRaw.firstIndex(where: { $0.isWhitespace || $0 == "/" }) ?? nameRaw.endIndex
                 let tagName = nameRaw[nameRaw.startIndex..<nameEndIdx].lowercased()
 
+                if inFigcaption {
+                    switch tagName {
+                    case "figcaption":
+                        if isClose {
+                            finishFigcaptionPart()
+                            inFigcaption = false
+                        }
+                    case "p", "div":
+                        finishFigcaptionPart()
+                    case "br":
+                        if !figcaptionBuffer.isEmpty, !figcaptionBuffer.hasSuffix(" ") {
+                            figcaptionBuffer.append(" ")
+                        }
+                    default:
+                        break
+                    }
+                    continue
+                }
+
                 switch tagName {
+                case "figure":
+                    flush()
+                    if !isClose {
+                        inFigure = true
+                        pendingFigureImage = nil
+                        figcaptionParts = []
+                        figcaptionBuffer = ""
+                    } else {
+                        if let pending = pendingFigureImage {
+                            let caption = figcaptionParts.joined(separator: "\n")
+                            items.append(.image(
+                                url: pending.url,
+                                alt: pending.alt,
+                                caption: caption.isEmpty ? nil : caption
+                            ))
+                        }
+                        inFigure = false
+                        pendingFigureImage = nil
+                        figcaptionParts = []
+                        figcaptionBuffer = ""
+                    }
+                case "figcaption":
+                    if !isClose {
+                        flush()
+                        inFigcaption = true
+                        figcaptionBuffer = ""
+                    }
                 case "img":
                     if !isClose, let extractor = imageExtractor,
                        let src = extractAttribute("src", from: raw) {
@@ -886,7 +944,11 @@ private enum EpubHTMLExtractor {
                             let fileURL = imageDir.appendingPathComponent(filename)
                             try? imageData.write(to: fileURL)
                             let alt = extractAttribute("alt", from: raw)
-                            items.append(.image(url: fileURL, alt: alt, caption: nil))
+                            if inFigure {
+                                pendingFigureImage = (fileURL, alt)
+                            } else {
+                                items.append(.image(url: fileURL, alt: alt, caption: nil))
+                            }
                         }
                     }
                 case "h1", "h2", "h3", "h4", "h5", "h6":
@@ -1008,7 +1070,9 @@ private enum EpubHTMLExtractor {
                     break
                 }
             } else {
-                if !insideFootnoteAnchor {
+                if inFigcaption {
+                    figcaptionBuffer.append(c)
+                } else if !insideFootnoteAnchor {
                     textBuffer.append(c)
                 }
                 i += 1
