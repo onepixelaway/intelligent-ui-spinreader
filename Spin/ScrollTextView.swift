@@ -127,6 +127,20 @@ enum ReaderScrollMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum ReaderScrollControl: String, CaseIterable, Identifiable {
+    case wheel
+    case trackpad
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .wheel: return "Wheel"
+        case .trackpad: return "Trackpad"
+        }
+    }
+}
+
 @MainActor
 final class ReaderSettings: ObservableObject {
     private enum Keys {
@@ -136,6 +150,7 @@ final class ReaderSettings: ObservableObject {
         static let margins = "reader.margins"
         static let dimLevel = "reader.dimLevel"
         static let scrollMode = "reader.scrollMode"
+        static let scrollControl = "reader.scrollControl"
     }
 
     @Published var fontSize: Double {
@@ -174,6 +189,12 @@ final class ReaderSettings: ObservableObject {
             UserDefaults.standard.set(scrollMode.rawValue, forKey: Keys.scrollMode)
         }
     }
+    @Published var scrollControl: ReaderScrollControl {
+        didSet {
+            guard scrollControl != oldValue else { return }
+            UserDefaults.standard.set(scrollControl.rawValue, forKey: Keys.scrollControl)
+        }
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -184,6 +205,7 @@ final class ReaderSettings: ObservableObject {
         self.margins = defaults.string(forKey: Keys.margins).flatMap(ReaderMargins.init(rawValue:)) ?? .normal
         self.dimLevel = min(max(defaults.double(forKey: Keys.dimLevel), 0), 0.7)
         self.scrollMode = defaults.string(forKey: Keys.scrollMode).flatMap(ReaderScrollMode.init(rawValue:)) ?? .fluid
+        self.scrollControl = defaults.string(forKey: Keys.scrollControl).flatMap(ReaderScrollControl.init(rawValue:)) ?? .wheel
     }
 
     var titleSize: CGFloat { CGFloat(fontSize) + 9 }
@@ -206,6 +228,42 @@ final class ReaderSettings: ObservableObject {
     }
 }
 
+final class HapticFeedback {
+    private var engine: CHHapticEngine?
+    private var lastHapticTime: CFTimeInterval = 0
+
+    func prepare() {
+        guard CHHapticEngine.capabilitiesForHardware().supportsHaptics, engine == nil else { return }
+        do {
+            let engine = try CHHapticEngine()
+            try engine.start()
+            self.engine = engine
+        } catch {
+            print("Haptic engine creation failed: \(error.localizedDescription)")
+        }
+    }
+
+    func perform(speed: Double, minInterval: CFTimeInterval) {
+        guard let engine else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastHapticTime >= minInterval else { return }
+        lastHapticTime = now
+
+        do {
+            let normalizedSpeed = min(abs(speed) / 10.0, 1.0)
+            let intensity = CHHapticEventParameter(parameterID: .hapticIntensity, value: Float(0.3 + normalizedSpeed * 0.3))
+            let sharpness = CHHapticEventParameter(parameterID: .hapticSharpness, value: Float(0.3 + normalizedSpeed * 0.4))
+            let duration = 0.08 - (normalizedSpeed * 0.04)
+            let event = CHHapticEvent(eventType: .hapticTransient, parameters: [intensity, sharpness], relativeTime: 0, duration: duration)
+            let pattern = try CHHapticPattern(events: [event], parameters: [])
+            let player = try engine.makePlayer(with: pattern)
+            try player.start(atTime: 0)
+        } catch {
+            print("Failed to play haptic pattern: \(error.localizedDescription)")
+        }
+    }
+}
+
 struct ScrollWheel: View {
     let onScrolled: (Double) -> Void
 
@@ -214,11 +272,10 @@ struct ScrollWheel: View {
     @State private var lastDelta: Double = 0
     @State private var lastDirection: Double = 0
 
-    @State private var engine: CHHapticEngine?
-    @State private var lastHapticTime: CFTimeInterval = 0
+    @State private var haptics = HapticFeedback()
 
     private let stepDegrees = 30.0
-    private let hapticThreshold: CFTimeInterval = 0.1
+    private let hapticInterval: CFTimeInterval = 0.1
 
     var body: some View {
         GeometryReader { geo in
@@ -244,7 +301,7 @@ struct ScrollWheel: View {
                     .rotationEffect(.degrees(rotation))
             }
             .contentShape(Circle())
-            .onAppear(perform: prepareHaptics)
+            .onAppear { haptics.prepare() }
             .gesture(dragGesture(center: center))
         }
     }
@@ -280,7 +337,7 @@ struct ScrollWheel: View {
 
                 if currentStep != previousStep, lastDirection != 0 {
                     onScrolled(lastDirection)
-                    performHapticFeedback(speed: abs(movement) / 0.016)
+                    haptics.perform(speed: abs(movement) / 0.016, minInterval: hapticInterval)
                 }
             }
             .onEnded { _ in
@@ -290,55 +347,70 @@ struct ScrollWheel: View {
             }
     }
 
-    private func prepareHaptics() {
-        guard CHHapticEngine.capabilitiesForHardware().supportsHaptics, engine == nil else { return }
-        do {
-            let engine = try CHHapticEngine()
-            try engine.start()
-            self.engine = engine
-        } catch {
-            print("Haptic engine creation failed: \(error.localizedDescription)")
-        }
-    }
-
-    private func performHapticFeedback(speed: Double) {
-        guard let engine else { return }
-
-        let now = CACurrentMediaTime()
-        guard now - lastHapticTime >= hapticThreshold else { return }
-        lastHapticTime = now
-
-        do {
-            let normalizedSpeed = min(abs(speed) / 10.0, 1.0)
-            let intensity = CHHapticEventParameter(
-                parameterID: .hapticIntensity,
-                value: Float(0.3 + normalizedSpeed * 0.3)
-            )
-            let sharpness = CHHapticEventParameter(
-                parameterID: .hapticSharpness,
-                value: Float(0.3 + normalizedSpeed * 0.4)
-            )
-            let duration = 0.08 - (normalizedSpeed * 0.04)
-
-            let event = CHHapticEvent(
-                eventType: .hapticTransient,
-                parameters: [intensity, sharpness],
-                relativeTime: 0,
-                duration: duration
-            )
-            let pattern = try CHHapticPattern(events: [event], parameters: [])
-            let player = try engine.makePlayer(with: pattern)
-            try player.start(atTime: 0)
-        } catch {
-            print("Failed to play haptic pattern: \(error.localizedDescription)")
-        }
-    }
-
     private func angle(from center: CGPoint, to point: CGPoint) -> Double {
         let dx = point.x - center.x
         let dy = point.y - center.y
         let degrees = atan2(dy, dx) * (180.0 / .pi)
         return (degrees + 90.0).truncatingRemainder(dividingBy: 360.0)
+    }
+}
+
+struct TrackpadScrollView: View {
+    let onDrag: (Double) -> Void   // positive delta = swipe down (scroll content up)
+    let onFlick: (Double) -> Void  // ±1 direction on fast release
+
+    @State private var haptics = HapticFeedback()
+    @State private var hapticAccumulator: CGFloat = 0
+    @State private var lastTranslation: CGFloat = 0
+
+    private let hapticInterval: CFTimeInterval = 0.08
+    private let hapticStepPoints: CGFloat = 40.0
+    private let flickThreshold: CGFloat = 35.0
+
+    var body: some View {
+        GeometryReader { _ in
+            ZStack(alignment: .top) {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(Color.white.opacity(0.06))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20, style: .continuous)
+                            .stroke(Color.white.opacity(0.22), lineWidth: 1.5)
+                    )
+
+                Capsule()
+                    .fill(Color.white.opacity(0.3))
+                    .frame(width: 36, height: 5)
+                    .padding(.top, 10)
+            }
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .onAppear { haptics.prepare() }
+            .gesture(
+                DragGesture(minimumDistance: 1)
+                    .onChanged { value in
+                        let current = value.translation.height
+                        let delta = current - lastTranslation
+                        lastTranslation = current
+
+                        if delta != 0 {
+                            onDrag(Double(delta))
+
+                            hapticAccumulator += abs(delta)
+                            if hapticAccumulator >= hapticStepPoints {
+                                hapticAccumulator = 0
+                                haptics.perform(speed: abs(Double(delta)) * 5, minInterval: hapticInterval)
+                            }
+                        }
+                    }
+                    .onEnded { value in
+                        lastTranslation = 0
+                        hapticAccumulator = 0
+                        let extraMomentum = value.predictedEndTranslation.height - value.translation.height
+                        if abs(extraMomentum) > flickThreshold {
+                            onFlick(extraMomentum > 0 ? 1.0 : -1.0)
+                        }
+                    }
+            )
+        }
     }
 }
 
@@ -540,15 +612,34 @@ struct ScrollTextView: View {
                 .position(x: geometry.size.width / 2, y: geometry.size.height * 0.075)
             }
 
-            ScrollWheel { direction in
-                showTopGradient = abs(scrollState.offset) > topGradientThreshold
-                let chunk: CGFloat? = readerSettings.scrollMode == .paginated ? readerSettings.paginatedChunkHeight : nil
-                scrollState.handleScroll(direction: direction, paginatedChunk: chunk)
-
-                spinCount += 1
-                if spinCount >= 2 {
-                    spinCount = 0
-                    handleAnalysisRequest()
+            Group {
+                if readerSettings.scrollControl == .wheel {
+                    ScrollWheel { direction in
+                        showTopGradient = abs(scrollState.offset) > topGradientThreshold
+                        let chunk: CGFloat? = readerSettings.scrollMode == .paginated ? readerSettings.paginatedChunkHeight : nil
+                        scrollState.handleScroll(direction: direction, paginatedChunk: chunk)
+                        spinCount += 1
+                        if spinCount >= 2 {
+                            spinCount = 0
+                            handleAnalysisRequest()
+                        }
+                    }
+                } else {
+                    TrackpadScrollView(
+                        onDrag: { delta in
+                            scrollState.applyDirectDelta(delta)
+                            showTopGradient = abs(scrollState.offset) > topGradientThreshold
+                        },
+                        onFlick: { direction in
+                            scrollState.applyFlick(direction: direction)
+                            showTopGradient = abs(scrollState.offset) > topGradientThreshold
+                            spinCount += 1
+                            if spinCount >= 2 {
+                                spinCount = 0
+                                handleAnalysisRequest()
+                            }
+                        }
+                    )
                 }
             }
             .frame(width: geometry.size.width * 0.3, height: geometry.size.width * 0.3)
@@ -784,6 +875,18 @@ final class ScrollState: ObservableObject {
 
     init() {
         startMomentumTimer()
+    }
+
+    func applyDirectDelta(_ delta: Double) {
+        offset += delta
+    }
+
+    func applyFlick(direction: Double) {
+        velocity = direction * maxVelocity
+        lastScrollTime = CACurrentMediaTime()
+        withAnimation(momentumSpring) {
+            offset += velocity * 3
+        }
     }
 
     func handleScroll(direction: Double, paginatedChunk: CGFloat? = nil) {
@@ -1193,6 +1296,7 @@ struct ReaderSettingsSheet: View {
             optionSection("Line spacing", options: ReaderLineSpacing.allCases, selection: $settings.lineSpacing, label: \.label)
             optionSection("Margins", options: ReaderMargins.allCases, selection: $settings.margins, label: \.label)
             optionSection("Scroll", options: ReaderScrollMode.allCases, selection: $settings.scrollMode, label: \.label)
+            optionSection("Control", options: ReaderScrollControl.allCases, selection: $settings.scrollControl, label: \.label)
             brightnessSection
 
             Spacer(minLength: 0)
@@ -1202,7 +1306,7 @@ struct ReaderSettingsSheet: View {
         .padding(.bottom, 28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.black.ignoresSafeArea())
-        .presentationDetents([.height(540)])
+        .presentationDetents([.height(590)])
         .presentationBackground(Color.black)
         .presentationDragIndicator(.visible)
         .preferredColorScheme(.dark)
