@@ -19,6 +19,9 @@
 		A1B2C3D51D40000000000006 /* FeedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41D40000000000005 /* FeedStore.swift */; };
 		A1B2C3D71D40000000000008 /* FeedManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D61D40000000000007 /* FeedManagerView.swift */; };
 		A1B2C3D91D4000000000000A /* ArticlePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D81D40000000000009 /* ArticlePickerView.swift */; };
+		EB1A0001000000000000B001 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1A0001000000000000A001 /* HomeView.swift */; };
+		EB1A0001000000000000B002 /* EpubParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1A0001000000000000A002 /* EpubParser.swift */; };
+		EB1A0001000000000000B003 /* EpubLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB1A0001000000000000A003 /* EpubLibraryView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -34,6 +37,9 @@
 		A1B2C3D41D40000000000005 /* FeedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedStore.swift; sourceTree = "<group>"; };
 		A1B2C3D61D40000000000007 /* FeedManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedManagerView.swift; sourceTree = "<group>"; };
 		A1B2C3D81D40000000000009 /* ArticlePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticlePickerView.swift; sourceTree = "<group>"; };
+		EB1A0001000000000000A001 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
+		EB1A0001000000000000A002 /* EpubParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubParser.swift; sourceTree = "<group>"; };
+		EB1A0001000000000000A003 /* EpubLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubLibraryView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,6 +65,9 @@
 				A1B2C3D41D40000000000005 /* FeedStore.swift */,
 				A1B2C3D61D40000000000007 /* FeedManagerView.swift */,
 				A1B2C3D81D40000000000009 /* ArticlePickerView.swift */,
+				EB1A0001000000000000A001 /* HomeView.swift */,
+				EB1A0001000000000000A002 /* EpubParser.swift */,
+				EB1A0001000000000000A003 /* EpubLibraryView.swift */,
 				BE51FD8E9926EB5664C50A54 /* ScrollTextView.swift */,
 				8D97D9B02D32392700FBE934 /* StoryText.swift */,
 				EAFAF9A97D25123168059BCF /* Preview Content */,
@@ -173,6 +182,9 @@
 				A1B2C3D51D40000000000006 /* FeedStore.swift in Sources */,
 				A1B2C3D71D40000000000008 /* FeedManagerView.swift in Sources */,
 				A1B2C3D91D4000000000000A /* ArticlePickerView.swift in Sources */,
+				EB1A0001000000000000B001 /* HomeView.swift in Sources */,
+				EB1A0001000000000000B002 /* EpubParser.swift in Sources */,
+				EB1A0001000000000000B003 /* EpubLibraryView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

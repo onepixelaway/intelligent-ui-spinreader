@@ -434,7 +434,7 @@ struct ScrollTextView: View {
     @State private var analysisTask: Task<Void, Never>?
     @State private var showReaderSettings: Bool = false
 
-    enum ReadableItem: Hashable {
+    enum ReadableItem: Hashable, Sendable {
         case title(String)
         case byline(String)
         case paragraph(String)
@@ -511,6 +511,21 @@ struct ScrollTextView: View {
         self.items = built
         self.showsBackButton = true
         self.article = article
+    }
+
+    init(items: [ReadableItem], title: String) {
+        var built = items
+        let hasLeadingTitle: Bool = {
+            if let first = built.first, case .title = first { return true }
+            return false
+        }()
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !hasLeadingTitle && !trimmedTitle.isEmpty {
+            built.insert(.title(trimmedTitle), at: 0)
+        }
+        self.items = built
+        self.showsBackButton = true
+        self.article = nil
     }
 
     private func textForAnalysis(_ item: ReadableItem) -> String {
