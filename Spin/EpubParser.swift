@@ -800,6 +800,8 @@ private enum EpubHTMLExtractor {
         var cnDepth = 0
         var ctDepth = 0
 
+        var cocl1Buffer: [String] = []
+
         let sceneBreakPatterns = Self.sceneBreakPatterns
 
         func flushTextBuffer() {
@@ -821,7 +823,14 @@ private enum EpubHTMLExtractor {
             figcaptionBuffer = ""
         }
 
-        func flush() {
+        func flushCOCL1IfNeeded() {
+            if !cocl1Buffer.isEmpty {
+                items.append(.chapterTOC(cocl1Buffer))
+                cocl1Buffer = []
+            }
+        }
+
+        func flushSpansOnly() {
             flushTextBuffer()
 
             let fullText = spans.map(\.text).joined()
@@ -879,6 +888,11 @@ private enum EpubHTMLExtractor {
                 case .title, .subheading: break
                 }
             }
+        }
+
+        func flush() {
+            flushSpansOnly()
+            flushCOCL1IfNeeded()
         }
 
         let chars = Array(cleaned)
@@ -987,23 +1001,29 @@ private enum EpubHTMLExtractor {
                         let cls = extractAttribute("class", from: raw)?.lowercased() ?? ""
                         let classes = cls.split(whereSeparator: { $0.isWhitespace }).map(String.init)
                         if tagName == "p" && classes.contains("cocl1") {
-                            flush()
+                            flushSpansOnly()
                             var depth = 1
+                            var inner = ""
                             while i < chars.count && depth > 0 {
                                 if chars[i] == "<" {
                                     var te = i + 1
                                     while te < chars.count && chars[te] != ">" { te += 1 }
-                                    let inner = String(chars[(i+1)..<min(te, chars.count)])
-                                    let innerName = inner.hasPrefix("/") ? String(inner.dropFirst()) : inner
+                                    let innerTag = String(chars[(i+1)..<min(te, chars.count)])
+                                    let innerName = innerTag.hasPrefix("/") ? String(innerTag.dropFirst()) : innerTag
                                     let nameEnd = innerName.firstIndex(where: { $0.isWhitespace || $0 == "/" }) ?? innerName.endIndex
                                     let tn = innerName[innerName.startIndex..<nameEnd].lowercased()
                                     if tn == "p" {
-                                        if inner.hasPrefix("/") { depth -= 1 } else { depth += 1 }
+                                        if innerTag.hasPrefix("/") { depth -= 1 } else { depth += 1 }
                                     }
                                     i = te + 1
                                 } else {
+                                    inner.append(chars[i])
                                     i += 1
                                 }
+                            }
+                            let text = collapseWhitespace(decodeEntities(inner)).trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !text.isEmpty {
+                                cocl1Buffer.append(text)
                             }
                             continue
                         }

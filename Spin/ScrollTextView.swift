@@ -467,6 +467,7 @@ struct ScrollTextView: View {
         case divider
         case callout(String)
         case paragraphWithFootnotes(text: String, footnotes: [FootnoteRef])
+        case chapterTOC([String])
     }
 
     private let items: [ReadableItem]
@@ -569,6 +570,8 @@ struct ScrollTextView: View {
             return ""
         case .paragraphWithFootnotes(let text, _):
             return text
+        case .chapterTOC(let entries):
+            return entries.joined(separator: " ")
         }
     }
 
@@ -888,6 +891,8 @@ struct ScrollTextView: View {
             CalloutView(text: text)
         case .paragraphWithFootnotes(let text, let footnotes):
             FootnoteParagraphView(text: text, footnotes: footnotes, activeFootnote: $activeFootnote)
+        case .chapterTOC(let entries):
+            ChapterTOCView(entries: entries)
         }
     }
 
@@ -1121,7 +1126,7 @@ extension ScrollTextView.ReadableItem {
         switch self {
         case .image, .video, .code:
             return true
-        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .divider, .callout, .paragraphWithFootnotes:
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .divider, .callout, .paragraphWithFootnotes, .chapterTOC:
             return false
         }
     }
@@ -1340,6 +1345,33 @@ struct CalloutView: View {
                 .fill(Color.white.opacity(0.06))
         )
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct ChapterTOCView: View {
+    let entries: [String]
+
+    @EnvironmentObject private var settings: ReaderSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(entries, id: \.self) { entry in
+                Text(entry)
+                    .font(.system(size: settings.paragraphSize, weight: .regular, design: settings.fontFamily.design))
+                    .foregroundColor(Color(red: 0.4, green: 0.6, blue: 0.9))
+                    .lineSpacing(settings.lineSpacingPt(for: settings.paragraphSize))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.07))
+        )
     }
 }
 
