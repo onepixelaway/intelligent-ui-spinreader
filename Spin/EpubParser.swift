@@ -418,8 +418,13 @@ private enum EpubHTMLExtractor {
         var italicDepth = 0
         var hasFormatting = false
         var hadFirstHeading = false
+        var justEmittedHeading = false
+        var blockquoteDepth = 0
+        var isCallout = false
 
         var listStack: [(ordered: Bool, index: Int)] = []
+
+        let sceneBreakPatterns: Set<String> = ["* * *", "***", "---", "· · ·", "⁂"]
 
         func flushTextBuffer() {
             if !textBuffer.isEmpty {
@@ -450,12 +455,27 @@ private enum EpubHTMLExtractor {
                 } else {
                     items.append(.subheading(decoded))
                 }
+                justEmittedHeading = true
                 return
             }
 
             if !listStack.isEmpty, let last = listStack.last {
                 let decoded = decodeEntities(trimmed)
                 items.append(.listItem(decoded, ordered: last.ordered, index: last.index))
+                justEmittedHeading = false
+                return
+            }
+
+            if sceneBreakPatterns.contains(trimmed) {
+                items.append(.divider)
+                justEmittedHeading = false
+                return
+            }
+
+            if isCallout || blockquoteDepth > 1 {
+                let decoded = decodeEntities(trimmed)
+                items.append(.callout(decoded))
+                justEmittedHeading = false
                 return
             }
 
@@ -465,12 +485,20 @@ private enum EpubHTMLExtractor {
             } else {
                 let decoded = decodeEntities(trimmed)
                 switch currentType {
-                case .paragraph: items.append(.paragraph(decoded))
+                case .paragraph:
+                    if justEmittedHeading && decoded.count > 1 {
+                        let first = String(decoded.prefix(1))
+                        let rest = String(decoded.dropFirst())
+                        items.append(.dropCapParagraph(firstLetter: first, rest: rest))
+                    } else {
+                        items.append(.paragraph(decoded))
+                    }
                 case .blockquote: items.append(.blockquote(decoded))
                 case .code: items.append(.code(decoded))
                 case .title, .subheading: break
                 }
             }
+            justEmittedHeading = false
         }
 
         let chars = Array(cleaned)
@@ -510,15 +538,39 @@ private enum EpubHTMLExtractor {
                     currentType = isClose ? .paragraph : .title
                 case "p", "div":
                     flush()
-                    if isClose { currentType = .paragraph }
+                    if !isClose {
+                        if let cls = extractAttribute("class", from: raw)?.lowercased(),
+                           hasCalloutClass(cls) {
+                            isCallout = true
+                        }
+                    } else {
+                        currentType = .paragraph
+                        isCallout = false
+                    }
                 case "blockquote":
                     flush()
-                    currentType = isClose ? .paragraph : .blockquote
+                    if isClose {
+                        blockquoteDepth = max(0, blockquoteDepth - 1)
+                        if blockquoteDepth == 0 {
+                            currentType = .paragraph
+                            isCallout = false
+                        }
+                    } else {
+                        blockquoteDepth += 1
+                        currentType = .blockquote
+                        if let cls = extractAttribute("class", from: raw)?.lowercased(),
+                           hasCalloutClass(cls) {
+                            isCallout = true
+                        }
+                    }
                 case "pre", "code":
                     flush()
                     currentType = isClose ? .paragraph : .code
-                case "br", "hr":
+                case "br":
                     flush()
+                case "hr":
+                    flush()
+                    items.append(.divider)
                 case "b", "strong":
                     flushTextBuffer()
                     if isClose {
@@ -553,6 +605,11 @@ private enum EpubHTMLExtractor {
                     flush()
                     if !isClose, !listStack.isEmpty {
                         listStack[listStack.count - 1].index += 1
+                    }
+                case "span":
+                    if !isClose, let cls = extractAttribute("class", from: raw)?.lowercased(),
+                       cls.contains("dropcap") || cls.contains("drop-cap") || cls.contains("drop_cap") || cls.contains("initial") {
+                        justEmittedHeading = true
                     }
                 default:
                     break
@@ -589,6 +646,11 @@ private enum EpubHTMLExtractor {
               let match = regex.firstMatch(in: tagContent, range: NSRange(tagContent.startIndex..., in: tagContent)),
               let range = Range(match.range(at: 1), in: tagContent) else { return nil }
         return String(tagContent[range])
+    }
+
+    private static func hasCalloutClass(_ cls: String) -> Bool {
+        let keywords = ["callout", "pull-quote", "pullquote", "sidebar", "note", "tip", "warning", "admonition", "aside"]
+        return keywords.contains(where: { cls.contains($0) })
     }
 
     private static func normalizePath(_ path: String) -> String {

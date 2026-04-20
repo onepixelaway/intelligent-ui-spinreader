@@ -458,6 +458,9 @@ struct ScrollTextView: View {
         case blockquote(String)
         case code(String)
         case video(videoURL: URL, thumbnailURL: URL?, provider: VideoProvider)
+        case divider
+        case dropCapParagraph(firstLetter: String, rest: String)
+        case callout(String)
     }
 
     private let items: [ReadableItem]
@@ -546,7 +549,7 @@ struct ScrollTextView: View {
 
     private func textForAnalysis(_ item: ReadableItem) -> String {
         switch item {
-        case .title(let text), .byline(let text), .paragraph(let text), .blockquote(let text), .code(let text), .subheading(let text):
+        case .title(let text), .byline(let text), .paragraph(let text), .blockquote(let text), .code(let text), .subheading(let text), .callout(let text):
             return text
         case .richParagraph(let rt):
             return rt.attributedString.string
@@ -556,6 +559,10 @@ struct ScrollTextView: View {
             return [alt, caption].compactMap { $0 }.joined(separator: " ")
         case .video:
             return ""
+        case .divider:
+            return ""
+        case .dropCapParagraph(let firstLetter, let rest):
+            return firstLetter + rest
         }
     }
 
@@ -856,6 +863,16 @@ struct ScrollTextView: View {
             CodeBlockView(text: text)
         case .video(let videoURL, let thumbnailURL, let provider):
             VideoEmbedView(videoURL: videoURL, thumbnailURL: thumbnailURL, provider: provider)
+        case .divider:
+            Text("·  ·  ·")
+                .font(.system(size: readerSettings.paragraphSize, weight: .regular, design: readerSettings.fontFamily.design))
+                .foregroundColor(Color(white: 0.6, opacity: 0.6))
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 12)
+        case .dropCapParagraph(let firstLetter, let rest):
+            DropCapView(firstLetter: firstLetter, rest: rest)
+        case .callout(let text):
+            CalloutView(text: text)
         }
     }
 
@@ -1089,7 +1106,7 @@ extension ScrollTextView.ReadableItem {
         switch self {
         case .image, .video, .code:
             return true
-        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote:
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .divider, .dropCapParagraph, .callout:
             return false
         }
     }
@@ -1277,6 +1294,70 @@ struct BlockquoteView: View {
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct DropCapView: View {
+    let firstLetter: String
+    let rest: String
+
+    @EnvironmentObject private var settings: ReaderSettings
+
+    var body: some View {
+        let dropSize = settings.paragraphSize * 3
+        let bodySize = settings.paragraphSize
+        HStack(alignment: .top, spacing: 0) {
+            Text(firstLetter)
+                .font(.system(size: dropSize, weight: .bold, design: settings.fontFamily.design))
+                .foregroundColor(Color(white: 0.92))
+                .frame(width: dropSize * 0.75, height: dropSize * 0.85, alignment: .topLeading)
+                .padding(.trailing, 4)
+                .padding(.top, 4)
+            Text(styledRest(rest, size: bodySize))
+                .lineSpacing(settings.lineSpacingPt(for: bodySize))
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func styledRest(_ text: String, size: CGFloat) -> AttributedString {
+        var attributed = AttributedString(text)
+        let range = attributed.startIndex..<attributed.endIndex
+        attributed[range].font = .system(size: size, weight: .regular, design: settings.fontFamily.design)
+        attributed[range].foregroundColor = Color(white: 0.92, opacity: 1.0)
+        return attributed
+    }
+}
+
+struct CalloutView: View {
+    let text: String
+
+    @EnvironmentObject private var settings: ReaderSettings
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                .fill(Color.white.opacity(0.45))
+                .frame(width: 3)
+
+            Text(text)
+                .font(.system(size: settings.blockquoteSize, weight: .regular, design: settings.fontFamily.design).italic())
+                .foregroundColor(Color(white: 0.85))
+                .lineSpacing(settings.lineSpacingPt(for: settings.blockquoteSize))
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 14)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+        )
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
