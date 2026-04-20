@@ -255,7 +255,7 @@ private struct ChapterListView: View {
                             .toolbar(.hidden, for: .navigationBar)
                             .navigationBarBackButtonHidden(true)
                     } label: {
-                        ChapterRow(title: chapter.title, index: chapter.id)
+                        ChapterRow(title: chapter.title, depth: chapter.depth)
                     }
                     .listRowBackground(Color.black)
                     .listRowSeparatorTint(.white.opacity(0.06))
@@ -275,21 +275,29 @@ private struct ChapterListView: View {
 
 private struct ChapterRow: View {
     let title: String
-    let index: Int
+    let depth: Int
+
+    private var leadingPadding: CGFloat {
+        CGFloat(min(depth, 3)) * 16
+    }
+
+    private var opacity: Double {
+        switch depth {
+        case 0: return 1.0
+        case 1: return 0.75
+        default: return 0.55
+        }
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
-            Text("\(index + 1)")
-                .font(.system(size: 13, weight: .medium, design: .monospaced))
-                .foregroundColor(.gray.opacity(0.5))
-                .frame(width: 28, alignment: .trailing)
-            Text(title)
-                .font(.system(size: 15, weight: .regular))
-                .foregroundColor(.white.opacity(0.92))
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-        }
-        .padding(.vertical, 8)
+        Text(title)
+            .font(.system(size: 15, weight: .regular))
+            .foregroundColor(.white.opacity(opacity))
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, leadingPadding)
+            .padding(.vertical, 8)
     }
 }
 

@@ -17,6 +17,9 @@ struct EpubBook: Identifiable, Hashable, Sendable {
 struct EpubChapter: Identifiable, Hashable, Sendable {
     let id: Int
     let title: String
+    let xhtmlPath: String
+    let anchor: String?
+    let depth: Int
     let items: [ScrollTextView.ReadableItem]
 }
 
@@ -72,35 +75,60 @@ enum EpubParser {
 
         let bookTitle = opf.title.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : opf.title
 
-        let tocTitles = parseTOC(archive: archive, opf: opf, opfBase: opfBase)
+        let tocEntries = parseTOC(archive: archive, opf: opf, opfBase: opfBase)
 
-        var chapters: [EpubChapter] = []
-        for itemId in opf.spineIDs {
-            guard let href = opf.manifestById[itemId] else { continue }
-            let decodedHref = href.removingPercentEncoding ?? href
-            let fullPath = normalize(opfBase + decodedHref)
-            guard let chapterData = try? archive.fileData(named: fullPath),
+        var itemsCache: [String: [ScrollTextView.ReadableItem]] = [:]
+        func itemsForXHTML(_ xhtmlPath: String) -> [ScrollTextView.ReadableItem]? {
+            if let cached = itemsCache[xhtmlPath] { return cached }
+            guard let chapterData = try? archive.fileData(named: xhtmlPath),
                   let xhtml = String(data: chapterData, encoding: .utf8)
                           ?? String(data: chapterData, encoding: .isoLatin1)
-            else { continue }
-
-            let items = EpubHTMLExtractor.extractItems(
+            else { return nil }
+            let parsed = EpubHTMLExtractor.extractItems(
                 from: xhtml,
-                xhtmlPath: fullPath,
+                xhtmlPath: xhtmlPath,
                 bookTitle: bookTitle,
                 imageExtractor: { path in try? archive.fileData(named: path) }
             )
-            guard !items.isEmpty else { continue }
+            itemsCache[xhtmlPath] = parsed
+            return parsed
+        }
 
-            let chapterTitle: String = {
-                let basename = (decodedHref as NSString).lastPathComponent
-                if let tocTitle = tocTitles[decodedHref] ?? tocTitles[basename] ?? tocTitles[fullPath] {
-                    return tocTitle
-                }
-                if case .title(let t) = items.first { return t }
-                return "Chapter \(chapters.count + 1)"
-            }()
-            chapters.append(EpubChapter(id: chapters.count, title: chapterTitle, items: items))
+        var chapters: [EpubChapter] = []
+        for entry in tocEntries {
+            let decodedHref = entry.href.removingPercentEncoding ?? entry.href
+            let (file, fragment) = splitFragment(decodedHref)
+            let xhtmlPath = normalize(entry.basePath + file)
+            guard let items = itemsForXHTML(xhtmlPath) else { continue }
+            chapters.append(EpubChapter(
+                id: chapters.count,
+                title: entry.title,
+                xhtmlPath: xhtmlPath,
+                anchor: fragment,
+                depth: entry.depth,
+                items: items
+            ))
+        }
+
+        if chapters.isEmpty {
+            for itemId in opf.spineIDs {
+                guard let href = opf.manifestById[itemId] else { continue }
+                let decodedHref = href.removingPercentEncoding ?? href
+                let xhtmlPath = normalize(opfBase + decodedHref)
+                guard let items = itemsForXHTML(xhtmlPath), !items.isEmpty else { continue }
+                let title: String = {
+                    if case .title(let t) = items.first { return t }
+                    return "Chapter \(chapters.count + 1)"
+                }()
+                chapters.append(EpubChapter(
+                    id: chapters.count,
+                    title: title,
+                    xhtmlPath: xhtmlPath,
+                    anchor: nil,
+                    depth: 0,
+                    items: items
+                ))
+            }
         }
 
         let title = bookTitle
@@ -197,87 +225,58 @@ enum EpubParser {
         )
     }
 
-    private static func parseTOC(archive: ZipArchive, opf: OPFContents, opfBase: String) -> [String: String] {
+    private static func parseTOC(archive: ZipArchive, opf: OPFContents, opfBase: String) -> [TOCEntry] {
+        if let ncxHref = opf.ncxHref {
+            let fullPath = normalize(opfBase + ncxHref)
+            if let data = try? archive.fileData(named: fullPath) {
+                let entries = parseNCX(data, basePath: directory(of: fullPath))
+                if !entries.isEmpty { return entries }
+            }
+        }
         if let navHref = opf.navHref {
             let fullPath = normalize(opfBase + navHref)
             if let data = try? archive.fileData(named: fullPath),
                let html = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .isoLatin1) {
-                let titles = parseNavDocument(html)
-                if !titles.isEmpty { return titles }
+                let entries = parseNavDocument(html, basePath: directory(of: fullPath))
+                if !entries.isEmpty { return entries }
             }
         }
-        if let ncxHref = opf.ncxHref {
-            let fullPath = normalize(opfBase + ncxHref)
-            if let data = try? archive.fileData(named: fullPath) {
-                let titles = parseNCX(data)
-                if !titles.isEmpty { return titles }
-            }
-        }
-        return [:]
+        return []
     }
 
-    private static func parseNavDocument(_ html: String) -> [String: String] {
-        guard let data = html.data(using: .utf8) else { return [:] }
+    private static func parseNavDocument(_ html: String, basePath: String) -> [TOCEntry] {
+        guard let data = html.data(using: .utf8) else { return [] }
         let parser = XMLParser(data: data)
-        let delegate = NavDocParserDelegate()
+        let delegate = NavDocParserDelegate(basePath: basePath)
         parser.delegate = delegate
         parser.shouldProcessNamespaces = true
         parser.parse()
-
-        var authoritativeTitles: [String: String] = [:]
-        var fallbackTitles: [String: String] = [:]
-
-        for entry in delegate.entries {
-            let hasFragment = entry.href.contains("#")
-            let href = stripFragment(entry.href)
-            let basename = (href as NSString).lastPathComponent
-            guard !entry.title.isEmpty else { continue }
-
-            if !hasFragment {
-                authoritativeTitles[href] = entry.title
-                authoritativeTitles[basename] = entry.title
-            } else {
-                if fallbackTitles[href] == nil { fallbackTitles[href] = entry.title }
-                if fallbackTitles[basename] == nil { fallbackTitles[basename] = entry.title }
-            }
-        }
-
-        return fallbackTitles.merging(authoritativeTitles) { _, authoritative in authoritative }
+        return delegate.entries
     }
 
-    private static func parseNCX(_ data: Data) -> [String: String] {
+    private static func parseNCX(_ data: Data, basePath: String) -> [TOCEntry] {
         let parser = XMLParser(data: data)
-        let delegate = NCXParserDelegate()
+        let delegate = NCXParserDelegate(basePath: basePath)
         parser.delegate = delegate
         parser.shouldProcessNamespaces = true
         parser.parse()
-
-        var authoritativeTitles: [String: String] = [:]
-        var fallbackTitles: [String: String] = [:]
-
-        for entry in delegate.entries {
-            let hasFragment = entry.href.contains("#")
-            let href = stripFragment(entry.href)
-            let basename = (href as NSString).lastPathComponent
-            guard !entry.title.isEmpty else { continue }
-
-            if !hasFragment {
-                authoritativeTitles[href] = entry.title
-                authoritativeTitles[basename] = entry.title
-            } else {
-                if fallbackTitles[href] == nil { fallbackTitles[href] = entry.title }
-                if fallbackTitles[basename] == nil { fallbackTitles[basename] = entry.title }
-            }
-        }
-
-        return fallbackTitles.merging(authoritativeTitles) { _, authoritative in authoritative }
+        return delegate.entries
     }
 
-    private static func stripFragment(_ href: String) -> String {
+    fileprivate static func splitFragment(_ href: String) -> (file: String, fragment: String?) {
         if let hashIndex = href.firstIndex(of: "#") {
-            return String(href[href.startIndex..<hashIndex])
+            let file = String(href[href.startIndex..<hashIndex])
+            let frag = String(href[href.index(after: hashIndex)...])
+            return (file, frag.isEmpty ? nil : frag)
         }
-        return href
+        return (href, nil)
+    }
+
+    fileprivate static func directory(of path: String) -> String {
+        if let lastSlash = path.lastIndex(of: "/") {
+            return String(path[path.startIndex...lastSlash])
+        }
+        return ""
     }
 }
 
@@ -387,15 +386,21 @@ private struct TOCEntry {
     let href: String
     let title: String
     let depth: Int
+    let basePath: String
 }
 
 private final class NavDocParserDelegate: NSObject, XMLParserDelegate {
     var entries: [TOCEntry] = []
+    private let basePath: String
     private var inTocNav = false
     private var currentHref: String?
     private var buffer: String = ""
     private var inAnchor = false
     private var olDepth = 0
+
+    init(basePath: String) {
+        self.basePath = basePath
+    }
 
     func parser(
         _ parser: XMLParser,
@@ -434,7 +439,12 @@ private final class NavDocParserDelegate: NSObject, XMLParserDelegate {
             if elementName == "a", let href = currentHref {
                 let title = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !title.isEmpty {
-                    entries.append(TOCEntry(href: href, title: title, depth: olDepth))
+                    entries.append(TOCEntry(
+                        href: href,
+                        title: title,
+                        depth: max(0, olDepth - 1),
+                        basePath: basePath
+                    ))
                 }
                 inAnchor = false
                 currentHref = nil
@@ -447,11 +457,20 @@ private final class NavDocParserDelegate: NSObject, XMLParserDelegate {
 
 private final class NCXParserDelegate: NSObject, XMLParserDelegate {
     var entries: [TOCEntry] = []
-    private var navPointDepth = 0
+    private let basePath: String
+
+    private struct PendingNavPoint {
+        var entryIndex: Int
+        var titleSet: Bool
+        var srcSet: Bool
+    }
+    private var stack: [PendingNavPoint] = []
     private var inText = false
-    private var currentSrc: String?
-    private var currentDepth = 0
     private var buffer: String = ""
+
+    init(basePath: String) {
+        self.basePath = basePath
+    }
 
     func parser(
         _ parser: XMLParser,
@@ -461,14 +480,26 @@ private final class NCXParserDelegate: NSObject, XMLParserDelegate {
         attributes attributeDict: [String: String] = [:]
     ) {
         if elementName == "navPoint" {
-            navPointDepth += 1
-            currentSrc = nil
-            currentDepth = navPointDepth
-            buffer = ""
+            entries.append(TOCEntry(href: "", title: "", depth: stack.count, basePath: basePath))
+            stack.append(PendingNavPoint(entryIndex: entries.count - 1, titleSet: false, srcSet: false))
+            return
         }
-        if navPointDepth > 0 && elementName == "text" { inText = true; buffer = "" }
-        if navPointDepth > 0 && elementName == "content", let src = attributeDict["src"] {
-            currentSrc = src
+        guard !stack.isEmpty else { return }
+        if elementName == "text" {
+            inText = true
+            buffer = ""
+        } else if elementName == "content", let src = attributeDict["src"] {
+            let top = stack.count - 1
+            if !stack[top].srcSet {
+                let existing = entries[stack[top].entryIndex]
+                entries[stack[top].entryIndex] = TOCEntry(
+                    href: src,
+                    title: existing.title,
+                    depth: existing.depth,
+                    basePath: existing.basePath
+                )
+                stack[top].srcSet = true
+            }
         }
     }
 
@@ -482,14 +513,32 @@ private final class NCXParserDelegate: NSObject, XMLParserDelegate {
         namespaceURI: String?,
         qualifiedName qName: String?
     ) {
-        if elementName == "text" { inText = false }
-        if elementName == "navPoint" {
-            let title = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
-            if let src = currentSrc, !title.isEmpty {
-                entries.append(TOCEntry(href: src, title: title, depth: currentDepth))
+        if elementName == "text" {
+            inText = false
+            if !stack.isEmpty {
+                let top = stack.count - 1
+                if !stack[top].titleSet {
+                    let title = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !title.isEmpty {
+                        let existing = entries[stack[top].entryIndex]
+                        entries[stack[top].entryIndex] = TOCEntry(
+                            href: existing.href,
+                            title: title,
+                            depth: existing.depth,
+                            basePath: existing.basePath
+                        )
+                        stack[top].titleSet = true
+                    }
+                }
             }
-            navPointDepth -= 1
+            buffer = ""
+        } else if elementName == "navPoint" {
+            if !stack.isEmpty { stack.removeLast() }
         }
+    }
+
+    func parserDidEndDocument(_ parser: XMLParser) {
+        entries = entries.filter { !$0.href.isEmpty && !$0.title.isEmpty }
     }
 }
 
