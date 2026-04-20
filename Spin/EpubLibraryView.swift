@@ -7,6 +7,11 @@ struct EpubLibraryView: View {
     @State private var showImporter = false
     @State private var errorMessage: String?
 
+    private let columns = [
+        GridItem(.flexible(), spacing: 20),
+        GridItem(.flexible(), spacing: 20)
+    ]
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -18,7 +23,7 @@ struct EpubLibraryView: View {
                 } else if library.books.isEmpty {
                     emptyState
                 } else {
-                    bookList
+                    bookGrid
                 }
             }
             .navigationTitle("Books")
@@ -73,14 +78,14 @@ struct EpubLibraryView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "books.vertical")
-                .font(.system(size: 36, weight: .light))
-                .foregroundColor(.gray.opacity(0.5))
-            Text("No books yet")
+                .font(.system(size: 48, weight: .light))
+                .foregroundColor(.gray.opacity(0.4))
+            Text("Add your first book")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundColor(.white.opacity(0.85))
-            Text("Import an .epub file to begin reading.")
+            Text("Import an .epub file to start reading.")
                 .font(.system(size: 14))
-                .foregroundColor(.gray.opacity(0.7))
+                .foregroundColor(.gray.opacity(0.6))
                 .multilineTextAlignment(.center)
 
             Button {
@@ -99,24 +104,22 @@ struct EpubLibraryView: View {
         .padding(.horizontal, 32)
     }
 
-    private var bookList: some View {
-        List {
-            ForEach(library.books) { book in
-                NavigationLink {
-                    ChapterListView(book: book)
-                } label: {
-                    BookRow(book: book)
+    private var bookGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, spacing: 24) {
+                ForEach(library.books) { book in
+                    NavigationLink {
+                        ChapterListView(book: book)
+                    } label: {
+                        BookCard(book: book)
+                    }
+                    .buttonStyle(.plain)
                 }
-                .listRowBackground(Color.black)
-                .listRowSeparatorTint(.white.opacity(0.06))
             }
-            .onDelete { indexSet in
-                library.delete(at: indexSet)
-            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            .padding(.bottom, 32)
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .background(Color.black)
     }
 
     private func handleImport(result: Result<[URL], Error>) async {
@@ -135,27 +138,91 @@ struct EpubLibraryView: View {
     }
 }
 
-private struct BookRow: View {
+private struct BookCard: View {
     let book: EpubBook
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            coverImage
+                .frame(maxWidth: .infinity)
+                .aspectRatio(2.0/3.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
+
             Text(book.title)
-                .font(.system(size: 16, weight: .medium))
-                .foregroundColor(.white.opacity(0.95))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
+
             if !book.author.isEmpty {
                 Text(book.author)
-                    .font(.system(size: 12))
+                    .font(.system(size: 11))
                     .foregroundColor(.gray.opacity(0.6))
                     .lineLimit(1)
             }
-            Text("\(book.chapters.count) chapter\(book.chapters.count == 1 ? "" : "s")")
-                .font(.system(size: 11))
-                .foregroundColor(.gray.opacity(0.45))
         }
-        .padding(.vertical, 6)
+    }
+
+    @ViewBuilder
+    private var coverImage: some View {
+        if let data = book.coverImageData, let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+        } else {
+            PlaceholderCover(title: book.title, author: book.author)
+        }
+    }
+}
+
+private struct PlaceholderCover: View {
+    let title: String
+    let author: String
+
+    var body: some View {
+        GeometryReader { geo in
+            let colors = deterministicGradient(for: title)
+            ZStack {
+                LinearGradient(
+                    colors: colors,
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+
+                VStack(spacing: 8) {
+                    Spacer()
+                    Text(title)
+                        .font(.system(size: min(geo.size.width * 0.1, 15), weight: .semibold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(4)
+                        .padding(.horizontal, 12)
+                    if !author.isEmpty {
+                        Text(author)
+                            .font(.system(size: min(geo.size.width * 0.07, 11)))
+                            .foregroundColor(.white.opacity(0.7))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 12)
+                    }
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private func deterministicGradient(for seed: String) -> [Color] {
+        var hash: UInt64 = 5381
+        for byte in seed.utf8 {
+            hash = ((hash &<< 5) &+ hash) &+ UInt64(byte)
+        }
+        let hue1 = Double(hash % 360) / 360.0
+        let hue2 = Double((hash / 360) % 360) / 360.0
+        return [
+            Color(hue: hue1, saturation: 0.5, brightness: 0.35),
+            Color(hue: hue2, saturation: 0.6, brightness: 0.25)
+        ]
     }
 }
 
@@ -166,6 +233,22 @@ private struct ChapterListView: View {
         ZStack {
             Color.black.ignoresSafeArea()
             List {
+                if let data = book.coverImageData, let uiImage = UIImage(data: data) {
+                    HStack {
+                        Spacer()
+                        Image(uiImage: uiImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 120)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .shadow(color: .black.opacity(0.3), radius: 6, x: 0, y: 3)
+                        Spacer()
+                    }
+                    .listRowBackground(Color.black)
+                    .listRowSeparatorTint(.clear)
+                    .padding(.vertical, 8)
+                }
+
                 ForEach(book.chapters) { chapter in
                     NavigationLink {
                         ScrollTextView(items: chapter.items, title: chapter.title)
@@ -233,9 +316,7 @@ final class EpubLibrary: ObservableObject {
         do {
             try fm.copyItem(at: bundleURL, to: dest)
             await loadFromDisk()
-        } catch {
-            // seeding is best-effort; ignore failures
-        }
+        } catch {}
     }
 
     func loadFromDisk() async {
