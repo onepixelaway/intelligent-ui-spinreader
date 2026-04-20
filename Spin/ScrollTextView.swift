@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import CoreHaptics
 import NaturalLanguage
 @preconcurrency import OpenAI
@@ -434,10 +435,25 @@ struct ScrollTextView: View {
     @State private var analysisTask: Task<Void, Never>?
     @State private var showReaderSettings: Bool = false
 
+    struct RichText: Hashable, @unchecked Sendable {
+        let attributedString: NSAttributedString
+
+        func hash(into hasher: inout Hasher) {
+            hasher.combine(attributedString.string)
+        }
+
+        static func == (lhs: RichText, rhs: RichText) -> Bool {
+            lhs.attributedString.isEqual(to: rhs.attributedString)
+        }
+    }
+
     enum ReadableItem: Hashable, Sendable {
         case title(String)
         case byline(String)
         case paragraph(String)
+        case richParagraph(RichText)
+        case subheading(String)
+        case listItem(String, ordered: Bool, index: Int)
         case image(url: URL, alt: String?, caption: String?)
         case blockquote(String)
         case code(String)
@@ -530,7 +546,11 @@ struct ScrollTextView: View {
 
     private func textForAnalysis(_ item: ReadableItem) -> String {
         switch item {
-        case .title(let text), .byline(let text), .paragraph(let text), .blockquote(let text), .code(let text):
+        case .title(let text), .byline(let text), .paragraph(let text), .blockquote(let text), .code(let text), .subheading(let text):
+            return text
+        case .richParagraph(let rt):
+            return rt.attributedString.string
+        case .listItem(let text, _, _):
             return text
         case .image(_, let alt, let caption):
             return [alt, caption].compactMap { $0 }.joined(separator: " ")
@@ -805,6 +825,29 @@ struct ScrollTextView: View {
                 .lineLimit(nil)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
+        case .richParagraph(let rt):
+            Text(richAttributedString(rt, size: readerSettings.paragraphSize))
+                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .subheading(let text):
+            Text(styledText(text, size: readerSettings.titleSize - 4, weight: .bold))
+                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.titleSize - 4))
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        case .listItem(let text, let ordered, let index):
+            let prefix = ordered ? "\(index). " : "\u{2022} "
+            Text(styledText(prefix + text, size: readerSettings.paragraphSize, weight: .regular))
+                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(nil)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 16)
         case .image(let url, let alt, let caption):
             ArticleImageView(url: url, alt: alt, caption: caption)
         case .blockquote(let text):
@@ -827,6 +870,27 @@ struct ScrollTextView: View {
         attributed[range].font = .system(size: size, weight: weight, design: readerSettings.fontFamily.design)
         attributed[range].foregroundColor = Color(white: 0.92, opacity: 1.0)
         return attributed
+    }
+
+    private func richAttributedString(_ rt: RichText, size: CGFloat) -> AttributedString {
+        let ns = rt.attributedString
+        var result = AttributedString()
+        ns.enumerateAttributes(in: NSRange(location: 0, length: ns.length)) { attrs, range, _ in
+            let substring = ns.attributedSubstring(from: range).string
+            var chunk = AttributedString(substring)
+            let chunkRange = chunk.startIndex..<chunk.endIndex
+            let uiFont = attrs[.font] as? UIFont
+            let traits = uiFont?.fontDescriptor.symbolicTraits ?? []
+            let isBold = traits.contains(.traitBold)
+            let isItalic = traits.contains(.traitItalic)
+            let weight: Font.Weight = isBold ? .bold : .regular
+            var font = Font.system(size: size, weight: weight, design: readerSettings.fontFamily.design)
+            if isItalic { font = font.italic() }
+            chunk[chunkRange].font = font
+            chunk[chunkRange].foregroundColor = Color(white: 0.92, opacity: 1.0)
+            result.append(chunk)
+        }
+        return result
     }
 
     private func analyzeVisibleText(_ text: String) async {
@@ -1025,7 +1089,7 @@ extension ScrollTextView.ReadableItem {
         switch self {
         case .image, .video, .code:
             return true
-        default:
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote:
             return false
         }
     }

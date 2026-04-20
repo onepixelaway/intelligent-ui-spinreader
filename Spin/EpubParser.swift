@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 import Compression
 
 struct EpubBook: Identifiable, Hashable, Sendable {
@@ -68,6 +69,8 @@ enum EpubParser {
             return ""
         }()
 
+        let bookTitle = opf.title.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : opf.title
+
         var chapters: [EpubChapter] = []
         for itemId in opf.spineIDs {
             guard let href = opf.manifestById[itemId] else { continue }
@@ -78,7 +81,12 @@ enum EpubParser {
                           ?? String(data: chapterData, encoding: .isoLatin1)
             else { continue }
 
-            let items = EpubHTMLExtractor.extractItems(from: xhtml)
+            let items = EpubHTMLExtractor.extractItems(
+                from: xhtml,
+                xhtmlPath: fullPath,
+                bookTitle: bookTitle,
+                imageExtractor: { path in try? archive.fileData(named: path) }
+            )
             guard !items.isEmpty else { continue }
 
             let chapterTitle: String = {
@@ -88,7 +96,7 @@ enum EpubParser {
             chapters.append(EpubChapter(id: chapters.count, title: chapterTitle, items: items))
         }
 
-        let title = opf.title.isEmpty ? fileURL.deletingPathExtension().lastPathComponent : opf.title
+        let title = bookTitle
         return EpubBook(
             id: fileURL.lastPathComponent,
             title: title,
@@ -368,29 +376,100 @@ private enum EpubHTMLExtractor {
     private enum BlockType {
         case paragraph
         case title
+        case subheading
         case blockquote
         case code
     }
 
-    static func extractItems(from xhtml: String) -> [ScrollTextView.ReadableItem] {
+    private struct TextSpan {
+        let text: String
+        let bold: Bool
+        let italic: Bool
+    }
+
+    static func extractItems(
+        from xhtml: String,
+        xhtmlPath: String = "",
+        bookTitle: String = "",
+        imageExtractor: ((String) -> Data?)? = nil
+    ) -> [ScrollTextView.ReadableItem] {
         let body = extractBody(xhtml)
         let cleaned = stripScriptsAndStyles(body)
 
+        let xhtmlDir: String = {
+            if let lastSlash = xhtmlPath.lastIndex(of: "/") {
+                return String(xhtmlPath[...lastSlash])
+            }
+            return ""
+        }()
+
+        let imageDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("spinreader-epub-images")
+            .appendingPathComponent(bookTitle)
+        if imageExtractor != nil {
+            try? FileManager.default.createDirectory(at: imageDir, withIntermediateDirectories: true)
+        }
+
         var items: [ScrollTextView.ReadableItem] = []
-        var buffer = ""
+        var spans: [TextSpan] = []
+        var textBuffer = ""
         var currentType: BlockType = .paragraph
+        var boldDepth = 0
+        var italicDepth = 0
+        var hasFormatting = false
+        var hadFirstHeading = false
+
+        var listStack: [(ordered: Bool, index: Int)] = []
+
+        func flushTextBuffer() {
+            if !textBuffer.isEmpty {
+                spans.append(TextSpan(text: textBuffer, bold: boldDepth > 0, italic: italicDepth > 0))
+                textBuffer = ""
+            }
+        }
 
         func flush() {
-            let collapsed = collapseWhitespace(buffer)
+            flushTextBuffer()
+
+            let fullText = spans.map(\.text).joined()
+            let collapsed = collapseWhitespace(fullText)
             let trimmed = collapsed.trimmingCharacters(in: .whitespacesAndNewlines)
-            buffer = ""
+
+            defer {
+                spans = []
+                hasFormatting = false
+            }
+
             guard !trimmed.isEmpty else { return }
-            let decoded = decodeEntities(trimmed)
-            switch currentType {
-            case .title: items.append(.title(decoded))
-            case .paragraph: items.append(.paragraph(decoded))
-            case .blockquote: items.append(.blockquote(decoded))
-            case .code: items.append(.code(decoded))
+
+            if currentType == .title || currentType == .subheading {
+                let decoded = decodeEntities(trimmed)
+                if !hadFirstHeading {
+                    hadFirstHeading = true
+                    items.append(.title(decoded))
+                } else {
+                    items.append(.subheading(decoded))
+                }
+                return
+            }
+
+            if !listStack.isEmpty, let last = listStack.last {
+                let decoded = decodeEntities(trimmed)
+                items.append(.listItem(decoded, ordered: last.ordered, index: last.index))
+                return
+            }
+
+            if hasFormatting {
+                let attrStr = buildAttributedString(from: spans)
+                items.append(.richParagraph(ScrollTextView.RichText(attributedString: attrStr)))
+            } else {
+                let decoded = decodeEntities(trimmed)
+                switch currentType {
+                case .paragraph: items.append(.paragraph(decoded))
+                case .blockquote: items.append(.blockquote(decoded))
+                case .code: items.append(.code(decoded))
+                case .title, .subheading: break
+                }
             }
         }
 
@@ -413,6 +492,19 @@ private enum EpubHTMLExtractor {
                 let tagName = nameRaw[nameRaw.startIndex..<nameEndIdx].lowercased()
 
                 switch tagName {
+                case "img":
+                    if !isClose, let extractor = imageExtractor,
+                       let src = extractAttribute("src", from: raw) {
+                        flush()
+                        let resolvedPath = normalizePath(xhtmlDir + src)
+                        if let imageData = extractor(resolvedPath) {
+                            let filename = URL(string: src.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? src)?.lastPathComponent ?? "image.png"
+                            let fileURL = imageDir.appendingPathComponent(filename)
+                            try? imageData.write(to: fileURL)
+                            let alt = extractAttribute("alt", from: raw)
+                            items.append(.image(url: fileURL, alt: alt, caption: nil))
+                        }
+                    }
                 case "h1", "h2", "h3", "h4", "h5", "h6":
                     flush()
                     currentType = isClose ? .paragraph : .title
@@ -427,20 +519,88 @@ private enum EpubHTMLExtractor {
                     currentType = isClose ? .paragraph : .code
                 case "br", "hr":
                     flush()
+                case "b", "strong":
+                    flushTextBuffer()
+                    if isClose {
+                        boldDepth = max(0, boldDepth - 1)
+                    } else {
+                        boldDepth += 1
+                        hasFormatting = true
+                    }
+                case "em", "i":
+                    flushTextBuffer()
+                    if isClose {
+                        italicDepth = max(0, italicDepth - 1)
+                    } else {
+                        italicDepth += 1
+                        hasFormatting = true
+                    }
+                case "ul":
+                    flush()
+                    if !isClose {
+                        listStack.append((ordered: false, index: 0))
+                    } else if !listStack.isEmpty {
+                        listStack.removeLast()
+                    }
+                case "ol":
+                    flush()
+                    if !isClose {
+                        listStack.append((ordered: true, index: 0))
+                    } else if !listStack.isEmpty {
+                        listStack.removeLast()
+                    }
                 case "li":
                     flush()
-                    if !isClose && !buffer.isEmpty { buffer.append("\n") }
+                    if !isClose, !listStack.isEmpty {
+                        listStack[listStack.count - 1].index += 1
+                    }
                 default:
                     break
                 }
             } else {
-                buffer.append(c)
+                textBuffer.append(c)
                 i += 1
             }
         }
         flush()
 
         return items
+    }
+
+    private static func buildAttributedString(from spans: [TextSpan]) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        for span in spans {
+            let decoded = decodeEntities(span.text)
+            var traits: UIFontDescriptor.SymbolicTraits = []
+            if span.bold { traits.insert(.traitBold) }
+            if span.italic { traits.insert(.traitItalic) }
+            let baseDescriptor = UIFont.systemFont(ofSize: 17).fontDescriptor
+            let descriptor = baseDescriptor.withSymbolicTraits(traits) ?? baseDescriptor
+            let font = UIFont(descriptor: descriptor, size: 17)
+            let attrs: [NSAttributedString.Key: Any] = [.font: font]
+            result.append(NSAttributedString(string: decoded, attributes: attrs))
+        }
+        return result
+    }
+
+    private static func extractAttribute(_ name: String, from tagContent: String) -> String? {
+        let pattern = name + "\\s*=\\s*[\"']([^\"']*)[\"']"
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: tagContent, range: NSRange(tagContent.startIndex..., in: tagContent)),
+              let range = Range(match.range(at: 1), in: tagContent) else { return nil }
+        return String(tagContent[range])
+    }
+
+    private static func normalizePath(_ path: String) -> String {
+        var components: [String] = []
+        for part in path.split(separator: "/", omittingEmptySubsequences: false) {
+            if part == ".." {
+                if !components.isEmpty { components.removeLast() }
+            } else if part != "." && !part.isEmpty {
+                components.append(String(part))
+            }
+        }
+        return components.joined(separator: "/")
     }
 
     private static func extractBody(_ html: String) -> String {
