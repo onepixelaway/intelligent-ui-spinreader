@@ -794,6 +794,12 @@ private enum EpubHTMLExtractor {
         var figcaptionBuffer = ""
         var figcaptionParts: [String] = []
 
+        var inChapterHeading = false
+        var cnBuffer = ""
+        var ctBuffer = ""
+        var cnDepth = 0
+        var ctDepth = 0
+
         let sceneBreakPatterns = Self.sceneBreakPatterns
 
         func flushTextBuffer() {
@@ -936,6 +942,104 @@ private enum EpubHTMLExtractor {
                         inFigcaption = true
                         figcaptionBuffer = ""
                     }
+                case "h1", "h2", "h3", "h4", "h5", "h6":
+                    if !isClose {
+                        flush()
+                        let cls = extractAttribute("class", from: raw)?.lowercased() ?? ""
+                        let classes = cls.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+                        if classes.contains(where: { $0.contains("chapter") }) {
+                            inChapterHeading = true
+                            cnBuffer = ""
+                            ctBuffer = ""
+                            cnDepth = 0
+                            ctDepth = 0
+                        }
+                        currentType = .title
+                    } else {
+                        if inChapterHeading {
+                            let cn = collapseWhitespace(decodeEntities(cnBuffer)).trimmingCharacters(in: .whitespacesAndNewlines)
+                            let ct = collapseWhitespace(decodeEntities(ctBuffer)).trimmingCharacters(in: .whitespacesAndNewlines)
+                            if !cn.isEmpty || !ct.isEmpty {
+                                spans = []
+                                textBuffer = ""
+                                hasFormatting = false
+                                pendingFootnotes = []
+                                if !cn.isEmpty { items.append(.byline(cn)) }
+                                if !ct.isEmpty {
+                                    items.append(.title(ct))
+                                    hadFirstHeading = true
+                                }
+                            } else {
+                                flush()
+                            }
+                            inChapterHeading = false
+                            cnBuffer = ""
+                            ctBuffer = ""
+                            cnDepth = 0
+                            ctDepth = 0
+                        } else {
+                            flush()
+                        }
+                        currentType = .paragraph
+                    }
+                case "p", "div":
+                    if !isClose {
+                        let cls = extractAttribute("class", from: raw)?.lowercased() ?? ""
+                        let classes = cls.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+                        if tagName == "p" && classes.contains("cocl1") {
+                            flush()
+                            var depth = 1
+                            while i < chars.count && depth > 0 {
+                                if chars[i] == "<" {
+                                    var te = i + 1
+                                    while te < chars.count && chars[te] != ">" { te += 1 }
+                                    let inner = String(chars[(i+1)..<min(te, chars.count)])
+                                    let innerName = inner.hasPrefix("/") ? String(inner.dropFirst()) : inner
+                                    let nameEnd = innerName.firstIndex(where: { $0.isWhitespace || $0 == "/" }) ?? innerName.endIndex
+                                    let tn = innerName[innerName.startIndex..<nameEnd].lowercased()
+                                    if tn == "p" {
+                                        if inner.hasPrefix("/") { depth -= 1 } else { depth += 1 }
+                                    }
+                                    i = te + 1
+                                } else {
+                                    i += 1
+                                }
+                            }
+                            continue
+                        }
+                        flush()
+                        if hasCalloutClass(cls) {
+                            isCallout = true
+                        }
+                    } else {
+                        flush()
+                        currentType = .paragraph
+                        isCallout = false
+                    }
+                case "span":
+                    if inChapterHeading {
+                        if !isClose {
+                            if cnDepth > 0 {
+                                cnDepth += 1
+                            } else if ctDepth > 0 {
+                                ctDepth += 1
+                            } else {
+                                let cls = extractAttribute("class", from: raw)?.lowercased() ?? ""
+                                let classes = cls.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+                                if classes.contains("cn") {
+                                    cnDepth = 1
+                                } else if classes.contains("ct") {
+                                    ctDepth = 1
+                                }
+                            }
+                        } else {
+                            if cnDepth > 0 {
+                                cnDepth -= 1
+                            } else if ctDepth > 0 {
+                                ctDepth -= 1
+                            }
+                        }
+                    }
                 case "img":
                     if !isClose, let extractor = imageExtractor,
                        let src = extractAttribute("src", from: raw) {
@@ -952,20 +1056,6 @@ private enum EpubHTMLExtractor {
                                 items.append(.image(url: fileURL, alt: alt, caption: nil))
                             }
                         }
-                    }
-                case "h1", "h2", "h3", "h4", "h5", "h6":
-                    flush()
-                    currentType = isClose ? .paragraph : .title
-                case "p", "div":
-                    flush()
-                    if !isClose {
-                        if let cls = extractAttribute("class", from: raw)?.lowercased(),
-                           hasCalloutClass(cls) {
-                            isCallout = true
-                        }
-                    } else {
-                        currentType = .paragraph
-                        isCallout = false
                     }
                 case "blockquote":
                     flush()
@@ -1074,6 +1164,10 @@ private enum EpubHTMLExtractor {
             } else {
                 if inFigcaption {
                     figcaptionBuffer.append(c)
+                } else if cnDepth > 0 {
+                    cnBuffer.append(c)
+                } else if ctDepth > 0 {
+                    ctBuffer.append(c)
                 } else if !insideFootnoteAnchor {
                     textBuffer.append(c)
                 }
