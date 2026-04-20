@@ -151,6 +151,7 @@ final class ReaderSettings: ObservableObject {
         static let dimLevel = "reader.dimLevel"
         static let scrollMode = "reader.scrollMode"
         static let scrollControl = "reader.scrollControl"
+        static let showAIQuestions = "reader.showAIQuestions"
     }
 
     @Published var fontSize: Double {
@@ -195,6 +196,12 @@ final class ReaderSettings: ObservableObject {
             UserDefaults.standard.set(scrollControl.rawValue, forKey: Keys.scrollControl)
         }
     }
+    @Published var showAIQuestions: Bool {
+        didSet {
+            guard showAIQuestions != oldValue else { return }
+            UserDefaults.standard.set(showAIQuestions, forKey: Keys.showAIQuestions)
+        }
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -206,6 +213,7 @@ final class ReaderSettings: ObservableObject {
         self.dimLevel = min(max(defaults.double(forKey: Keys.dimLevel), 0), 0.7)
         self.scrollMode = defaults.string(forKey: Keys.scrollMode).flatMap(ReaderScrollMode.init(rawValue:)) ?? .fluid
         self.scrollControl = defaults.string(forKey: Keys.scrollControl).flatMap(ReaderScrollControl.init(rawValue:)) ?? .wheel
+        self.showAIQuestions = defaults.object(forKey: Keys.showAIQuestions) as? Bool ?? true
     }
 
     var titleSize: CGFloat { CGFloat(fontSize) + 9 }
@@ -372,10 +380,6 @@ struct TrackpadScrollView: View {
             ZStack(alignment: .top) {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .fill(Color.white.opacity(0.06))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 20, style: .continuous)
-                            .stroke(Color.white.opacity(0.22), lineWidth: 1.5)
-                    )
 
                 Capsule()
                     .fill(Color.white.opacity(0.3))
@@ -551,6 +555,7 @@ struct ScrollTextView: View {
 
     var body: some View {
         GeometryReader { geometry in
+            let scrollViewHeight = geometry.size.height * 0.65
             ZStack(alignment: .top) {
                 ScrollViewReader { _ in
                     ScrollView {
@@ -569,29 +574,42 @@ struct ScrollTextView: View {
                         }
                         .padding(.top, showsBackButton ? backButtonTopPadding : topPadding)
                         .padding(.bottom, 100)
+                        .background(
+                            GeometryReader { geo in
+                                Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
+                            }
+                        )
                         .offset(y: scrollState.offset)
                     }
                     .coordinateSpace(name: "scroll")
-                    .frame(maxWidth: .infinity, maxHeight: geometry.size.height * 0.58, alignment: .top)
+                    .frame(maxWidth: .infinity, maxHeight: scrollViewHeight, alignment: .top)
                     .scrollDisabled(true)
                     .onPreferenceChange(ParagraphPositionKey.self) { positions in
-                        let visibleHeight = geometry.size.height * 0.58 * 0.60
+                        let visibleHeight = scrollViewHeight * 0.60
                         let viewport = CGRect(x: 0, y: 0, width: geometry.size.width, height: visibleHeight)
                         visibleParagraphs = positions
                             .filter { $0.value.intersects(viewport) }
                             .map { $0.key }
                             .sorted()
                     }
+                    .onPreferenceChange(ContentHeightKey.self) { h in
+                        scrollState.setScrollBounds(
+                            contentHeight: Double(h),
+                            viewportHeight: Double(scrollViewHeight)
+                        )
+                    }
                     .overlay(alignment: .bottom) {
                         LinearGradient(
                             stops: [
                                 .init(color: .clear, location: 0),
+                                .init(color: .clear, location: 0.25),
+                                .init(color: .black.opacity(0.6), location: 0.7),
                                 .init(color: .black, location: 1)
                             ],
                             startPoint: .top,
                             endPoint: .bottom
                         )
-                        .frame(height: geometry.size.height * 0.58 * 0.4)
+                        .frame(height: scrollViewHeight * 0.55)
                         .allowsHitTesting(false)
                     }
                 }
@@ -643,37 +661,39 @@ struct ScrollTextView: View {
                 }
             }
             .frame(width: geometry.size.width * 0.3, height: geometry.size.width * 0.3)
-            .position(x: geometry.size.width / 2, y: geometry.size.height * 0.68)
+            .position(x: geometry.size.width / 2, y: geometry.size.height * 0.76)
 
-            VStack(spacing: 4) {
-                if !tags.isEmpty {
-                    FlowLayout(spacing: 6) {
-                        ForEach(tags.prefix(maxTags), id: \.self) { tag in
-                            TagView(text: tag)
+            if readerSettings.showAIQuestions {
+                VStack(spacing: 4) {
+                    if !tags.isEmpty {
+                        FlowLayout(spacing: 6) {
+                            ForEach(tags.prefix(maxTags), id: \.self) { tag in
+                                TagView(text: tag)
+                            }
                         }
+                        .frame(maxHeight: 70)
+                        .padding(.horizontal, 16)
                     }
-                    .frame(maxHeight: 70)
-                    .padding(.horizontal, 16)
+
+                    Text(currentQuestion)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.gray.opacity(0.7))
+                        .padding(.top, 4)
+                        .opacity(isLoadingQuestion ? 0.5 : 1.0)
+                        .animation(.easeInOut(duration: 0.2), value: isLoadingQuestion)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .onTapGesture {
+                            if let url = perplexityURL(for: currentQuestion) {
+                                explainerURL = IdentifiableURL(url: url)
+                            }
+                        }
+                        .sheet(item: $explainerURL) { item in
+                            SafariView(url: item.url)
+                        }
                 }
-
-                Text(currentQuestion)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.gray.opacity(0.7))
-                    .padding(.top, 4)
-                    .opacity(isLoadingQuestion ? 0.5 : 1.0)
-                    .animation(.easeInOut(duration: 0.2), value: isLoadingQuestion)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .onTapGesture {
-                        if let url = perplexityURL(for: currentQuestion) {
-                            explainerURL = IdentifiableURL(url: url)
-                        }
-                    }
-                    .sheet(item: $explainerURL) { item in
-                        SafariView(url: item.url)
-                    }
+                .position(x: geometry.size.width / 2, y: geometry.size.height * 0.91)
             }
-            .position(x: geometry.size.width / 2, y: geometry.size.height * 0.88)
 
             if showsBackButton {
                 Button {
@@ -713,6 +733,17 @@ struct ScrollTextView: View {
         }
         .background(Color.black)
         .portraitOnly()
+        .gesture(
+            DragGesture(minimumDistance: 20, coordinateSpace: .global)
+                .onEnded { value in
+                    guard value.startLocation.x < 60 else { return }
+                    let dx = value.translation.width
+                    let dy = abs(value.translation.height)
+                    if dx > 50 && dy < dx * 0.75 {
+                        dismiss()
+                    }
+                }
+        )
         .environmentObject(readerSettings)
         .sheet(isPresented: $showReaderSettings) {
             ReaderSettingsSheet(settings: readerSettings)
@@ -877,15 +908,34 @@ final class ScrollState: ObservableObject {
         startMomentumTimer()
     }
 
+    private var contentHeight: Double = 0
+    private var viewportHeight: Double = 0
+    private var minOffset: Double { guard contentHeight > viewportHeight else { return 0 }; return -(contentHeight - viewportHeight) }
+    private var maxOffset: Double { 0 }
+
+    func setScrollBounds(contentHeight: Double, viewportHeight: Double) {
+        self.contentHeight = contentHeight
+        self.viewportHeight = viewportHeight
+    }
+
+    private func clamp(_ value: Double) -> Double {
+        min(maxOffset, max(minOffset, value))
+    }
+
     func applyDirectDelta(_ delta: Double) {
-        offset += delta
+        let proposed = offset + delta
+        if proposed > maxOffset || proposed < minOffset {
+            offset += delta * 0.25
+        } else {
+            offset = proposed
+        }
     }
 
     func applyFlick(direction: Double) {
         velocity = direction * maxVelocity
         lastScrollTime = CACurrentMediaTime()
         withAnimation(momentumSpring) {
-            offset += velocity * 3
+            offset = clamp(offset + velocity * 3)
         }
     }
 
@@ -915,7 +965,7 @@ final class ScrollState: ObservableObject {
         velocity = min(maxVelocity, max(-maxVelocity, velocity))
 
         withAnimation(momentumSpring) {
-            offset += velocity
+            offset = clamp(offset + velocity)
         }
     }
 
@@ -928,10 +978,18 @@ final class ScrollState: ObservableObject {
                 try? await Task.sleep(nanoseconds: sleepNanos)
 
                 let timeSinceLastScroll = CACurrentMediaTime() - self.lastScrollTime
-                if timeSinceLastScroll > 0.1 && abs(self.velocity) > 0.1 {
-                    self.velocity *= self.deceleration
-                    withAnimation(self.momentumSpring) {
-                        self.offset += self.velocity
+                if timeSinceLastScroll > 0.1 {
+                    let clamped = self.clamp(self.offset)
+                    if clamped != self.offset {
+                        self.velocity = 0
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            self.offset = clamped
+                        }
+                    } else if abs(self.velocity) > 0.1 {
+                        self.velocity *= self.deceleration
+                        withAnimation(self.momentumSpring) {
+                            self.offset += self.velocity
+                        }
                     }
                 }
             }
@@ -1007,6 +1065,11 @@ struct ArticleImageView: View {
         Rectangle()
             .fill(Color.white.opacity(0.04))
     }
+}
+
+struct ContentHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
 struct ParagraphPositionKey: PreferenceKey {
@@ -1297,6 +1360,7 @@ struct ReaderSettingsSheet: View {
             optionSection("Margins", options: ReaderMargins.allCases, selection: $settings.margins, label: \.label)
             optionSection("Scroll", options: ReaderScrollMode.allCases, selection: $settings.scrollMode, label: \.label)
             optionSection("Control", options: ReaderScrollControl.allCases, selection: $settings.scrollControl, label: \.label)
+            aiQuestionsToggle
             brightnessSection
 
             Spacer(minLength: 0)
@@ -1306,7 +1370,7 @@ struct ReaderSettingsSheet: View {
         .padding(.bottom, 28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.black.ignoresSafeArea())
-        .presentationDetents([.height(590)])
+        .presentationDetents([.height(640)])
         .presentationBackground(Color.black)
         .presentationDragIndicator(.visible)
         .preferredColorScheme(.dark)
@@ -1337,6 +1401,20 @@ struct ReaderSettingsSheet: View {
         VStack(alignment: .leading, spacing: 8) {
             sectionHeader(title)
             segmentedControl(options: options, selection: selection, label: label)
+        }
+    }
+
+    private var aiQuestionsToggle: some View {
+        HStack {
+            Text("AI Questions")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white.opacity(0.45))
+                .textCase(.uppercase)
+                .tracking(0.5)
+            Spacer()
+            Toggle("", isOn: $settings.showAIQuestions)
+                .labelsHidden()
+                .tint(.white.opacity(0.6))
         }
     }
 
