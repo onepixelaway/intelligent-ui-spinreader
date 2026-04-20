@@ -217,40 +217,60 @@ enum EpubParser {
     }
 
     private static func parseNavDocument(_ html: String) -> [String: String] {
-        var results: [String: String] = [:]
-        guard let data = html.data(using: .utf8) else { return results }
+        guard let data = html.data(using: .utf8) else { return [:] }
         let parser = XMLParser(data: data)
         let delegate = NavDocParserDelegate()
         parser.delegate = delegate
         parser.shouldProcessNamespaces = true
         parser.parse()
+
+        var authoritativeTitles: [String: String] = [:]
+        var fallbackTitles: [String: String] = [:]
+
         for entry in delegate.entries {
+            let hasFragment = entry.href.contains("#")
             let href = stripFragment(entry.href)
             let basename = (href as NSString).lastPathComponent
-            if !entry.title.isEmpty {
-                results[href] = entry.title
-                results[basename] = entry.title
+            guard !entry.title.isEmpty else { continue }
+
+            if !hasFragment {
+                authoritativeTitles[href] = entry.title
+                authoritativeTitles[basename] = entry.title
+            } else {
+                if fallbackTitles[href] == nil { fallbackTitles[href] = entry.title }
+                if fallbackTitles[basename] == nil { fallbackTitles[basename] = entry.title }
             }
         }
-        return results
+
+        return fallbackTitles.merging(authoritativeTitles) { _, authoritative in authoritative }
     }
 
     private static func parseNCX(_ data: Data) -> [String: String] {
-        var results: [String: String] = [:]
         let parser = XMLParser(data: data)
         let delegate = NCXParserDelegate()
         parser.delegate = delegate
         parser.shouldProcessNamespaces = true
         parser.parse()
+
+        var authoritativeTitles: [String: String] = [:]
+        var fallbackTitles: [String: String] = [:]
+
         for entry in delegate.entries {
+            let hasFragment = entry.href.contains("#")
             let href = stripFragment(entry.href)
             let basename = (href as NSString).lastPathComponent
-            if !entry.title.isEmpty {
-                results[href] = entry.title
-                results[basename] = entry.title
+            guard !entry.title.isEmpty else { continue }
+
+            if !hasFragment {
+                authoritativeTitles[href] = entry.title
+                authoritativeTitles[basename] = entry.title
+            } else {
+                if fallbackTitles[href] == nil { fallbackTitles[href] = entry.title }
+                if fallbackTitles[basename] == nil { fallbackTitles[basename] = entry.title }
             }
         }
-        return results
+
+        return fallbackTitles.merging(authoritativeTitles) { _, authoritative in authoritative }
     }
 
     private static func stripFragment(_ href: String) -> String {
@@ -366,6 +386,7 @@ private final class OPFParserDelegate: NSObject, XMLParserDelegate {
 private struct TOCEntry {
     let href: String
     let title: String
+    let depth: Int
 }
 
 private final class NavDocParserDelegate: NSObject, XMLParserDelegate {
@@ -374,6 +395,7 @@ private final class NavDocParserDelegate: NSObject, XMLParserDelegate {
     private var currentHref: String?
     private var buffer: String = ""
     private var inAnchor = false
+    private var olDepth = 0
 
     func parser(
         _ parser: XMLParser,
@@ -388,10 +410,13 @@ private final class NavDocParserDelegate: NSObject, XMLParserDelegate {
                 inTocNav = true
             }
         }
-        if inTocNav && elementName == "a" {
-            inAnchor = true
-            currentHref = attributeDict["href"]
-            buffer = ""
+        if inTocNav {
+            if elementName == "ol" { olDepth += 1 }
+            if elementName == "a" {
+                inAnchor = true
+                currentHref = attributeDict["href"]
+                buffer = ""
+            }
         }
     }
 
@@ -409,11 +434,12 @@ private final class NavDocParserDelegate: NSObject, XMLParserDelegate {
             if elementName == "a", let href = currentHref {
                 let title = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !title.isEmpty {
-                    entries.append(TOCEntry(href: href, title: title))
+                    entries.append(TOCEntry(href: href, title: title, depth: olDepth))
                 }
                 inAnchor = false
                 currentHref = nil
             }
+            if elementName == "ol" { olDepth = max(0, olDepth - 1) }
             if elementName == "nav" { inTocNav = false }
         }
     }
@@ -421,9 +447,10 @@ private final class NavDocParserDelegate: NSObject, XMLParserDelegate {
 
 private final class NCXParserDelegate: NSObject, XMLParserDelegate {
     var entries: [TOCEntry] = []
-    private var inNavPoint = false
+    private var navPointDepth = 0
     private var inText = false
     private var currentSrc: String?
+    private var currentDepth = 0
     private var buffer: String = ""
 
     func parser(
@@ -433,9 +460,14 @@ private final class NCXParserDelegate: NSObject, XMLParserDelegate {
         qualifiedName qName: String?,
         attributes attributeDict: [String: String] = [:]
     ) {
-        if elementName == "navPoint" { inNavPoint = true; currentSrc = nil; buffer = "" }
-        if inNavPoint && elementName == "text" { inText = true; buffer = "" }
-        if inNavPoint && elementName == "content", let src = attributeDict["src"] {
+        if elementName == "navPoint" {
+            navPointDepth += 1
+            currentSrc = nil
+            currentDepth = navPointDepth
+            buffer = ""
+        }
+        if navPointDepth > 0 && elementName == "text" { inText = true; buffer = "" }
+        if navPointDepth > 0 && elementName == "content", let src = attributeDict["src"] {
             currentSrc = src
         }
     }
@@ -454,9 +486,9 @@ private final class NCXParserDelegate: NSObject, XMLParserDelegate {
         if elementName == "navPoint" {
             let title = buffer.trimmingCharacters(in: .whitespacesAndNewlines)
             if let src = currentSrc, !title.isEmpty {
-                entries.append(TOCEntry(href: src, title: title))
+                entries.append(TOCEntry(href: src, title: title, depth: currentDepth))
             }
-            inNavPoint = false
+            navPointDepth -= 1
         }
     }
 }
