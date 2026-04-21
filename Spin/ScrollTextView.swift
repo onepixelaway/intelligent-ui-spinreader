@@ -435,6 +435,7 @@ struct ScrollTextView: View {
     @State private var analysisTask: Task<Void, Never>?
     @State private var showReaderSettings: Bool = false
     @State private var activeFootnote: String? = nil
+    @State private var isLoadingNextChapter: Bool = false
 
     struct RichText: Hashable, @unchecked Sendable {
         let attributedString: NSAttributedString
@@ -674,6 +675,9 @@ struct ScrollTextView: View {
                             contentHeight: Double(h),
                             viewportHeight: Double(scrollViewHeight)
                         )
+                        if isLoadingNextChapter {
+                            isLoadingNextChapter = false
+                        }
                     }
                     .overlay(alignment: .bottom) {
                         LinearGradient(
@@ -851,20 +855,25 @@ struct ScrollTextView: View {
     private func advanceToNextChapter() {
         let nextIndex = chapterIndex + 1
         guard !chapters.isEmpty, nextIndex < chapters.count else { return }
+        guard !isLoadingNextChapter else { return }
+        isLoadingNextChapter = true
+
         let chapter = chapters[nextIndex]
-        var built = chapter.items
-        let hasLeadingTitle: Bool = {
-            if let first = built.first, case .title = first { return true }
-            return false
-        }()
+        var newItems: [ReadableItem] = [.divider]
+
         let trimmedTitle = chapter.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !hasLeadingTitle && !trimmedTitle.isEmpty {
-            built.insert(.title(trimmedTitle), at: 0)
+        var chapterItems = chapter.items
+        if let first = chapterItems.first, case .title = first {
+            chapterItems.removeFirst()
         }
+        if !trimmedTitle.isEmpty {
+            newItems.append(.title(trimmedTitle))
+        }
+        newItems.append(contentsOf: chapterItems)
+
         chapterIndex = nextIndex
-        items = built
-        scrollState.offset = 0
-        showTopGradient = false
+        items.append(contentsOf: newItems)
+
         tags = []
         currentQuestion = ""
         lastAnalyzedText = ""
