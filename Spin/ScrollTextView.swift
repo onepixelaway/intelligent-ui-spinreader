@@ -571,7 +571,7 @@ struct ScrollTextView: View {
         case .paragraphWithFootnotes(let text, _):
             return text
         case .chapterTOC(let entries):
-            return entries.joined(separator: " ")
+            return entries.joined(separator: "\n")
         }
     }
 
@@ -1353,12 +1353,14 @@ struct ChapterTOCView: View {
 
     @EnvironmentObject private var settings: ReaderSettings
 
+    private static let linkColor = Color(red: 0.4, green: 0.6, blue: 0.9)
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                 Text(entry)
                     .font(.system(size: settings.paragraphSize, weight: .regular, design: settings.fontFamily.design))
-                    .foregroundColor(Color(red: 0.4, green: 0.6, blue: 0.9))
+                    .foregroundColor(Self.linkColor)
                     .lineSpacing(settings.lineSpacingPt(for: settings.paragraphSize))
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)

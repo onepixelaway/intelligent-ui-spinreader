@@ -960,7 +960,7 @@ private enum EpubHTMLExtractor {
                     if !isClose {
                         flush()
                         let cls = extractAttribute("class", from: raw)?.lowercased() ?? ""
-                        let classes = cls.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+                        let classes = splitClasses(cls)
                         if classes.contains(where: { $0.contains("chapter") }) {
                             inChapterHeading = true
                             cnBuffer = ""
@@ -999,7 +999,7 @@ private enum EpubHTMLExtractor {
                 case "p", "div":
                     if !isClose {
                         let cls = extractAttribute("class", from: raw)?.lowercased() ?? ""
-                        let classes = cls.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+                        let classes = splitClasses(cls)
                         if tagName == "p" && classes.contains("cocl1") {
                             flushSpansOnly()
                             var depth = 1
@@ -1045,7 +1045,7 @@ private enum EpubHTMLExtractor {
                                 ctDepth += 1
                             } else {
                                 let cls = extractAttribute("class", from: raw)?.lowercased() ?? ""
-                                let classes = cls.split(whereSeparator: { $0.isWhitespace }).map(String.init)
+                                let classes = splitClasses(cls)
                                 if classes.contains("cn") {
                                     cnDepth = 1
                                 } else if classes.contains("ct") {
@@ -1287,6 +1287,10 @@ private enum EpubHTMLExtractor {
 
     private static func hasCalloutClass(_ cls: String) -> Bool {
         calloutKeywords.contains(where: { cls.contains($0) })
+    }
+
+    private static func splitClasses(_ cls: String) -> [String] {
+        cls.split(whereSeparator: { $0.isWhitespace }).map(String.init)
     }
 
     private static func extractBody(_ html: String) -> String {
