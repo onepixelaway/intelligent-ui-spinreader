@@ -15,7 +15,8 @@
 		8D97D9B32D37180200FBE934 /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D97D9B22D37180200FBE934 /* Config.swift */; };
 		8D97D9BE2D3B763200FBE934 /* OpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = 8D97D9BD2D3B763200FBE934 /* OpenAI */; };
 		A1B2C3D11D40000000000002 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D01D40000000000001 /* Models.swift */; };
-		A1B2C3D31D40000000000004 /* RSSParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D21D40000000000003 /* RSSParser.swift */; };
+
+		F1E2D3C4B5A6F7E8D9C0B1A2 /* HighlightsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E1F2 /* HighlightsListView.swift */; };		A1B2C3D31D40000000000004 /* RSSParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D21D40000000000003 /* RSSParser.swift */; };
 		A1B2C3D51D40000000000006 /* FeedStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D41D40000000000005 /* FeedStore.swift */; };
 		A1B2C3D71D40000000000008 /* FeedManagerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D61D40000000000007 /* FeedManagerView.swift */; };
 		A1B2C3D91D4000000000000A /* ArticlePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D81D40000000000009 /* ArticlePickerView.swift */; };
@@ -34,7 +35,8 @@
 		BE51FD8E9926EB5664C50A54 /* ScrollTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollTextView.swift; sourceTree = "<group>"; };
 		DD732CE59931E7E3D90ABCAB /* SpinApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpinApp.swift; sourceTree = "<group>"; };
 		A1B2C3D01D40000000000001 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
-		A1B2C3D21D40000000000003 /* RSSParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RSSParser.swift; sourceTree = "<group>"; };
+
+		A1B2C3D4E5F6A7B8C9D0E1F2 /* HighlightsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlightsListView.swift; sourceTree = "<group>"; };		A1B2C3D21D40000000000003 /* RSSParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RSSParser.swift; sourceTree = "<group>"; };
 		A1B2C3D41D40000000000005 /* FeedStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedStore.swift; sourceTree = "<group>"; };
 		A1B2C3D61D40000000000007 /* FeedManagerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedManagerView.swift; sourceTree = "<group>"; };
 		A1B2C3D81D40000000000009 /* ArticlePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArticlePickerView.swift; sourceTree = "<group>"; };
@@ -63,6 +65,7 @@
 				8D97D9B22D37180200FBE934 /* Config.swift */,
 				DD732CE59931E7E3D90ABCAB /* SpinApp.swift */,
 				A1B2C3D01D40000000000001 /* Models.swift */,
+				A1B2C3D4E5F6A7B8C9D0E1F2 /* HighlightsListView.swift */,
 				A1B2C3D21D40000000000003 /* RSSParser.swift */,
 				A1B2C3D41D40000000000005 /* FeedStore.swift */,
 				A1B2C3D61D40000000000007 /* FeedManagerView.swift */,
@@ -190,6 +193,7 @@
 				22EEFB9A94BF60E40F37EDBA /* SpinApp.swift in Sources */,
 				4AD9B6E7AB7C36B8F8171E75 /* ScrollTextView.swift in Sources */,
 				A1B2C3D11D40000000000002 /* Models.swift in Sources */,
+				F1E2D3C4B5A6F7E8D9C0B1A2 /* HighlightsListView.swift in Sources */,
 				A1B2C3D31D40000000000004 /* RSSParser.swift in Sources */,
 				A1B2C3D51D40000000000006 /* FeedStore.swift in Sources */,
 				A1B2C3D71D40000000000008 /* FeedManagerView.swift in Sources */,

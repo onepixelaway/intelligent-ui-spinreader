@@ -421,6 +421,7 @@ struct TrackpadScrollView: View {
 
 struct ScrollTextView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(HighlightStore.self) private var highlightStore
 
     @StateObject private var scrollState = ScrollState()
     @StateObject private var readerSettings = ReaderSettings()
@@ -434,6 +435,7 @@ struct ScrollTextView: View {
     @State private var explainerURL: IdentifiableURL?
     @State private var analysisTask: Task<Void, Never>?
     @State private var showReaderSettings: Bool = false
+    @State private var showHighlightsList: Bool = false
     @State private var activeFootnote: String? = nil
     @State private var isLoadingNextChapter: Bool = false
 
@@ -476,6 +478,9 @@ struct ScrollTextView: View {
     @State private var chapterIndex: Int
     private let showsBackButton: Bool
     private let article: Article?
+    private let contentID: String
+    private let bookID: String?
+    @State private var itemContentIDs: [String] = []
     private let topPadding: CGFloat = 20
     private let backButtonTopPadding: CGFloat = 64
     private let maxTags = 5
@@ -501,6 +506,9 @@ struct ScrollTextView: View {
         _chapterIndex = State(initialValue: 0)
         self.showsBackButton = false
         self.article = nil
+        self.contentID = "story"
+        self.bookID = nil
+        _itemContentIDs = State(initialValue: Array(repeating: "story", count: built.count))
     }
 
     init(article: Article) {
@@ -544,6 +552,9 @@ struct ScrollTextView: View {
         _chapterIndex = State(initialValue: 0)
         self.showsBackButton = true
         self.article = article
+        self.contentID = article.id
+        self.bookID = nil
+        _itemContentIDs = State(initialValue: Array(repeating: article.id, count: built.count))
     }
 
     init(items: [ReadableItem], title: String) {
@@ -556,14 +567,18 @@ struct ScrollTextView: View {
         if !hasLeadingTitle && !trimmedTitle.isEmpty {
             built.insert(.title(trimmedTitle), at: 0)
         }
+        let cid = "custom:\(title)"
         _items = State(initialValue: built)
         self.chapters = []
         _chapterIndex = State(initialValue: 0)
         self.showsBackButton = true
         self.article = nil
+        self.contentID = cid
+        self.bookID = nil
+        _itemContentIDs = State(initialValue: Array(repeating: cid, count: built.count))
     }
 
-    init(chapters: [EpubChapter], startingIndex: Int) {
+    init(chapters: [EpubChapter], startingIndex: Int, bookID: String = "") {
         let chapter = chapters[startingIndex]
         var built = chapter.items
         let hasLeadingTitle: Bool = {
@@ -574,11 +589,15 @@ struct ScrollTextView: View {
         if !hasLeadingTitle && !trimmedTitle.isEmpty {
             built.insert(.title(trimmedTitle), at: 0)
         }
+        let cid = "\(bookID):\(chapter.xhtmlPath)"
         _items = State(initialValue: built)
         self.chapters = chapters
         _chapterIndex = State(initialValue: startingIndex)
         self.showsBackButton = true
         self.article = nil
+        self.contentID = cid
+        self.bookID = bookID
+        _itemContentIDs = State(initialValue: Array(repeating: cid, count: built.count))
     }
 
     private func textForAnalysis(_ item: ReadableItem) -> String {
@@ -639,7 +658,7 @@ struct ScrollTextView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 28) {
                             ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                                readableItemView(item)
+                                readableItemView(item, index: index)
                                     .id(index)
                                     .padding(.horizontal, horizontalPadding(for: item))
                                     .background(
@@ -801,6 +820,17 @@ struct ScrollTextView: View {
                 .position(x: 30, y: 30)
 
                 Button {
+                    showHighlightsList = true
+                } label: {
+                    Image(systemName: "highlighter")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.55))
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .position(x: geometry.size.width - (article != nil ? 118 : 74), y: 30)
+
+                Button {
                     showReaderSettings = true
                 } label: {
                     Image(systemName: "textformat.size")
@@ -841,6 +871,9 @@ struct ScrollTextView: View {
         .sheet(isPresented: $showReaderSettings) {
             ReaderSettingsSheet(settings: readerSettings)
         }
+        .sheet(isPresented: $showHighlightsList) {
+            HighlightsListView(contentIDs: Array(Set(itemContentIDs)))
+        }
         .overlay(alignment: .bottom) {
             if let footnote = activeFootnote {
                 FootnoteOverlay(text: footnote) {
@@ -873,6 +906,8 @@ struct ScrollTextView: View {
 
         chapterIndex = nextIndex
         items.append(contentsOf: newItems)
+        let newContentID = bookID.map { "\($0):\(chapter.xhtmlPath)" } ?? contentID
+        itemContentIDs.append(contentsOf: Array(repeating: newContentID, count: newItems.count))
 
         tags = []
         currentQuestion = ""
@@ -896,32 +931,23 @@ struct ScrollTextView: View {
         }
     }
 
-    private func readableTextBlock(_ attributed: AttributedString, size: CGFloat, extraLeading: CGFloat = 0) -> some View {
-        Text(attributed)
-            .lineSpacing(readerSettings.lineSpacingPt(for: size))
-            .fixedSize(horizontal: false, vertical: true)
-            .lineLimit(nil)
-            .multilineTextAlignment(.leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, extraLeading)
-    }
-
     @ViewBuilder
-    private func readableItemView(_ item: ReadableItem) -> some View {
+    private func readableItemView(_ item: ReadableItem, index: Int) -> some View {
         switch item {
         case .title(let text):
-            readableTextBlock(styledText(text, size: readerSettings.titleSize, weight: .bold), size: readerSettings.titleSize)
+            highlightableTextBlock(text, size: readerSettings.titleSize, fontWeight: .bold, itemIndex: index)
         case .byline(let text):
-            readableTextBlock(styledText(text, size: readerSettings.bylineSize, weight: .semibold), size: readerSettings.bylineSize)
+            highlightableTextBlock(text, size: readerSettings.bylineSize, fontWeight: .semibold, itemIndex: index)
         case .paragraph(let text):
-            readableTextBlock(styledText(text, size: readerSettings.paragraphSize, weight: .regular), size: readerSettings.paragraphSize)
+            highlightableTextBlock(text, size: readerSettings.paragraphSize, fontWeight: .regular, itemIndex: index)
         case .richParagraph(let rt):
-            readableTextBlock(richAttributedString(rt, size: readerSettings.paragraphSize), size: readerSettings.paragraphSize)
+            highlightableRichTextBlock(rt, size: readerSettings.paragraphSize, itemIndex: index)
         case .subheading(let text):
-            readableTextBlock(styledText(text, size: readerSettings.titleSize - 4, weight: .bold), size: readerSettings.titleSize - 4)
-        case .listItem(let text, let ordered, let index):
-            let prefix = ordered ? "\(index). " : "\u{2022} "
-            readableTextBlock(styledText(prefix + text, size: readerSettings.paragraphSize, weight: .regular), size: readerSettings.paragraphSize, extraLeading: 16)
+            highlightableTextBlock(text, size: readerSettings.titleSize - 4, fontWeight: .bold, itemIndex: index)
+        case .listItem(let text, let ordered, let listIdx):
+            let prefix = ordered ? "\(listIdx). " : "\u{2022} "
+            let fullText = prefix + text
+            highlightableTextBlock(fullText, size: readerSettings.paragraphSize, fontWeight: .regular, itemIndex: index, extraLeading: 16)
         case .image(let url, let alt, let caption):
             ArticleImageView(url: url, alt: alt, caption: caption)
         case .blockquote(let text):
@@ -950,33 +976,129 @@ struct ScrollTextView: View {
         return item.usesWideHorizontalPadding ? max(8, base - 12) : base
     }
 
-    private func styledText(_ text: String, size: CGFloat, weight: Font.Weight) -> AttributedString {
-        var attributed = AttributedString(text)
-        let range = attributed.startIndex..<attributed.endIndex
-        attributed[range].font = .system(size: size, weight: weight, design: readerSettings.fontFamily.design)
-        attributed[range].foregroundColor = Color(white: 0.92, opacity: 1.0)
-        return attributed
+    private func contentIDForItem(at index: Int) -> String {
+        guard index < itemContentIDs.count else { return contentID }
+        return itemContentIDs[index]
     }
 
-    private func richAttributedString(_ rt: RichText, size: CGFloat) -> AttributedString {
+    private func highlightsForParagraph(_ text: String, itemIndex: Int) -> [Highlight] {
+        let cid = contentIDForItem(at: itemIndex)
+        return highlightStore.highlights(for: cid).filter { h in
+            guard h.startOffset >= 0, h.endOffset <= text.count, h.startOffset < h.endOffset else { return false }
+            let s = text.index(text.startIndex, offsetBy: h.startOffset)
+            let e = text.index(text.startIndex, offsetBy: h.endOffset)
+            return String(text[s..<e]) == h.text
+        }
+    }
+
+    private func nsStyledText(_ text: String, size: CGFloat, weight: UIFont.Weight) -> NSAttributedString {
+        var font = UIFont.systemFont(ofSize: size, weight: weight)
+        let design: UIFontDescriptor.SystemDesign = {
+            switch readerSettings.fontFamily {
+            case .system: return .default
+            case .serif: return .serif
+            case .monospaced: return .monospaced
+            }
+        }()
+        if let descriptor = font.fontDescriptor.withDesign(design) {
+            font = UIFont(descriptor: descriptor, size: size)
+        }
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = readerSettings.lineSpacingPt(for: size)
+        return NSAttributedString(string: text, attributes: [
+            .font: font,
+            .foregroundColor: UIColor(white: 0.92, alpha: 1.0),
+            .paragraphStyle: para
+        ])
+    }
+
+    private func nsRichAttributedText(_ rt: RichText, size: CGFloat) -> NSAttributedString {
         let ns = rt.attributedString
-        var result = AttributedString()
+        let result = NSMutableAttributedString()
+        let design: UIFontDescriptor.SystemDesign = {
+            switch readerSettings.fontFamily {
+            case .system: return .default
+            case .serif: return .serif
+            case .monospaced: return .monospaced
+            }
+        }()
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = readerSettings.lineSpacingPt(for: size)
         ns.enumerateAttributes(in: NSRange(location: 0, length: ns.length)) { attrs, range, _ in
             let substring = ns.attributedSubstring(from: range).string
-            var chunk = AttributedString(substring)
-            let chunkRange = chunk.startIndex..<chunk.endIndex
             let uiFont = attrs[.font] as? UIFont
             let traits = uiFont?.fontDescriptor.symbolicTraits ?? []
             let isBold = traits.contains(.traitBold)
             let isItalic = traits.contains(.traitItalic)
-            let weight: Font.Weight = isBold ? .bold : .regular
-            var font = Font.system(size: size, weight: weight, design: readerSettings.fontFamily.design)
-            if isItalic { font = font.italic() }
-            chunk[chunkRange].font = font
-            chunk[chunkRange].foregroundColor = Color(white: 0.92, opacity: 1.0)
+            let weight: UIFont.Weight = isBold ? .bold : .regular
+            var font = UIFont.systemFont(ofSize: size, weight: weight)
+            if let descriptor = font.fontDescriptor.withDesign(design) {
+                font = UIFont(descriptor: descriptor, size: size)
+            }
+            if isItalic, let italicDesc = font.fontDescriptor.withSymbolicTraits(.traitItalic) {
+                font = UIFont(descriptor: italicDesc, size: size)
+            }
+            let chunk = NSAttributedString(string: substring, attributes: [
+                .font: font,
+                .foregroundColor: UIColor(white: 0.92, alpha: 1.0),
+                .paragraphStyle: para
+            ])
             result.append(chunk)
         }
         return result
+    }
+
+    private static func uiFontWeight(from swiftUIWeight: Font.Weight) -> UIFont.Weight {
+        switch swiftUIWeight {
+        case .bold: return .bold
+        case .semibold: return .semibold
+        case .medium: return .medium
+        case .light: return .light
+        case .thin: return .thin
+        case .heavy: return .heavy
+        case .black: return .black
+        default: return .regular
+        }
+    }
+
+    @ViewBuilder
+    private func highlightableTextBlock(_ text: String, size: CGFloat, fontWeight: Font.Weight, itemIndex: Int, extraLeading: CGFloat = 0) -> some View {
+        let matching = highlightsForParagraph(text, itemIndex: itemIndex)
+        let cid = contentIDForItem(at: itemIndex)
+        let nsAttr = nsStyledText(text, size: size, weight: Self.uiFontWeight(from: fontWeight))
+        HighlightableTextView(
+            text: text,
+            attributedText: nsAttr,
+            highlights: matching,
+            onHighlightCreated: { selectedText, start, end in
+                highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
+            },
+            onHighlightRemoved: { id in
+                highlightStore.remove(id: id)
+            }
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, extraLeading)
+    }
+
+    @ViewBuilder
+    private func highlightableRichTextBlock(_ rt: RichText, size: CGFloat, itemIndex: Int) -> some View {
+        let text = rt.attributedString.string
+        let matching = highlightsForParagraph(text, itemIndex: itemIndex)
+        let cid = contentIDForItem(at: itemIndex)
+        let nsAttr = nsRichAttributedText(rt, size: size)
+        HighlightableTextView(
+            text: text,
+            attributedText: nsAttr,
+            highlights: matching,
+            onHighlightCreated: { selectedText, start, end in
+                highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
+            },
+            onHighlightRemoved: { id in
+                highlightStore.remove(id: id)
+            }
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func analyzeVisibleText(_ text: String) async {
@@ -1823,6 +1945,149 @@ struct ReaderSettingsSheet: View {
     }
 }
 
+private func buildHighlightDisplayText(
+    base: NSAttributedString,
+    highlights: [Highlight],
+    selectionRange: NSRange? = nil
+) -> NSAttributedString {
+    let mutable = NSMutableAttributedString(attributedString: base)
+    for h in highlights {
+        let range = NSRange(location: h.startOffset, length: h.endOffset - h.startOffset)
+        guard range.location >= 0, NSMaxRange(range) <= mutable.length else { continue }
+        mutable.addAttribute(.backgroundColor, value: UIColor.yellow.withAlphaComponent(0.3), range: range)
+    }
+    if let sel = selectionRange, sel.length > 0, sel.location >= 0, NSMaxRange(sel) <= mutable.length {
+        mutable.addAttribute(.backgroundColor, value: UIColor.yellow.withAlphaComponent(0.25), range: sel)
+    }
+    return mutable
+}
+
+struct HighlightableTextView: UIViewRepresentable {
+    let text: String
+    let attributedText: NSAttributedString
+    let highlights: [Highlight]
+    let onHighlightCreated: @MainActor (String, Int, Int) -> Void
+    let onHighlightRemoved: @MainActor (UUID) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeUIView(context: Context) -> UITextView {
+        let tv = UITextView()
+        tv.isEditable = false
+        tv.isSelectable = false
+        tv.isScrollEnabled = false
+        tv.backgroundColor = .clear
+        tv.textContainerInset = .zero
+        tv.textContainer.lineFragmentPadding = 0
+        tv.setContentHuggingPriority(.required, for: .vertical)
+        tv.setContentCompressionResistancePriority(.required, for: .vertical)
+
+        let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
+        pan.minimumNumberOfTouches = 1
+        pan.maximumNumberOfTouches = 1
+        tv.addGestureRecognizer(pan)
+
+        let tap = UITapGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handleTap(_:)))
+        tv.addGestureRecognizer(tap)
+
+        return tv
+    }
+
+    func updateUIView(_ tv: UITextView, context: Context) {
+        let c = context.coordinator
+        c.baseAttributedText = attributedText
+        c.highlights = highlights
+        c.text = text
+        c.onHighlightCreated = onHighlightCreated
+        c.onHighlightRemoved = onHighlightRemoved
+        if c.isDragging { return }
+        tv.attributedText = buildHighlightDisplayText(base: attributedText, highlights: highlights)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? UIView.layoutFittingCompressedSize.width
+        let size = uiView.sizeThatFits(CGSize(width: width, height: CGFloat.greatestFiniteMagnitude))
+        return CGSize(width: width, height: size.height)
+    }
+
+    final class Coordinator: NSObject {
+        var baseAttributedText = NSAttributedString()
+        var highlights: [Highlight] = []
+        var text: String = ""
+        var onHighlightCreated: (@MainActor (String, Int, Int) -> Void)?
+        var onHighlightRemoved: (@MainActor (UUID) -> Void)?
+        var isDragging = false
+        private var dragStart: Int?
+
+        private func charIndex(at point: CGPoint, in tv: UITextView) -> Int {
+            let layoutManager = tv.layoutManager
+            let textContainer = tv.textContainer
+            let inset = tv.textContainerInset
+            let p = CGPoint(x: point.x - inset.left, y: point.y - inset.top)
+            let idx = layoutManager.characterIndex(for: p, in: textContainer, fractionOfDistanceBetweenInsertionPoints: nil)
+            return min(idx, (tv.text ?? "").count)
+        }
+
+        @objc func handlePan(_ g: UIPanGestureRecognizer) {
+            guard let tv = g.view as? UITextView else { return }
+            let pt = g.location(in: tv)
+
+            switch g.state {
+            case .began:
+                isDragging = true
+                dragStart = charIndex(at: pt, in: tv)
+            case .changed:
+                guard let start = dragStart else { return }
+                let current = charIndex(at: pt, in: tv)
+                let loc = min(start, current)
+                let len = abs(current - start)
+                tv.attributedText = buildHighlightDisplayText(
+                    base: baseAttributedText,
+                    highlights: highlights,
+                    selectionRange: NSRange(location: loc, length: len)
+                )
+            case .ended:
+                guard let start = dragStart else { return }
+                let end = charIndex(at: pt, in: tv)
+                let loc = min(start, end)
+                let len = abs(end - start)
+                if len > 0 {
+                    let nsText = (text as NSString)
+                    let range = NSRange(location: loc, length: min(len, nsText.length - loc))
+                    if NSMaxRange(range) <= nsText.length {
+                        let selectedText = nsText.substring(with: range)
+                        let cb = onHighlightCreated
+                        MainActor.assumeIsolated { cb?(selectedText, loc, loc + range.length) }
+                    }
+                }
+                isDragging = false
+                dragStart = nil
+                tv.attributedText = buildHighlightDisplayText(base: baseAttributedText, highlights: highlights)
+            default:
+                isDragging = false
+                dragStart = nil
+                tv.attributedText = buildHighlightDisplayText(base: baseAttributedText, highlights: highlights)
+            }
+        }
+
+        @objc func handleTap(_ g: UITapGestureRecognizer) {
+            guard let tv = g.view as? UITextView else { return }
+            let pt = g.location(in: tv)
+            let idx = charIndex(at: pt, in: tv)
+
+            for h in highlights where idx >= h.startOffset && idx < h.endOffset {
+                let cb = onHighlightRemoved
+                let hid = h.id
+                MainActor.assumeIsolated { cb?(hid) }
+                return
+            }
+        }
+    }
+}
+
 #Preview {
     ScrollTextView()
+        .environment(HighlightStore())
 }
