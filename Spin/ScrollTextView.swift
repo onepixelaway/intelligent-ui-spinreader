@@ -896,57 +896,36 @@ struct ScrollTextView: View {
         }
     }
 
+    private func readableTextBlock(_ attributed: AttributedString, size: CGFloat, extraLeading: CGFloat = 0) -> some View {
+        Text(attributed)
+            .lineSpacing(readerSettings.lineSpacingPt(for: size))
+            .fixedSize(horizontal: false, vertical: true)
+            .lineLimit(nil)
+            .multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, extraLeading)
+    }
+
     @ViewBuilder
     private func readableItemView(_ item: ReadableItem) -> some View {
         switch item {
         case .title(let text):
-            Text(styledText(text, size: readerSettings.titleSize, weight: .bold))
-                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.titleSize))
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            readableTextBlock(styledText(text, size: readerSettings.titleSize, weight: .bold), size: readerSettings.titleSize)
         case .byline(let text):
-            Text(styledText(text, size: readerSettings.bylineSize, weight: .semibold))
-                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.bylineSize))
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            readableTextBlock(styledText(text, size: readerSettings.bylineSize, weight: .semibold), size: readerSettings.bylineSize)
         case .paragraph(let text):
-            Text(styledText(text, size: readerSettings.paragraphSize, weight: .regular))
-                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            readableTextBlock(styledText(text, size: readerSettings.paragraphSize, weight: .regular), size: readerSettings.paragraphSize)
         case .richParagraph(let rt):
-            Text(richAttributedString(rt, size: readerSettings.paragraphSize))
-                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            readableTextBlock(richAttributedString(rt, size: readerSettings.paragraphSize), size: readerSettings.paragraphSize)
         case .subheading(let text):
-            Text(styledText(text, size: readerSettings.titleSize - 4, weight: .bold))
-                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.titleSize - 4))
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            readableTextBlock(styledText(text, size: readerSettings.titleSize - 4, weight: .bold), size: readerSettings.titleSize - 4)
         case .listItem(let text, let ordered, let index):
             let prefix = ordered ? "\(index). " : "\u{2022} "
-            Text(styledText(prefix + text, size: readerSettings.paragraphSize, weight: .regular))
-                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
-                .fixedSize(horizontal: false, vertical: true)
-                .lineLimit(nil)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 16)
+            readableTextBlock(styledText(prefix + text, size: readerSettings.paragraphSize, weight: .regular), size: readerSettings.paragraphSize, extraLeading: 16)
         case .image(let url, let alt, let caption):
             ArticleImageView(url: url, alt: alt, caption: caption)
         case .blockquote(let text):
-            BlockquoteView(text: text)
+            AccentedQuoteView(text: text)
         case .code(let text):
             CodeBlockView(text: text)
         case .video(let videoURL, let thumbnailURL, let provider):
@@ -958,7 +937,7 @@ struct ScrollTextView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 12)
         case .callout(let text):
-            CalloutView(text: text)
+            AccentedQuoteView(text: text, barOpacity: 0.45, textWhite: 0.85, hasBackground: true)
         case .paragraphWithFootnotes(let text, let footnotes):
             FootnoteParagraphView(text: text, footnotes: footnotes, activeFootnote: $activeFootnote)
         case .chapterTOC(let entries):
@@ -1061,7 +1040,6 @@ struct ScrollTextView: View {
                 questionText = result.choices.first?.message.content
             }
         } catch is CancellationError {
-            // Caller will set loading state on next cycle.
         } catch {
             print("Failed to perform OpenAI query: \(error.localizedDescription)")
         }
@@ -1092,6 +1070,10 @@ final class ScrollState: ObservableObject {
 
     init() {
         startMomentumTimer()
+    }
+
+    deinit {
+        momentumTask?.cancel()
     }
 
     private var contentHeight: Double = 0
@@ -1372,53 +1354,40 @@ struct SafariView: UIViewControllerRepresentable {
     func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 
-struct BlockquoteView: View {
+struct AccentedQuoteView: View {
     let text: String
+    let barOpacity: Double
+    let textWhite: Double
+    let hasBackground: Bool
 
     @EnvironmentObject private var settings: ReaderSettings
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                .fill(Color.white.opacity(0.25))
-                .frame(width: 3)
-
-            Text(text)
-                .font(.system(size: settings.blockquoteSize, weight: .regular, design: settings.fontFamily.design).italic())
-                .foregroundColor(Color(white: 0.78))
-                .lineSpacing(settings.lineSpacingPt(for: settings.blockquoteSize))
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    init(text: String, barOpacity: Double = 0.25, textWhite: Double = 0.78, hasBackground: Bool = false) {
+        self.text = text
+        self.barOpacity = barOpacity
+        self.textWhite = textWhite
+        self.hasBackground = hasBackground
     }
-}
-
-struct CalloutView: View {
-    let text: String
-
-    @EnvironmentObject private var settings: ReaderSettings
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                .fill(Color.white.opacity(0.45))
+                .fill(Color.white.opacity(barOpacity))
                 .frame(width: 3)
 
             Text(text)
                 .font(.system(size: settings.blockquoteSize, weight: .regular, design: settings.fontFamily.design).italic())
-                .foregroundColor(Color(white: 0.85))
+                .foregroundColor(Color(white: textWhite))
                 .lineSpacing(settings.lineSpacingPt(for: settings.blockquoteSize))
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 14)
+        .padding(.horizontal, hasBackground ? 12 : 0)
+        .padding(.vertical, hasBackground ? 14 : 0)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.06))
+                .fill(Color.white.opacity(hasBackground ? 0.06 : 0))
         )
         .frame(maxWidth: .infinity, alignment: .leading)
     }

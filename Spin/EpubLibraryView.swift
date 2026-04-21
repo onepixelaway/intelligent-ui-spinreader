@@ -321,15 +321,12 @@ final class EpubLibrary: ObservableObject {
     @Published private(set) var books: [EpubBook] = []
     @Published private(set) var isLoading: Bool = false
 
-    private var booksDirectory: URL {
-        let fm = FileManager.default
-        let docs = fm.urls(for: .documentDirectory, in: .userDomainMask).first!
+    let booksDirectory: URL = {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let dir = docs.appendingPathComponent("epubs", isDirectory: true)
-        if !fm.fileExists(atPath: dir.path) {
-            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        }
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
-    }
+    }()
 
     func seedDefaultEpubs() async {
         let dest = booksDirectory.appendingPathComponent("UXTeamofOne.epub")
