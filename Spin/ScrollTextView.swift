@@ -955,7 +955,11 @@ struct ScrollTextView: View {
         let tokenizer = NLTokenizer(unit: .sentence)
         for index in visibleParagraphs {
             guard items.indices.contains(index) else { continue }
-            guard let frame = paragraphFrames[index], viewport.contains(frame) else { continue }
+            guard let frame = paragraphFrames[index] else { continue }
+            let intersection = viewport.intersection(frame)
+            guard !intersection.isEmpty, frame.height > 0 else { continue }
+            let visibleFraction = intersection.height / frame.height
+            guard visibleFraction >= 0.75 else { continue }
             let text = textForAnalysis(items[index])
             guard !text.isEmpty else { continue }
             let cid = contentIDForItem(at: index)
