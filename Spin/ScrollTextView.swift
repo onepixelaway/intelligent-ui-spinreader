@@ -1354,8 +1354,8 @@ struct ChapterTOCView: View {
     @EnvironmentObject private var settings: ReaderSettings
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            ForEach(entries, id: \.self) { entry in
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(entries.enumerated()), id: \.offset) { index, entry in
                 Text(entry)
                     .font(.system(size: settings.paragraphSize, weight: .regular, design: settings.fontFamily.design))
                     .foregroundColor(Color(red: 0.4, green: 0.6, blue: 0.9))
@@ -1363,10 +1363,15 @@ struct ChapterTOCView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                if index < entries.count - 1 {
+                    Divider()
+                        .opacity(0.12)
+                        .padding(.vertical, 4)
+                }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
