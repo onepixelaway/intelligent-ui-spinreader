@@ -249,9 +249,9 @@ private struct ChapterListView: View {
                     .padding(.vertical, 8)
                 }
 
-                ForEach(book.chapters) { chapter in
+                ForEach(Array(book.chapters.enumerated()), id: \.element.id) { index, chapter in
                     NavigationLink {
-                        ScrollTextView(items: chapter.items, title: chapter.title)
+                        ScrollTextView(chapters: book.chapters, startingIndex: index)
                             .toolbar(.hidden, for: .navigationBar)
                             .navigationBarBackButtonHidden(true)
                     } label: {

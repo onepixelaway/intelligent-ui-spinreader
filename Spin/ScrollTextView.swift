@@ -470,7 +470,9 @@ struct ScrollTextView: View {
         case chapterTOC([String])
     }
 
-    private let items: [ReadableItem]
+    @State private var items: [ReadableItem]
+    private let chapters: [EpubChapter]
+    @State private var chapterIndex: Int
     private let showsBackButton: Bool
     private let article: Article?
     private let topPadding: CGFloat = 20
@@ -493,7 +495,9 @@ struct ScrollTextView: View {
             }
         }
 
-        self.items = built
+        _items = State(initialValue: built)
+        self.chapters = []
+        _chapterIndex = State(initialValue: 0)
         self.showsBackButton = false
         self.article = nil
     }
@@ -534,7 +538,9 @@ struct ScrollTextView: View {
             }
         }
 
-        self.items = built
+        _items = State(initialValue: built)
+        self.chapters = []
+        _chapterIndex = State(initialValue: 0)
         self.showsBackButton = true
         self.article = article
     }
@@ -549,7 +555,27 @@ struct ScrollTextView: View {
         if !hasLeadingTitle && !trimmedTitle.isEmpty {
             built.insert(.title(trimmedTitle), at: 0)
         }
-        self.items = built
+        _items = State(initialValue: built)
+        self.chapters = []
+        _chapterIndex = State(initialValue: 0)
+        self.showsBackButton = true
+        self.article = nil
+    }
+
+    init(chapters: [EpubChapter], startingIndex: Int) {
+        let chapter = chapters[startingIndex]
+        var built = chapter.items
+        let hasLeadingTitle: Bool = {
+            if let first = built.first, case .title = first { return true }
+            return false
+        }()
+        let trimmedTitle = chapter.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !hasLeadingTitle && !trimmedTitle.isEmpty {
+            built.insert(.title(trimmedTitle), at: 0)
+        }
+        _items = State(initialValue: built)
+        self.chapters = chapters
+        _chapterIndex = State(initialValue: startingIndex)
         self.showsBackButton = true
         self.article = nil
     }
@@ -686,6 +712,10 @@ struct ScrollTextView: View {
                     ScrollWheel { direction in
                         showTopGradient = abs(scrollState.offset) > topGradientThreshold
                         let chunk: CGFloat? = readerSettings.scrollMode == .paginated ? readerSettings.paginatedChunkHeight : nil
+                        if direction < 0 && scrollState.isAtBottom {
+                            advanceToNextChapter()
+                            return
+                        }
                         scrollState.handleScroll(direction: direction, paginatedChunk: chunk)
                         spinCount += 1
                         if spinCount >= 2 {
@@ -696,10 +726,18 @@ struct ScrollTextView: View {
                 } else {
                     TrackpadScrollView(
                         onDrag: { delta in
+                            if delta < 0 && scrollState.isAtBottom {
+                                advanceToNextChapter()
+                                return
+                            }
                             scrollState.applyDirectDelta(delta)
                             showTopGradient = abs(scrollState.offset) > topGradientThreshold
                         },
                         onFlick: { direction in
+                            if direction < 0 && scrollState.isAtBottom {
+                                advanceToNextChapter()
+                                return
+                            }
                             scrollState.applyFlick(direction: direction)
                             showTopGradient = abs(scrollState.offset) > topGradientThreshold
                             spinCount += 1
@@ -808,6 +846,29 @@ struct ScrollTextView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: activeFootnote)
+    }
+
+    private func advanceToNextChapter() {
+        let nextIndex = chapterIndex + 1
+        guard !chapters.isEmpty, nextIndex < chapters.count else { return }
+        let chapter = chapters[nextIndex]
+        var built = chapter.items
+        let hasLeadingTitle: Bool = {
+            if let first = built.first, case .title = first { return true }
+            return false
+        }()
+        let trimmedTitle = chapter.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !hasLeadingTitle && !trimmedTitle.isEmpty {
+            built.insert(.title(trimmedTitle), at: 0)
+        }
+        chapterIndex = nextIndex
+        items = built
+        scrollState.offset = 0
+        showTopGradient = false
+        tags = []
+        currentQuestion = ""
+        lastAnalyzedText = ""
+        spinCount = 0
     }
 
     private func handleAnalysisRequest() {
@@ -1028,6 +1089,12 @@ final class ScrollState: ObservableObject {
     private var viewportHeight: Double = 0
     private var minOffset: Double { guard contentHeight > viewportHeight else { return 0 }; return -(contentHeight - viewportHeight) - 120 }
     private var maxOffset: Double { 0 }
+
+    var isAtBottom: Bool {
+        guard contentHeight > viewportHeight else { return false }
+        let contentBottom = -(contentHeight - viewportHeight)
+        return offset <= contentBottom + 5
+    }
 
     func setScrollBounds(contentHeight: Double, viewportHeight: Double) {
         self.contentHeight = contentHeight
