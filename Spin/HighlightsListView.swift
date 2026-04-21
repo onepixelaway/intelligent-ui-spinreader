@@ -55,9 +55,8 @@ struct HighlightsListView: View {
                         .listRowSeparatorTint(.white.opacity(0.1))
                     }
                     .onDelete { indexSet in
-                        for index in indexSet {
-                            highlightStore.remove(id: highlights[index].id)
-                        }
+                        let ids = Set(indexSet.map { highlights[$0].id })
+                        highlightStore.removeBatch(ids: ids)
                     }
                 }
                 .listStyle(.plain)

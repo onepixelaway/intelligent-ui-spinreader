@@ -69,6 +69,8 @@ struct Highlight: Identifiable, Codable {
 @MainActor
 final class HighlightStore {
     private(set) var highlights: [Highlight] = []
+    private var highlightsByContentID: [String: [Highlight]] = [:]
+    private var pendingSaveTask: Task<Void, Never>?
 
     private static var fileURL: URL {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -82,23 +84,59 @@ final class HighlightStore {
     }
 
     func highlights(for contentID: String) -> [Highlight] {
-        highlights.filter { $0.contentID == contentID }
+        highlightsByContentID[contentID] ?? []
     }
 
     func add(_ highlight: Highlight) {
         highlights.append(highlight)
-        save()
+        highlightsByContentID[highlight.contentID, default: []].append(highlight)
+        debouncedSave()
+    }
+
+    func addBatch(_ newHighlights: [Highlight]) {
+        guard !newHighlights.isEmpty else { return }
+        highlights.append(contentsOf: newHighlights)
+        for h in newHighlights {
+            highlightsByContentID[h.contentID, default: []].append(h)
+        }
+        debouncedSave()
     }
 
     func remove(id: UUID) {
+        guard let h = highlights.first(where: { $0.id == id }) else { return }
+        highlightsByContentID[h.contentID]?.removeAll { $0.id == id }
         highlights.removeAll { $0.id == id }
-        save()
+        debouncedSave()
+    }
+
+    func removeBatch(ids: Set<UUID>) {
+        guard !ids.isEmpty else { return }
+        let removed = highlights.filter { ids.contains($0.id) }
+        for h in removed {
+            highlightsByContentID[h.contentID]?.removeAll { $0.id == h.id }
+        }
+        highlights.removeAll { ids.contains($0.id) }
+        debouncedSave()
+    }
+
+    private func rebuildIndex() {
+        highlightsByContentID = Dictionary(grouping: highlights, by: \.contentID)
     }
 
     private func load() {
         guard let data = try? Data(contentsOf: Self.fileURL),
               let decoded = try? JSONDecoder().decode([Highlight].self, from: data) else { return }
         highlights = decoded
+        rebuildIndex()
+    }
+
+    private func debouncedSave() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            save()
+        }
     }
 
     private func save() {

@@ -64,6 +64,14 @@ enum ReaderFontFamily: String, CaseIterable, Identifiable {
         case .monospaced: return .monospaced
         }
     }
+
+    var uiDesign: UIFontDescriptor.SystemDesign {
+        switch self {
+        case .system: return .default
+        case .serif: return .serif
+        case .monospaced: return .monospaced
+        }
+    }
 }
 
 enum ReaderLineSpacing: String, CaseIterable, Identifiable {
@@ -485,6 +493,7 @@ struct ScrollTextView: View {
     private let contentID: String
     private let bookID: String?
     @State private var itemContentIDs: [String] = []
+    private let viewportHeightFraction: CGFloat = 0.60
     private let topPadding: CGFloat = 20
     private let backButtonTopPadding: CGFloat = 64
     private let maxTags = 5
@@ -686,7 +695,7 @@ struct ScrollTextView: View {
                     .frame(maxWidth: .infinity, maxHeight: scrollViewHeight, alignment: .top)
                     .scrollDisabled(true)
                     .onPreferenceChange(ParagraphPositionKey.self) { positions in
-                        let visibleHeight = scrollViewHeight * 0.60
+                        let visibleHeight = scrollViewHeight * viewportHeightFraction
                         let viewport = CGRect(x: 0, y: 0, width: geometry.size.width, height: visibleHeight)
                         visibleParagraphs = positions
                             .filter { $0.value.intersects(viewport) }
@@ -950,9 +959,10 @@ struct ScrollTextView: View {
     }
 
     private func autoHighlightVisibleSentences() {
-        let visibleHeight = storedScrollViewHeight * 0.60
+        let visibleHeight = storedScrollViewHeight * viewportHeightFraction
         let viewport = CGRect(x: 0, y: 0, width: storedViewportWidth, height: visibleHeight)
         let tokenizer = NLTokenizer(unit: .sentence)
+        var newHighlights: [Highlight] = []
         for index in visibleParagraphs {
             guard items.indices.contains(index) else { continue }
             guard let frame = paragraphFrames[index] else { continue }
@@ -963,19 +973,20 @@ struct ScrollTextView: View {
             let text = textForAnalysis(items[index])
             guard !text.isEmpty else { continue }
             let cid = contentIDForItem(at: index)
-            let existing = highlightStore.highlights(for: cid)
+            let existingTexts = Set(highlightStore.highlights(for: cid).map(\.text))
 
             tokenizer.string = text
             tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
                 let sentence = String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
                 guard sentence.count >= 5 else { return true }
-                if existing.contains(where: { $0.text == sentence }) { return true }
+                if existingTexts.contains(sentence) { return true }
                 let startOffset = text.distance(from: text.startIndex, to: range.lowerBound)
                 let endOffset = text.distance(from: text.startIndex, to: range.upperBound)
-                highlightStore.add(Highlight(contentID: cid, text: sentence, startOffset: startOffset, endOffset: endOffset))
+                newHighlights.append(Highlight(contentID: cid, text: sentence, startOffset: startOffset, endOffset: endOffset))
                 return true
             }
         }
+        highlightStore.addBatch(newHighlights)
     }
 
     private func handleAnalysisRequest() {
@@ -998,19 +1009,19 @@ struct ScrollTextView: View {
     private func readableItemView(_ item: ReadableItem, index: Int) -> some View {
         switch item {
         case .title(let text):
-            highlightableTextBlock(text, size: readerSettings.titleSize, fontWeight: .bold, itemIndex: index)
+            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.titleSize, weight: .bold), itemIndex: index)
         case .byline(let text):
-            highlightableTextBlock(text, size: readerSettings.bylineSize, fontWeight: .semibold, itemIndex: index)
+            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.bylineSize, weight: .semibold), itemIndex: index)
         case .paragraph(let text):
-            highlightableTextBlock(text, size: readerSettings.paragraphSize, fontWeight: .regular, itemIndex: index)
+            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.paragraphSize, weight: .regular), itemIndex: index)
         case .richParagraph(let rt):
-            highlightableRichTextBlock(rt, size: readerSettings.paragraphSize, itemIndex: index)
+            highlightableBlock(rt.attributedString.string, attributedText: nsRichAttributedText(rt, size: readerSettings.paragraphSize), itemIndex: index)
         case .subheading(let text):
-            highlightableTextBlock(text, size: readerSettings.titleSize - 4, fontWeight: .bold, itemIndex: index)
+            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.titleSize - 4, weight: .bold), itemIndex: index)
         case .listItem(let text, let ordered, let listIdx):
             let prefix = ordered ? "\(listIdx). " : "\u{2022} "
             let fullText = prefix + text
-            highlightableTextBlock(fullText, size: readerSettings.paragraphSize, fontWeight: .regular, itemIndex: index, extraLeading: 16)
+            highlightableBlock(fullText, attributedText: nsStyledText(fullText, size: readerSettings.paragraphSize, weight: .regular), itemIndex: index, extraLeading: 16)
         case .image(let url, let alt, let caption):
             ArticleImageView(url: url, alt: alt, caption: caption)
         case .blockquote(let text):
@@ -1056,13 +1067,7 @@ struct ScrollTextView: View {
 
     private func nsStyledText(_ text: String, size: CGFloat, weight: UIFont.Weight) -> NSAttributedString {
         var font = UIFont.systemFont(ofSize: size, weight: weight)
-        let design: UIFontDescriptor.SystemDesign = {
-            switch readerSettings.fontFamily {
-            case .system: return .default
-            case .serif: return .serif
-            case .monospaced: return .monospaced
-            }
-        }()
+        let design = readerSettings.fontFamily.uiDesign
         if let descriptor = font.fontDescriptor.withDesign(design) {
             font = UIFont(descriptor: descriptor, size: size)
         }
@@ -1078,13 +1083,7 @@ struct ScrollTextView: View {
     private func nsRichAttributedText(_ rt: RichText, size: CGFloat) -> NSAttributedString {
         let ns = rt.attributedString
         let result = NSMutableAttributedString()
-        let design: UIFontDescriptor.SystemDesign = {
-            switch readerSettings.fontFamily {
-            case .system: return .default
-            case .serif: return .serif
-            case .monospaced: return .monospaced
-            }
-        }()
+        let design = readerSettings.fontFamily.uiDesign
         let para = NSMutableParagraphStyle()
         para.lineSpacing = readerSettings.lineSpacingPt(for: size)
         ns.enumerateAttributes(in: NSRange(location: 0, length: ns.length)) { attrs, range, _ in
@@ -1111,27 +1110,13 @@ struct ScrollTextView: View {
         return result
     }
 
-    private static func uiFontWeight(from swiftUIWeight: Font.Weight) -> UIFont.Weight {
-        switch swiftUIWeight {
-        case .bold: return .bold
-        case .semibold: return .semibold
-        case .medium: return .medium
-        case .light: return .light
-        case .thin: return .thin
-        case .heavy: return .heavy
-        case .black: return .black
-        default: return .regular
-        }
-    }
-
     @ViewBuilder
-    private func highlightableTextBlock(_ text: String, size: CGFloat, fontWeight: Font.Weight, itemIndex: Int, extraLeading: CGFloat = 0) -> some View {
+    private func highlightableBlock(_ text: String, attributedText: NSAttributedString, itemIndex: Int, extraLeading: CGFloat = 0) -> some View {
         let matching = highlightsForParagraph(text, itemIndex: itemIndex)
         let cid = contentIDForItem(at: itemIndex)
-        let nsAttr = nsStyledText(text, size: size, weight: Self.uiFontWeight(from: fontWeight))
         HighlightableTextView(
             text: text,
-            attributedText: nsAttr,
+            attributedText: attributedText,
             highlights: matching,
             onHighlightCreated: { selectedText, start, end in
                 highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
@@ -1142,26 +1127,6 @@ struct ScrollTextView: View {
         )
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, extraLeading)
-    }
-
-    @ViewBuilder
-    private func highlightableRichTextBlock(_ rt: RichText, size: CGFloat, itemIndex: Int) -> some View {
-        let text = rt.attributedString.string
-        let matching = highlightsForParagraph(text, itemIndex: itemIndex)
-        let cid = contentIDForItem(at: itemIndex)
-        let nsAttr = nsRichAttributedText(rt, size: size)
-        HighlightableTextView(
-            text: text,
-            attributedText: nsAttr,
-            highlights: matching,
-            onHighlightCreated: { selectedText, start, end in
-                highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
-            },
-            onHighlightRemoved: { id in
-                highlightStore.remove(id: id)
-            }
-        )
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func analyzeVisibleText(_ text: String) async {
