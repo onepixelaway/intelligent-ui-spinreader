@@ -24,6 +24,21 @@ struct EpubLibraryView: View {
                     emptyState
                 } else {
                     bookGrid
+                        .overlay(alignment: .bottomTrailing) {
+                            Button {
+                                showImporter = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 24, weight: .semibold))
+                                    .foregroundColor(.black)
+                                    .frame(width: 56, height: 56)
+                                    .background(Color.white)
+                                    .clipShape(Circle())
+                                    .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
+                            }
+                            .padding(.bottom, 32)
+                            .padding(.trailing, 24)
+                        }
                 }
             }
             .navigationTitle("Books")
