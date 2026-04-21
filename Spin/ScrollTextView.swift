@@ -796,12 +796,13 @@ struct ScrollTextView: View {
                 } label: {
                     ZStack {
                         Circle()
-                            .fill(Color.yellow.opacity(0.85))
+                            .fill(Color(white: 0.18))
                             .frame(width: 52, height: 52)
-                            .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+                            .shadow(color: Color.black.opacity(0.4), radius: 4)
                         Image(systemName: autoHighlightAnimating ? "checkmark" : "highlighter")
-                            .font(.system(size: 20, weight: .semibold))
-                            .foregroundColor(.black.opacity(0.75))
+                            .font(.system(size: 19, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.75))
+                            .padding(14)
                     }
                     .scaleEffect(autoHighlightAnimating ? 1.1 : 1.0)
                 }
