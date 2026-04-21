@@ -439,6 +439,9 @@ struct ScrollTextView: View {
     @State private var activeFootnote: String? = nil
     @State private var isLoadingNextChapter: Bool = false
     @State private var autoHighlightAnimating: Bool = false
+    @State private var paragraphFrames: [Int: CGRect] = [:]
+    @State private var storedScrollViewHeight: CGFloat = 0
+    @State private var storedViewportWidth: CGFloat = 0
 
     struct RichText: Hashable, @unchecked Sendable {
         let attributedString: NSAttributedString
@@ -689,6 +692,9 @@ struct ScrollTextView: View {
                             .filter { $0.value.intersects(viewport) }
                             .map { $0.key }
                             .sorted()
+                        paragraphFrames = positions
+                        storedScrollViewHeight = scrollViewHeight
+                        storedViewportWidth = geometry.size.width
                     }
                     .onPreferenceChange(ContentHeightKey.self) { h in
                         scrollState.setScrollBounds(
@@ -943,9 +949,12 @@ struct ScrollTextView: View {
     }
 
     private func autoHighlightVisibleSentences() {
+        let visibleHeight = storedScrollViewHeight * 0.60
+        let viewport = CGRect(x: 0, y: 0, width: storedViewportWidth, height: visibleHeight)
         let tokenizer = NLTokenizer(unit: .sentence)
         for index in visibleParagraphs {
             guard items.indices.contains(index) else { continue }
+            guard let frame = paragraphFrames[index], viewport.contains(frame) else { continue }
             let text = textForAnalysis(items[index])
             guard !text.isEmpty else { continue }
             let cid = contentIDForItem(at: index)
