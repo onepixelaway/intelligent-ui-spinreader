@@ -438,6 +438,7 @@ struct ScrollTextView: View {
     @State private var showHighlightsList: Bool = false
     @State private var activeFootnote: String? = nil
     @State private var isLoadingNextChapter: Bool = false
+    @State private var autoHighlightAnimating: Bool = false
 
     struct RichText: Hashable, @unchecked Sendable {
         let attributedString: NSAttributedString
@@ -775,6 +776,32 @@ struct ScrollTextView: View {
             .frame(width: geometry.size.width * 0.3, height: geometry.size.width * 0.3)
             .position(x: geometry.size.width / 2, y: geometry.size.height * 0.76)
 
+            if !visibleParagraphs.isEmpty {
+                Button {
+                    autoHighlightVisibleSentences()
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        autoHighlightAnimating = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            autoHighlightAnimating = false
+                        }
+                    }
+                } label: {
+                    ZStack {
+                        Circle()
+                            .fill(Color.yellow.opacity(0.85))
+                            .frame(width: 52, height: 52)
+                            .shadow(color: .black.opacity(0.4), radius: 6, y: 2)
+                        Image(systemName: autoHighlightAnimating ? "checkmark" : "highlighter")
+                            .font(.system(size: 20, weight: .semibold))
+                            .foregroundColor(.black.opacity(0.75))
+                    }
+                    .scaleEffect(autoHighlightAnimating ? 1.1 : 1.0)
+                }
+                .position(x: geometry.size.width * 0.35 - 36, y: geometry.size.height * 0.76)
+            }
+
             if readerSettings.showAIQuestions {
                 VStack(spacing: 4) {
                     if !tags.isEmpty {
@@ -913,6 +940,28 @@ struct ScrollTextView: View {
         currentQuestion = ""
         lastAnalyzedText = ""
         spinCount = 0
+    }
+
+    private func autoHighlightVisibleSentences() {
+        let tokenizer = NLTokenizer(unit: .sentence)
+        for index in visibleParagraphs {
+            guard items.indices.contains(index) else { continue }
+            let text = textForAnalysis(items[index])
+            guard !text.isEmpty else { continue }
+            let cid = contentIDForItem(at: index)
+            let existing = highlightStore.highlights(for: cid)
+
+            tokenizer.string = text
+            tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+                let sentence = String(text[range]).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard sentence.count >= 5 else { return true }
+                if existing.contains(where: { $0.text == sentence }) { return true }
+                let startOffset = text.distance(from: text.startIndex, to: range.lowerBound)
+                let endOffset = text.distance(from: text.startIndex, to: range.upperBound)
+                highlightStore.add(Highlight(contentID: cid, text: sentence, startOffset: startOffset, endOffset: endOffset))
+                return true
+            }
+        }
     }
 
     private func handleAnalysisRequest() {
@@ -1966,8 +2015,8 @@ struct HighlightableTextView: UIViewRepresentable {
     let text: String
     let attributedText: NSAttributedString
     let highlights: [Highlight]
-    let onHighlightCreated: @MainActor (String, Int, Int) -> Void
-    let onHighlightRemoved: @MainActor (UUID) -> Void
+    let onHighlightCreated: (String, Int, Int) -> Void
+    let onHighlightRemoved: (UUID) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -2012,12 +2061,13 @@ struct HighlightableTextView: UIViewRepresentable {
         return CGSize(width: width, height: size.height)
     }
 
+    @MainActor
     final class Coordinator: NSObject {
         var baseAttributedText = NSAttributedString()
         var highlights: [Highlight] = []
         var text: String = ""
-        var onHighlightCreated: (@MainActor (String, Int, Int) -> Void)?
-        var onHighlightRemoved: (@MainActor (UUID) -> Void)?
+        var onHighlightCreated: ((String, Int, Int) -> Void)?
+        var onHighlightRemoved: ((UUID) -> Void)?
         var isDragging = false
         private var dragStart: Int?
 
@@ -2058,8 +2108,7 @@ struct HighlightableTextView: UIViewRepresentable {
                     let range = NSRange(location: loc, length: min(len, nsText.length - loc))
                     if NSMaxRange(range) <= nsText.length {
                         let selectedText = nsText.substring(with: range)
-                        let cb = onHighlightCreated
-                        MainActor.assumeIsolated { cb?(selectedText, loc, loc + range.length) }
+                        onHighlightCreated?(selectedText, loc, loc + range.length)
                     }
                 }
                 isDragging = false
@@ -2078,9 +2127,7 @@ struct HighlightableTextView: UIViewRepresentable {
             let idx = charIndex(at: pt, in: tv)
 
             for h in highlights where idx >= h.startOffset && idx < h.endOffset {
-                let cb = onHighlightRemoved
-                let hid = h.id
-                MainActor.assumeIsolated { cb?(hid) }
+                onHighlightRemoved?(h.id)
                 return
             }
         }
