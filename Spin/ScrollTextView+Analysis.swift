@@ -77,9 +77,7 @@ extension ScrollTextView {
             if let message = ChatQuery.ChatCompletionMessageParam(role: .user, content: prompt) {
                 let query = ChatQuery(messages: [message], model: .gpt3_5Turbo)
                 let result = try await openAI.chats(query: query)
-                if case .assistant(let assistantMessage) = result.choices.first?.message {
-                    questionText = assistantMessage.content
-                }
+                questionText = result.choices.first?.message.content
             }
         } catch is CancellationError {
         } catch {

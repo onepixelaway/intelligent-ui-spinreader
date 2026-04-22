@@ -2,8 +2,6 @@ import SwiftUI
 import UIKit
 
 extension ScrollTextView {
-    // Attributed text matching what `readableItemView` renders for a given item.
-    // Covers the three `isHighlightableBody` cases; falls back to plain styling for others.
     func attributedTextForItem(_ item: ReadableItem) -> NSAttributedString {
         switch item {
         case .paragraph(let text):
@@ -18,38 +16,39 @@ extension ScrollTextView {
         }
     }
 
-    func nsStyledText(_ text: String, size: CGFloat, weight: UIFont.Weight) -> NSAttributedString {
+    private func styledFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
         var font = UIFont.systemFont(ofSize: size, weight: weight)
-        let design = readerSettings.fontFamily.uiDesign
-        if let descriptor = font.fontDescriptor.withDesign(design) {
+        if let descriptor = font.fontDescriptor.withDesign(readerSettings.fontFamily.uiDesign) {
             font = UIFont(descriptor: descriptor, size: size)
         }
+        return font
+    }
+
+    private func paragraphStyle(for size: CGFloat) -> NSParagraphStyle {
         let para = NSMutableParagraphStyle()
         para.lineSpacing = readerSettings.lineSpacingPt(for: size)
-        return NSAttributedString(string: text, attributes: [
-            .font: font,
+        return para
+    }
+
+    func nsStyledText(_ text: String, size: CGFloat, weight: UIFont.Weight) -> NSAttributedString {
+        NSAttributedString(string: text, attributes: [
+            .font: styledFont(size: size, weight: weight),
             .foregroundColor: UIColor(white: 0.92, alpha: 1.0),
-            .paragraphStyle: para
+            .paragraphStyle: paragraphStyle(for: size)
         ])
     }
 
     func nsRichAttributedText(_ rt: RichText, size: CGFloat) -> NSAttributedString {
         let ns = rt.attributedString
         let result = NSMutableAttributedString()
-        let design = readerSettings.fontFamily.uiDesign
-        let para = NSMutableParagraphStyle()
-        para.lineSpacing = readerSettings.lineSpacingPt(for: size)
+        let para = paragraphStyle(for: size)
         ns.enumerateAttributes(in: NSRange(location: 0, length: ns.length)) { attrs, range, _ in
             let substring = ns.attributedSubstring(from: range).string
             let uiFont = attrs[.font] as? UIFont
             let traits = uiFont?.fontDescriptor.symbolicTraits ?? []
             let isBold = traits.contains(.traitBold)
             let isItalic = traits.contains(.traitItalic)
-            let weight: UIFont.Weight = isBold ? .bold : .regular
-            var font = UIFont.systemFont(ofSize: size, weight: weight)
-            if let descriptor = font.fontDescriptor.withDesign(design) {
-                font = UIFont(descriptor: descriptor, size: size)
-            }
+            var font = styledFont(size: size, weight: isBold ? .bold : .regular)
             if isItalic, let italicDesc = font.fontDescriptor.withSymbolicTraits(.traitItalic) {
                 font = UIFont(descriptor: italicDesc, size: size)
             }

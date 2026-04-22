@@ -3,7 +3,7 @@ import SwiftUI
 extension ScrollTextView.ReadableItem {
     var usesWideHorizontalPadding: Bool {
         switch self {
-        case .image, .video, .code:
+        case .image, .code:
             return true
         case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .divider, .callout, .paragraphWithFootnotes, .chapterTOC:
             return false
@@ -15,7 +15,7 @@ extension ScrollTextView.ReadableItem {
         switch self {
         case .paragraph, .richParagraph, .listItem:
             return true
-        case .title, .byline, .subheading, .blockquote, .callout, .paragraphWithFootnotes, .image, .code, .video, .divider, .chapterTOC:
+        case .title, .byline, .subheading, .blockquote, .callout, .paragraphWithFootnotes, .image, .code, .divider, .chapterTOC:
             return false
         }
     }
@@ -25,7 +25,7 @@ extension ScrollTextView.ReadableItem {
         switch self {
         case .blockquote, .callout, .paragraphWithFootnotes:
             return true
-        case .paragraph, .richParagraph, .listItem, .title, .byline, .subheading, .image, .code, .video, .divider, .chapterTOC:
+        case .paragraph, .richParagraph, .listItem, .title, .byline, .subheading, .image, .code, .divider, .chapterTOC:
             return false
         }
     }

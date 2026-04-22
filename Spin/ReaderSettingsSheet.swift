@@ -25,8 +25,6 @@ struct ReaderSettingsSheet: View {
             optionSection("Font", options: ReaderFontFamily.allCases, selection: $settings.fontFamily, label: \.label)
             optionSection("Line spacing", options: ReaderLineSpacing.allCases, selection: $settings.lineSpacing, label: \.label)
             optionSection("Margins", options: ReaderMargins.allCases, selection: $settings.margins, label: \.label)
-            optionSection("Scroll", options: ReaderScrollMode.allCases, selection: $settings.scrollMode, label: \.label)
-            optionSection("Control", options: ReaderScrollControl.allCases, selection: $settings.scrollControl, label: \.label)
             aiQuestionsToggle
             brightnessSection
 

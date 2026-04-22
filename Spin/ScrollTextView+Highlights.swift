@@ -44,12 +44,9 @@ extension ScrollTextView {
         }
     }
 
-    // Additive: grow the current highlight by one sentence without advancing the cycle.
-    // Falls back to tap behavior when there's nothing to extend yet, or when the last phase wasn't a single-sentence one.
     func extendHighlightForTopVisibleParagraph(viewportWidth: CGFloat, scrollViewHeight: CGFloat, topFadeHeight: CGFloat) {
         guard let ctx = resolveHighlightContext(viewportWidth: viewportWidth, scrollViewHeight: scrollViewHeight, topFadeHeight: topFadeHeight) else { return }
         guard items[ctx.index].isHighlightableBody else {
-            // Whole-item targets don't support incremental extension; fall through to the two-phase toggle.
             cycleHighlightForTopVisibleParagraph(viewportWidth: viewportWidth, scrollViewHeight: scrollViewHeight, topFadeHeight: topFadeHeight)
             return
         }
@@ -90,7 +87,6 @@ extension ScrollTextView {
         scrollViewHeight: CGFloat,
         topFadeHeight: CGFloat
     ) -> HighlightContext? {
-        // Exclude the top fade region from the "visible" viewport — content under the gradient is considered obscured.
         let viewport = CGRect(
             x: 0,
             y: topFadeHeight,
@@ -114,23 +110,21 @@ extension ScrollTextView {
         return (step - 1) % cycleLengthFor(sentenceCount: sentenceCount) < sentenceCount
     }
 
-    // Prefer the topmost paragraph whose top edge lies within the viewport (a new paragraph just came into view).
-    // Fall back to the topmost paragraph that overlaps the viewport (reader is mid-paragraph).
     private func pickHighlightTarget(viewport: CGRect) -> Int? {
-        func eligible(_ index: Int) -> Bool {
+        func frameIfEligible(_ index: Int) -> CGRect? {
             guard items.indices.contains(index),
                   items[index].isHighlightableBody || items[index].isWholeItemHighlightable,
-                  let frame = paragraphFrames[index], frame.height > 0 else { return false }
-            return true
+                  let frame = paragraphFrames[index], frame.height > 0 else { return nil }
+            return frame
         }
         if let newParagraph = visibleParagraphs.first(where: { index in
-            guard eligible(index), let frame = paragraphFrames[index] else { return false }
+            guard let frame = frameIfEligible(index) else { return false }
             return frame.minY >= viewport.minY && frame.minY < viewport.maxY
         }) {
             return newParagraph
         }
         return visibleParagraphs.first { index in
-            guard eligible(index), let frame = paragraphFrames[index] else { return false }
+            guard let frame = frameIfEligible(index) else { return false }
             return viewport.intersects(frame)
         }
     }
@@ -143,7 +137,6 @@ extension ScrollTextView {
         let step = autoHighlightCycleStep[ctx.index] ?? 0
         let cyclePos = step % cycleLength
 
-        // Recompute the starting sentence from scroll position at the start of each cycle; preserve it across continuing taps.
         let startOffset: Int
         if cyclePos == 0 {
             startOffset = startingSentenceIndex(itemIndex: ctx.index, viewport: ctx.viewport, sentences: ctx.sentences)
@@ -163,7 +156,6 @@ extension ScrollTextView {
         return []
     }
 
-    // Two-phase cycle for items rendered via bespoke views: highlight whole item → deselect.
     private func wholeItemCycleHighlight(ctx: HighlightContext) -> [Highlight] {
         let step = autoHighlightCycleStep[ctx.index] ?? 0
         autoHighlightCycleStep[ctx.index] = step + 1
@@ -186,8 +178,6 @@ extension ScrollTextView {
         return result
     }
 
-    // First sentence whose line-top y-position within the paragraph is ≥ the viewport top's offset inside the paragraph.
-    // If the paragraph starts in or below the viewport, returns 0.
     private func startingSentenceIndex(
         itemIndex: Int,
         viewport: CGRect,

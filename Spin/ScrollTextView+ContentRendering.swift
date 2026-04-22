@@ -26,8 +26,6 @@ extension ScrollTextView {
             }
         case .code(let text):
             CodeBlockView(text: text)
-        case .video(let videoURL, let thumbnailURL, let provider):
-            VideoEmbedView(videoURL: videoURL, thumbnailURL: thumbnailURL, provider: provider)
         case .divider:
             Text("·  ·  ·")
                 .font(.system(size: readerSettings.paragraphSize, weight: .regular, design: readerSettings.fontFamily.design))

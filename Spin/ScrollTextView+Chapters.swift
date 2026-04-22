@@ -11,8 +11,6 @@ extension ScrollTextView {
             return text
         case .image(_, let alt, let caption):
             return [alt, caption].compactMap { $0 }.joined(separator: " ")
-        case .video:
-            return ""
         case .divider:
             return ""
         case .paragraphWithFootnotes(let text, _):

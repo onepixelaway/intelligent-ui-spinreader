@@ -357,7 +357,7 @@ final class EpubLibrary: ObservableObject {
             }
             return result
         }.value
-        books = parsed.sorted { $0.title.lowercased() < $1.title.lowercased() }
+        books = parsed.sorted(by: sortedByTitle)
     }
 
     func importFile(at sourceURL: URL) async throws -> EpubBook {
@@ -379,16 +379,10 @@ final class EpubLibrary: ObservableObject {
             books[idx] = book
         } else {
             books.append(book)
-            books.sort { $0.title.lowercased() < $1.title.lowercased() }
+            books.sort(by: sortedByTitle)
         }
         return book
     }
 
-    func delete(at offsets: IndexSet) {
-        let toDelete = offsets.map { books[$0] }
-        for book in toDelete {
-            try? FileManager.default.removeItem(at: book.fileURL)
-        }
-        books.remove(atOffsets: offsets)
-    }
+    private let sortedByTitle: (EpubBook, EpubBook) -> Bool = { $0.title.lowercased() < $1.title.lowercased() }
 }

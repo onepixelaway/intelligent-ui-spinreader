@@ -8,7 +8,7 @@ struct SpinApp: App {
 
     var body: some Scene {
         WindowGroup {
-            HomeView()
+            EpubLibraryView()
                 .environment(highlightStore)
         }
         .onChange(of: scenePhase) { _, phase in

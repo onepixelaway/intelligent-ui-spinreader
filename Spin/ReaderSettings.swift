@@ -119,34 +119,6 @@ enum ReaderMargins: String, CaseIterable, Identifiable {
     }
 }
 
-enum ReaderScrollMode: String, CaseIterable, Identifiable {
-    case fluid
-    case paginated
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .fluid: return "Fluid"
-        case .paginated: return "Chunked"
-        }
-    }
-}
-
-enum ReaderScrollControl: String, CaseIterable, Identifiable {
-    case wheel
-    case trackpad
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .wheel: return "Wheel"
-        case .trackpad: return "Trackpad"
-        }
-    }
-}
-
 @MainActor
 final class ReaderSettings: ObservableObject {
     private enum Keys {
@@ -155,8 +127,6 @@ final class ReaderSettings: ObservableObject {
         static let fontFamily = "reader.fontFamily"
         static let margins = "reader.margins"
         static let dimLevel = "reader.dimLevel"
-        static let scrollMode = "reader.scrollMode"
-        static let scrollControl = "reader.scrollControl"
         static let showAIQuestions = "reader.showAIQuestions"
     }
 
@@ -190,18 +160,6 @@ final class ReaderSettings: ObservableObject {
             UserDefaults.standard.set(dimLevel, forKey: Keys.dimLevel)
         }
     }
-    @Published var scrollMode: ReaderScrollMode {
-        didSet {
-            guard scrollMode != oldValue else { return }
-            UserDefaults.standard.set(scrollMode.rawValue, forKey: Keys.scrollMode)
-        }
-    }
-    @Published var scrollControl: ReaderScrollControl {
-        didSet {
-            guard scrollControl != oldValue else { return }
-            UserDefaults.standard.set(scrollControl.rawValue, forKey: Keys.scrollControl)
-        }
-    }
     @Published var showAIQuestions: Bool {
         didSet {
             guard showAIQuestions != oldValue else { return }
@@ -217,8 +175,6 @@ final class ReaderSettings: ObservableObject {
         self.fontFamily = defaults.string(forKey: Keys.fontFamily).flatMap(ReaderFontFamily.init(rawValue:)) ?? .system
         self.margins = defaults.string(forKey: Keys.margins).flatMap(ReaderMargins.init(rawValue:)) ?? .normal
         self.dimLevel = min(max(defaults.double(forKey: Keys.dimLevel), 0), 0.7)
-        self.scrollMode = defaults.string(forKey: Keys.scrollMode).flatMap(ReaderScrollMode.init(rawValue:)) ?? .fluid
-        self.scrollControl = defaults.string(forKey: Keys.scrollControl).flatMap(ReaderScrollControl.init(rawValue:)) ?? .wheel
         self.showAIQuestions = defaults.object(forKey: Keys.showAIQuestions) as? Bool ?? true
     }
 
