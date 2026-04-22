@@ -91,7 +91,7 @@ extension ScrollTextView {
             x: 0,
             y: topFadeHeight,
             width: viewportWidth,
-            height: max(0, scrollViewHeight * viewportHeightFraction - topFadeHeight)
+            height: max(0, scrollViewHeight - topFadeHeight)
         )
         guard let index = pickHighlightTarget(viewport: viewport) else { return nil }
         let text = textForAnalysis(items[index])

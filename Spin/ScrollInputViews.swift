@@ -2,52 +2,47 @@ import SwiftUI
 import QuartzCore
 
 struct TrackpadScrollView: View {
-    let onDrag: (Double) -> Void   // positive delta = swipe down (scroll content up)
-    let onFlick: (Double) -> Void  // ±1 direction on fast release
-    var onRelease: (() -> Void)?
+    let onPageUp: () -> Void
+    let onPageDown: () -> Void
 
     @State private var haptics = HapticFeedback()
-    @State private var hapticAccumulator: CGFloat = 0
-    @State private var lastTranslation: CGFloat = 0
+    @State private var gestureConsumed = false
+    @State private var lastPageTurnTime: CFTimeInterval = 0
 
-    private let hapticInterval: CFTimeInterval = 0.08
-    private let hapticStepPoints: CGFloat = 40.0
-    private let flickThreshold: CGFloat = 35.0
+    private let swipeThreshold: CGFloat = 50.0
+    private let cooldownSeconds: CFTimeInterval = 0.35
 
     var body: some View {
         GeometryReader { _ in
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color.white.opacity(0.06))
                 .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .onAppear { haptics.prepare() }
-            .gesture(
-                DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        let current = value.translation.height
-                        let delta = current - lastTranslation
-                        lastTranslation = current
-
-                        if delta != 0 {
-                            onDrag(Double(delta))
-
-                            hapticAccumulator += abs(delta)
-                            if hapticAccumulator >= hapticStepPoints {
-                                hapticAccumulator = 0
-                                haptics.perform(speed: abs(Double(delta)) * 5, minInterval: hapticInterval)
+                .onAppear { haptics.prepare() }
+                .gesture(
+                    DragGesture(minimumDistance: 15)
+                        .onChanged { value in
+                            guard !gestureConsumed else { return }
+                            let dy = value.translation.height
+                            if abs(dy) >= swipeThreshold {
+                                let now = CACurrentMediaTime()
+                                guard now - lastPageTurnTime >= cooldownSeconds else {
+                                    gestureConsumed = true
+                                    return
+                                }
+                                gestureConsumed = true
+                                lastPageTurnTime = now
+                                if dy < 0 {
+                                    onPageDown()
+                                } else {
+                                    onPageUp()
+                                }
+                                haptics.perform(speed: 3.0, minInterval: 0)
                             }
                         }
-                    }
-                    .onEnded { value in
-                        lastTranslation = 0
-                        hapticAccumulator = 0
-                        let extraMomentum = value.predictedEndTranslation.height - value.translation.height
-                        if abs(extraMomentum) > flickThreshold {
-                            onFlick(extraMomentum > 0 ? 1.0 : -1.0)
-                        } else {
-                            onRelease?()
+                        .onEnded { _ in
+                            gestureConsumed = false
                         }
-                    }
-            )
+                )
         }
     }
 }

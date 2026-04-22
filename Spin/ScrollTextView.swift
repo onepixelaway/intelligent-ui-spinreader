@@ -12,7 +12,6 @@ struct ScrollTextView: View {
 
     @StateObject private var scrollState = ScrollState()
     @StateObject var readerSettings = ReaderSettings()
-    @State private var showTopGradient: Bool = false
     @State private var showTopBar: Bool = true
     @State var visibleParagraphs: [Int] = []
     @State var spinCount: Int = 0
@@ -75,14 +74,12 @@ struct ScrollTextView: View {
     let bookID: String?
     // Must stay same length/order as `items`. contentIDForItem(at:) silently falls back on mismatch.
     @State var itemContentIDs: [String] = []
-    let viewportHeightFraction: CGFloat = 0.60
     private let topPadding: CGFloat = 20
     private let backButtonTopPadding: CGFloat = 64
     let maxTags = 5
-    private let topGradientThreshold: CGFloat = 200
-    private let topFadeFraction: CGFloat = 0.15
     private let highlightSwipeMinDistance: CGFloat = 20
     private let highlightSwipeActivationDY: CGFloat = 30
+    private let pageAnimation: Animation = .spring(response: 0.3, dampingFraction: 0.88)
 
     init(chapters: [EpubChapter], startingIndex: Int, bookID: String = "") {
         let chapter = chapters[startingIndex]
@@ -136,117 +133,88 @@ struct ScrollTextView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let scrollViewHeight = geometry.size.height * 0.65
+            let trackpadSize = geometry.size.width * 0.3
+            let trackpadCenterY = geometry.size.height * 0.76
+            let scrollViewHeight = trackpadCenterY - trackpadSize / 2 - 12
             ZStack(alignment: .top) {
-                ScrollViewReader { _ in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 28) {
-                            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                                readableItemView(item, index: index)
-                                    .id(index)
-                                    .padding(.horizontal, horizontalPadding(for: item))
-                                    .background(
-                                        GeometryReader { geo in
-                                            Color.clear
-                                                .preference(key: ParagraphPositionKey.self, value: [index: geo.frame(in: .named("scroll"))])
-                                        }
-                                    )
-                            }
-                        }
-                        .padding(.top, showsBackButton ? backButtonTopPadding : topPadding)
-                        .padding(.bottom, 100)
-                        .background(
-                            GeometryReader { geo in
-                                Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
-                            }
-                        )
-                        .offset(y: scrollState.offset)
-                    }
-                    .coordinateSpace(name: "scroll")
-                    .frame(maxWidth: .infinity, maxHeight: scrollViewHeight, alignment: .top)
-                    .scrollDisabled(true)
-                    .onPreferenceChange(ParagraphPositionKey.self) { positions in
-                        let visibleHeight = scrollViewHeight * viewportHeightFraction
-                        let viewport = CGRect(x: 0, y: 0, width: geometry.size.width, height: visibleHeight)
-                        let newVisible = positions
-                            .filter { $0.value.intersects(viewport) }
-                            .map { $0.key }
-                            .sorted()
-                        if newVisible != visibleParagraphs {
-                            visibleParagraphs = newVisible
-                        }
-                        if positions != paragraphFrames {
-                            paragraphFrames = positions
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 28) {
+                        ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                            readableItemView(item, index: index)
+                                .id(index)
+                                .padding(.horizontal, horizontalPadding(for: item))
+                                .background(
+                                    GeometryReader { geo in
+                                        Color.clear
+                                            .preference(key: ParagraphPositionKey.self, value: [index: geo.frame(in: .named("scroll"))])
+                                    }
+                                )
                         }
                     }
-                    .onPreferenceChange(ContentHeightKey.self) { h in
-                        scrollState.setScrollBounds(
-                            contentHeight: Double(h),
-                            viewportHeight: Double(scrollViewHeight)
-                        )
-                        if isLoadingNextChapter {
-                            isLoadingNextChapter = false
+                    .padding(.top, showsBackButton ? backButtonTopPadding : topPadding)
+                    .padding(.bottom, 100)
+                    .background(
+                        GeometryReader { geo in
+                            Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
                         }
+                    )
+                    .offset(y: scrollState.offset)
+                }
+                .coordinateSpace(name: "scroll")
+                .frame(maxWidth: .infinity, maxHeight: scrollViewHeight, alignment: .top)
+                .scrollDisabled(true)
+                .onPreferenceChange(ParagraphPositionKey.self) { positions in
+                    let viewport = CGRect(x: 0, y: 0, width: geometry.size.width, height: scrollViewHeight)
+                    let newVisible = positions
+                        .filter { $0.value.intersects(viewport) }
+                        .map { $0.key }
+                        .sorted()
+                    if newVisible != visibleParagraphs {
+                        visibleParagraphs = newVisible
                     }
-                    .overlay(alignment: .bottom) {
-                        LinearGradient(
-                            stops: [
-                                .init(color: .clear, location: 0),
-                                .init(color: .clear, location: 0.25),
-                                .init(color: .black.opacity(0.6), location: 0.7),
-                                .init(color: .black, location: 1)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(height: scrollViewHeight * 0.55)
-                        .allowsHitTesting(false)
+                    if positions != paragraphFrames {
+                        paragraphFrames = positions
+                    }
+                    let currentOffset = scrollState.offset
+                    let contentBounds = positions.values.map { frame in
+                        (minY: Double(frame.minY) - currentOffset,
+                         maxY: Double(frame.maxY) - currentOffset)
+                    }
+                    scrollState.setItemBounds(contentBounds)
+                }
+                .onPreferenceChange(ContentHeightKey.self) { h in
+                    scrollState.setScrollBounds(
+                        contentHeight: Double(h),
+                        viewportHeight: Double(scrollViewHeight)
+                    )
+                    if isLoadingNextChapter {
+                        isLoadingNextChapter = false
                     }
                 }
                 .clipped()
-
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0),
-                        .init(color: .clear, location: 1)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(height: geometry.size.height * 0.15)
-                .allowsHitTesting(false)
-                .opacity((showsBackButton && showTopBar) || showTopGradient ? 1 : 0)
-                .animation(.easeInOut(duration: 0.2), value: showTopBar)
-                .animation(.easeInOut(duration: 0.3), value: showTopGradient)
-                .position(x: geometry.size.width / 2, y: geometry.size.height * 0.075)
             }
 
             TrackpadScrollView(
-                onDrag: { delta in
+                onPageUp: {
                     hideTopBarIfNeeded()
-                    if delta < 0 && scrollState.isAtBottom {
-                        advanceToNextChapter()
-                        return
+                    withAnimation(pageAnimation) {
+                        scrollState.goToPreviousPage()
                     }
-                    scrollState.applyDirectDelta(delta)
-                    showTopGradient = abs(scrollState.offset) > topGradientThreshold
                 },
-                onFlick: { direction in
+                onPageDown: {
                     hideTopBarIfNeeded()
-                    if direction < 0 && scrollState.isAtBottom {
+                    if scrollState.isAtBottom {
                         advanceToNextChapter()
                         return
                     }
-                    scrollState.handleScroll(direction: direction, paginatedChunk: readerSettings.paginatedChunkHeight)
-                    showTopGradient = abs(scrollState.offset) > topGradientThreshold
+                    withAnimation(pageAnimation) {
+                        scrollState.goToNextPage()
+                    }
                     spinCount += 1
                     if spinCount >= 2 {
                         spinCount = 0
                         handleAnalysisRequest()
                     }
-                },
-                onRelease: {
-                    scrollState.snapToBoundsIfNeeded()
                 }
             )
             .frame(width: geometry.size.width * 0.3, height: geometry.size.width * 0.3)
@@ -255,12 +223,11 @@ struct ScrollTextView: View {
             if !visibleParagraphs.isEmpty {
                 let trackpadLeadingX = geometry.size.width * 0.5 - geometry.size.width * 0.3 / 2
                 let buttonTrackpadGap: CGFloat = 54
-                let topFadeHeight = geometry.size.height * topFadeFraction
                 Button {
                     cycleHighlightForTopVisibleParagraph(
                         viewportWidth: geometry.size.width,
                         scrollViewHeight: scrollViewHeight,
-                        topFadeHeight: topFadeHeight
+                        topFadeHeight: 0
                     )
                     flashAutoHighlightFeedback()
                 } label: {
@@ -284,7 +251,7 @@ struct ScrollTextView: View {
                             extendHighlightForTopVisibleParagraph(
                                 viewportWidth: geometry.size.width,
                                 scrollViewHeight: scrollViewHeight,
-                                topFadeHeight: topFadeHeight
+                                topFadeHeight: 0
                             )
                             flashAutoHighlightFeedback()
                         }
