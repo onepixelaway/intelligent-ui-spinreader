@@ -7,11 +7,21 @@ options:
   generateEmptyDirectories: true
   createIntermediateGroups: true
 
+# Load-bearing: xcodegen regenerates project.pbxproj from this file. Removing this
+# `packages:` stanza (or its matching `dependencies:` entry below) silently drops the
+# OpenAI SPM link and breaks the build with unhelpful linker errors.
+packages:
+  OpenAI:
+    url: https://github.com/MacPaw/OpenAI
+    from: 0.3.0
+
 targets:
   Spin:
     type: application
     platform: iOS
     sources: [Spin]
+    dependencies:
+      - package: OpenAI
     settings:
       base:
         SWIFT_VERSION: 6.0.3

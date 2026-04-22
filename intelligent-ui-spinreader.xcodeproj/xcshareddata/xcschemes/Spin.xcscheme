@@ -15,7 +15,7 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "025AA07113610B7B5ECD485D"
+               BlueprintIdentifier = "77DA0374B3416EEC25AA99BC"
                BuildableName = "Spin.app"
                BlueprintName = "Spin"
                ReferencedContainer = "container:intelligent-ui-spinreader.xcodeproj">
@@ -32,7 +32,7 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "025AA07113610B7B5ECD485D"
+            BlueprintIdentifier = "77DA0374B3416EEC25AA99BC"
             BuildableName = "Spin.app"
             BlueprintName = "Spin"
             ReferencedContainer = "container:intelligent-ui-spinreader.xcodeproj">
@@ -55,7 +55,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "025AA07113610B7B5ECD485D"
+            BlueprintIdentifier = "77DA0374B3416EEC25AA99BC"
             BuildableName = "Spin.app"
             BlueprintName = "Spin"
             ReferencedContainer = "container:intelligent-ui-spinreader.xcodeproj">
@@ -74,7 +74,7 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "025AA07113610B7B5ECD485D"
+            BlueprintIdentifier = "77DA0374B3416EEC25AA99BC"
             BuildableName = "Spin.app"
             BlueprintName = "Spin"
             ReferencedContainer = "container:intelligent-ui-spinreader.xcodeproj">

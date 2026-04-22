@@ -130,6 +130,7 @@ final class HighlightStore {
         rebuildIndex()
     }
 
+    // Coalesces burst writes with a 300ms delay. Call flush() on app backgrounding to avoid losing in-flight mutations.
     private func debouncedSave() {
         pendingSaveTask?.cancel()
         pendingSaveTask = Task {
@@ -137,6 +138,12 @@ final class HighlightStore {
             guard !Task.isCancelled else { return }
             save()
         }
+    }
+
+    func flush() {
+        pendingSaveTask?.cancel()
+        pendingSaveTask = nil
+        save()
     }
 
     private func save() {

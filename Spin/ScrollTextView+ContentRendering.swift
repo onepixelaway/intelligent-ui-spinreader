@@ -1,0 +1,89 @@
+import SwiftUI
+
+extension ScrollTextView {
+    @ViewBuilder
+    func readableItemView(_ item: ReadableItem, index: Int) -> some View {
+        switch item {
+        case .title(let text):
+            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.titleSize, weight: .bold), itemIndex: index)
+        case .byline(let text):
+            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.bylineSize, weight: .semibold), itemIndex: index)
+        case .paragraph(let text):
+            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.paragraphSize, weight: .regular), itemIndex: index)
+        case .richParagraph(let rt):
+            highlightableBlock(rt.attributedString.string, attributedText: nsRichAttributedText(rt, size: readerSettings.paragraphSize), itemIndex: index)
+        case .subheading(let text):
+            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.titleSize - 4, weight: .bold), itemIndex: index)
+        case .listItem(let text, let ordered, let listIdx):
+            let prefix = ordered ? "\(listIdx). " : "\u{2022} "
+            let fullText = prefix + text
+            highlightableBlock(fullText, attributedText: nsStyledText(fullText, size: readerSettings.paragraphSize, weight: .regular), itemIndex: index, extraLeading: 16)
+        case .image(let url, let alt, let caption):
+            ArticleImageView(url: url, alt: alt, caption: caption)
+        case .blockquote(let text):
+            wholeItemHighlight(text: text, itemIndex: index) {
+                AccentedQuoteView(text: text)
+            }
+        case .code(let text):
+            CodeBlockView(text: text)
+        case .video(let videoURL, let thumbnailURL, let provider):
+            VideoEmbedView(videoURL: videoURL, thumbnailURL: thumbnailURL, provider: provider)
+        case .divider:
+            Text("·  ·  ·")
+                .font(.system(size: readerSettings.paragraphSize, weight: .regular, design: readerSettings.fontFamily.design))
+                .foregroundColor(Color(white: 0.6, opacity: 0.6))
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.vertical, 12)
+        case .callout(let text):
+            wholeItemHighlight(text: text, itemIndex: index) {
+                AccentedQuoteView(text: text, barOpacity: 0.45, textWhite: 0.85, hasBackground: true)
+            }
+        case .paragraphWithFootnotes(let text, let footnotes):
+            wholeItemHighlight(text: text, itemIndex: index) {
+                FootnoteParagraphView(text: text, footnotes: footnotes, activeFootnote: $activeFootnote)
+            }
+        case .chapterTOC(let entries):
+            ChapterTOCView(entries: entries)
+        }
+    }
+
+    @ViewBuilder
+    func wholeItemHighlight<Content: View>(
+        text: String,
+        itemIndex: Int,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        let isHighlighted = !highlightsForParagraph(text, itemIndex: itemIndex).isEmpty
+        content()
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color.yellow.opacity(isHighlighted ? 0.25 : 0))
+                    .padding(.horizontal, -6)
+                    .padding(.vertical, -4)
+            )
+    }
+
+    func horizontalPadding(for item: ReadableItem) -> CGFloat {
+        let base = readerSettings.margins.horizontalPadding
+        return item.usesWideHorizontalPadding ? max(8, base - 12) : base
+    }
+
+    @ViewBuilder
+    func highlightableBlock(_ text: String, attributedText: NSAttributedString, itemIndex: Int, extraLeading: CGFloat = 0) -> some View {
+        let matching = highlightsForParagraph(text, itemIndex: itemIndex)
+        let cid = contentIDForItem(at: itemIndex)
+        HighlightableTextView(
+            text: text,
+            attributedText: attributedText,
+            highlights: matching,
+            onHighlightCreated: { selectedText, start, end in
+                highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
+            },
+            onHighlightRemoved: { id in
+                highlightStore.remove(id: id)
+            }
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.leading, extraLeading)
+    }
+}
