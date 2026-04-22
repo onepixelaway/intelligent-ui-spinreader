@@ -1,7 +1,16 @@
 import SwiftUI
+import UIKit
 import NaturalLanguage
 
 extension ScrollTextView {
+    private struct HighlightContext {
+        let index: Int
+        let text: String
+        let cid: String
+        let sentences: [(text: String, start: Int, end: Int)]
+        let viewport: CGRect
+    }
+
     func contentIDForItem(at index: Int) -> String {
         guard index < itemContentIDs.count else { return contentID }
         return itemContentIDs[index]
@@ -16,77 +25,200 @@ extension ScrollTextView {
         }
     }
 
-    func cycleHighlightForTopVisibleParagraph(viewportWidth: CGFloat, scrollViewHeight: CGFloat) {
-        let viewport = CGRect(x: 0, y: 0, width: viewportWidth, height: scrollViewHeight * viewportHeightFraction)
-        let minVisibleFraction: CGFloat = 0.5
+    func cycleHighlightForTopVisibleParagraph(viewportWidth: CGFloat, scrollViewHeight: CGFloat, topFadeHeight: CGFloat) {
+        guard let ctx = resolveHighlightContext(viewportWidth: viewportWidth, scrollViewHeight: scrollViewHeight, topFadeHeight: topFadeHeight) else { return }
 
-        let targetIndex = visibleParagraphs.first { index in
-            guard items.indices.contains(index) else { return false }
-            let item = items[index]
-            guard item.isHighlightableBody || item.isWholeItemHighlightable else { return false }
-            guard let frame = paragraphFrames[index], frame.height > 0 else { return false }
-            let intersection = viewport.intersection(frame)
-            return !intersection.isEmpty && intersection.height / frame.height >= minVisibleFraction
-        }
-        guard let index = targetIndex else { return }
-
-        let text = textForAnalysis(items[index])
-        guard !text.isEmpty else { return }
-        let cid = contentIDForItem(at: index)
-
-        if let existing = autoHighlightIDs[index], !existing.isEmpty {
+        if let existing = autoHighlightIDs[ctx.index], !existing.isEmpty {
             highlightStore.removeBatch(ids: Set(existing))
         }
 
-        let added: [Highlight]
-        if items[index].isWholeItemHighlightable {
-            added = wholeItemCycleHighlight(text: text, cid: cid, itemIndex: index)
-        } else {
-            added = sentenceCycleHighlights(text: text, cid: cid, itemIndex: index)
-        }
+        let added = items[ctx.index].isWholeItemHighlightable
+            ? wholeItemCycleHighlight(ctx: ctx)
+            : sentenceCycleHighlights(ctx: ctx)
 
         if added.isEmpty {
-            autoHighlightIDs[index] = []
+            autoHighlightIDs[ctx.index] = []
         } else {
             highlightStore.addBatch(added)
-            autoHighlightIDs[index] = added.map(\.id)
+            autoHighlightIDs[ctx.index] = added.map(\.id)
         }
     }
 
-    private func sentenceCycleHighlights(text: String, cid: String, itemIndex: Int) -> [Highlight] {
-        let tokenizer = NLTokenizer(unit: .sentence)
-        tokenizer.string = text
-        var sentences: [(text: String, start: Int, end: Int)] = []
-        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
-            let raw = String(text[range])
-            guard raw.trimmingCharacters(in: .whitespacesAndNewlines).count >= 5 else { return true }
-            let start = range.lowerBound.utf16Offset(in: text)
-            let end = range.upperBound.utf16Offset(in: text)
-            sentences.append((raw, start, end))
+    // Additive: grow the current highlight by one sentence without advancing the cycle.
+    // Falls back to tap behavior when there's nothing to extend yet, or when the last phase wasn't a single-sentence one.
+    func extendHighlightForTopVisibleParagraph(viewportWidth: CGFloat, scrollViewHeight: CGFloat, topFadeHeight: CGFloat) {
+        guard let ctx = resolveHighlightContext(viewportWidth: viewportWidth, scrollViewHeight: scrollViewHeight, topFadeHeight: topFadeHeight) else { return }
+        guard items[ctx.index].isHighlightableBody else {
+            // Whole-item targets don't support incremental extension; fall through to the two-phase toggle.
+            cycleHighlightForTopVisibleParagraph(viewportWidth: viewportWidth, scrollViewHeight: scrollViewHeight, topFadeHeight: topFadeHeight)
+            return
+        }
+        guard !ctx.sentences.isEmpty else { return }
+
+        let cycleStep = autoHighlightCycleStep[ctx.index] ?? 0
+        guard lastPhaseWasSingleSentence(step: cycleStep, sentenceCount: ctx.sentences.count) else {
+            cycleHighlightForTopVisibleParagraph(viewportWidth: viewportWidth, scrollViewHeight: scrollViewHeight, topFadeHeight: topFadeHeight)
+            return
+        }
+
+        let cycleLength = cycleLengthFor(sentenceCount: ctx.sentences.count)
+        let lastCyclePos = (cycleStep - 1) % cycleLength
+        let startOffset = autoHighlightStartOffset[ctx.index] ?? 0
+        let baseSentenceIdx = (startOffset + lastCyclePos) % ctx.sentences.count
+        let currentExtend = autoHighlightExtendCount[ctx.index] ?? 0
+        let maxExtend = ctx.sentences.count - 1 - baseSentenceIdx
+        let newExtend = min(currentExtend + 1, maxExtend)
+        guard newExtend > currentExtend else { return }
+        autoHighlightExtendCount[ctx.index] = newExtend
+
+        let startSentence = ctx.sentences[baseSentenceIdx]
+        let endSentence = ctx.sentences[baseSentenceIdx + newExtend]
+        let nsText = ctx.text as NSString
+        let combinedRange = NSRange(location: startSentence.start, length: endSentence.end - startSentence.start)
+        let combinedText = nsText.substring(with: combinedRange)
+
+        if let existing = autoHighlightIDs[ctx.index], !existing.isEmpty {
+            highlightStore.removeBatch(ids: Set(existing))
+        }
+        let h = Highlight(contentID: ctx.cid, text: combinedText, startOffset: startSentence.start, endOffset: endSentence.end)
+        highlightStore.addBatch([h])
+        autoHighlightIDs[ctx.index] = [h.id]
+    }
+
+    private func resolveHighlightContext(
+        viewportWidth: CGFloat,
+        scrollViewHeight: CGFloat,
+        topFadeHeight: CGFloat
+    ) -> HighlightContext? {
+        // Exclude the top fade region from the "visible" viewport — content under the gradient is considered obscured.
+        let viewport = CGRect(
+            x: 0,
+            y: topFadeHeight,
+            width: viewportWidth,
+            height: max(0, scrollViewHeight * viewportHeightFraction - topFadeHeight)
+        )
+        guard let index = pickHighlightTarget(viewport: viewport) else { return nil }
+        let text = textForAnalysis(items[index])
+        guard !text.isEmpty else { return nil }
+        let cid = contentIDForItem(at: index)
+        let sentences = tokenizeSentences(in: text)
+        return HighlightContext(index: index, text: text, cid: cid, sentences: sentences, viewport: viewport)
+    }
+
+    private func cycleLengthFor(sentenceCount: Int) -> Int {
+        sentenceCount + (sentenceCount > 1 ? 2 : 1)
+    }
+
+    private func lastPhaseWasSingleSentence(step: Int, sentenceCount: Int) -> Bool {
+        guard step > 0 else { return false }
+        return (step - 1) % cycleLengthFor(sentenceCount: sentenceCount) < sentenceCount
+    }
+
+    // Prefer the topmost paragraph whose top edge lies within the viewport (a new paragraph just came into view).
+    // Fall back to the topmost paragraph that overlaps the viewport (reader is mid-paragraph).
+    private func pickHighlightTarget(viewport: CGRect) -> Int? {
+        func eligible(_ index: Int) -> Bool {
+            guard items.indices.contains(index),
+                  items[index].isHighlightableBody || items[index].isWholeItemHighlightable,
+                  let frame = paragraphFrames[index], frame.height > 0 else { return false }
             return true
         }
-        guard !sentences.isEmpty else { return [] }
+        if let newParagraph = visibleParagraphs.first(where: { index in
+            guard eligible(index), let frame = paragraphFrames[index] else { return false }
+            return frame.minY >= viewport.minY && frame.minY < viewport.maxY
+        }) {
+            return newParagraph
+        }
+        return visibleParagraphs.first { index in
+            guard eligible(index), let frame = paragraphFrames[index] else { return false }
+            return viewport.intersects(frame)
+        }
+    }
 
-        let includeWholeParagraph = sentences.count > 1
-        let cycleLength = sentences.count + (includeWholeParagraph ? 2 : 1)
-        let step = autoHighlightCycleStep[itemIndex] ?? 0
-        let phase = step % cycleLength
-        autoHighlightCycleStep[itemIndex] = step + 1
+    private func sentenceCycleHighlights(ctx: HighlightContext) -> [Highlight] {
+        guard !ctx.sentences.isEmpty else { return [] }
 
-        if phase < sentences.count {
-            let s = sentences[phase]
-            return [Highlight(contentID: cid, text: s.text, startOffset: s.start, endOffset: s.end)]
-        } else if includeWholeParagraph && phase == sentences.count {
-            return [Highlight(contentID: cid, text: text, startOffset: 0, endOffset: (text as NSString).length)]
+        let includeWholeParagraph = ctx.sentences.count > 1
+        let cycleLength = cycleLengthFor(sentenceCount: ctx.sentences.count)
+        let step = autoHighlightCycleStep[ctx.index] ?? 0
+        let cyclePos = step % cycleLength
+
+        // Recompute the starting sentence from scroll position at the start of each cycle; preserve it across continuing taps.
+        let startOffset: Int
+        if cyclePos == 0 {
+            startOffset = startingSentenceIndex(itemIndex: ctx.index, viewport: ctx.viewport, sentences: ctx.sentences)
+            autoHighlightStartOffset[ctx.index] = startOffset
+        } else {
+            startOffset = autoHighlightStartOffset[ctx.index] ?? 0
+        }
+        autoHighlightCycleStep[ctx.index] = step + 1
+        autoHighlightExtendCount[ctx.index] = 0
+
+        if cyclePos < ctx.sentences.count {
+            let s = ctx.sentences[(startOffset + cyclePos) % ctx.sentences.count]
+            return [Highlight(contentID: ctx.cid, text: s.text, startOffset: s.start, endOffset: s.end)]
+        } else if includeWholeParagraph && cyclePos == ctx.sentences.count {
+            return [Highlight(contentID: ctx.cid, text: ctx.text, startOffset: 0, endOffset: (ctx.text as NSString).length)]
         }
         return []
     }
 
     // Two-phase cycle for items rendered via bespoke views: highlight whole item → deselect.
-    private func wholeItemCycleHighlight(text: String, cid: String, itemIndex: Int) -> [Highlight] {
-        let step = autoHighlightCycleStep[itemIndex] ?? 0
-        autoHighlightCycleStep[itemIndex] = step + 1
+    private func wholeItemCycleHighlight(ctx: HighlightContext) -> [Highlight] {
+        let step = autoHighlightCycleStep[ctx.index] ?? 0
+        autoHighlightCycleStep[ctx.index] = step + 1
         guard step % 2 == 0 else { return [] }
-        return [Highlight(contentID: cid, text: text, startOffset: 0, endOffset: (text as NSString).length)]
+        return [Highlight(contentID: ctx.cid, text: ctx.text, startOffset: 0, endOffset: (ctx.text as NSString).length)]
+    }
+
+    private func tokenizeSentences(in text: String) -> [(text: String, start: Int, end: Int)] {
+        let tokenizer = NLTokenizer(unit: .sentence)
+        tokenizer.string = text
+        var result: [(text: String, start: Int, end: Int)] = []
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let raw = String(text[range])
+            guard raw.trimmingCharacters(in: .whitespacesAndNewlines).count >= 5 else { return true }
+            let start = range.lowerBound.utf16Offset(in: text)
+            let end = range.upperBound.utf16Offset(in: text)
+            result.append((raw, start, end))
+            return true
+        }
+        return result
+    }
+
+    // First sentence whose line-top y-position within the paragraph is ≥ the viewport top's offset inside the paragraph.
+    // If the paragraph starts in or below the viewport, returns 0.
+    private func startingSentenceIndex(
+        itemIndex: Int,
+        viewport: CGRect,
+        sentences: [(text: String, start: Int, end: Int)]
+    ) -> Int {
+        guard let frame = paragraphFrames[itemIndex], frame.height > 0 else { return 0 }
+        if frame.minY >= viewport.minY { return 0 }
+
+        let item = items[itemIndex]
+        let paragraphWidth = viewport.width - 2 * horizontalPadding(for: item)
+        guard paragraphWidth > 0 else { return 0 }
+
+        let attributedText = attributedTextForItem(item)
+        let textStorage = NSTextStorage(attributedString: attributedText)
+        let layoutManager = NSLayoutManager()
+        textStorage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: CGSize(width: paragraphWidth, height: .greatestFiniteMagnitude))
+        container.lineFragmentPadding = 0
+        layoutManager.addTextContainer(container)
+        _ = layoutManager.glyphRange(for: container)
+
+        let effectiveTopInParagraph = viewport.minY - frame.minY
+
+        for (idx, sentence) in sentences.enumerated() {
+            let glyphIdx = layoutManager.glyphIndexForCharacter(at: sentence.start)
+            let lineRect = layoutManager.lineFragmentRect(forGlyphAt: glyphIdx, effectiveRange: nil)
+            if lineRect.minY >= effectiveTopInParagraph {
+                return idx
+            }
+        }
+        return 0
     }
 }
+

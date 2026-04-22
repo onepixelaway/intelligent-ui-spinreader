@@ -2,6 +2,22 @@ import SwiftUI
 import UIKit
 
 extension ScrollTextView {
+    // Attributed text matching what `readableItemView` renders for a given item.
+    // Covers the three `isHighlightableBody` cases; falls back to plain styling for others.
+    func attributedTextForItem(_ item: ReadableItem) -> NSAttributedString {
+        switch item {
+        case .paragraph(let text):
+            return nsStyledText(text, size: readerSettings.paragraphSize, weight: .regular)
+        case .richParagraph(let rt):
+            return nsRichAttributedText(rt, size: readerSettings.paragraphSize)
+        case .listItem(let text, _, _):
+            // Sentence offsets are in the unprefixed text. Assumes the bullet/number prefix fits on the first line so it only shifts x, not y — may drift at extreme font sizes or narrow widths.
+            return nsStyledText(text, size: readerSettings.paragraphSize, weight: .regular)
+        default:
+            return nsStyledText(textForAnalysis(item), size: readerSettings.paragraphSize, weight: .regular)
+        }
+    }
+
     func nsStyledText(_ text: String, size: CGFloat, weight: UIFont.Weight) -> NSAttributedString {
         var font = UIFont.systemFont(ofSize: size, weight: weight)
         let design = readerSettings.fontFamily.uiDesign

@@ -13,6 +13,7 @@ struct ScrollTextView: View {
     @StateObject private var scrollState = ScrollState()
     @StateObject var readerSettings = ReaderSettings()
     @State private var showTopGradient: Bool = false
+    @State private var showTopBar: Bool = true
     @State var visibleParagraphs: [Int] = []
     @State var spinCount: Int = 0
     @State var lastAnalyzedText: String = ""
@@ -29,6 +30,8 @@ struct ScrollTextView: View {
     // Keyed by `items` index. Stable because new chapters only append; reordering or in-place replacement would corrupt cycle state.
     @State var autoHighlightCycleStep: [Int: Int] = [:]
     @State var autoHighlightIDs: [Int: [UUID]] = [:]
+    @State var autoHighlightStartOffset: [Int: Int] = [:]
+    @State var autoHighlightExtendCount: [Int: Int] = [:]
     @State var paragraphFrames: [Int: CGRect] = [:]
 
     struct RichText: Hashable, @unchecked Sendable {
@@ -79,6 +82,9 @@ struct ScrollTextView: View {
     private let backButtonTopPadding: CGFloat = 64
     let maxTags = 5
     private let topGradientThreshold: CGFloat = 200
+    private let topFadeFraction: CGFloat = 0.15
+    private let highlightSwipeMinDistance: CGFloat = 20
+    private let highlightSwipeActivationDY: CGFloat = 30
 
     init() {
         let paragraphs = StoryText.content
@@ -302,7 +308,8 @@ struct ScrollTextView: View {
                 )
                 .frame(height: geometry.size.height * 0.15)
                 .allowsHitTesting(false)
-                .opacity(showTopGradient ? 1 : 0)
+                .opacity((showsBackButton && showTopBar) || showTopGradient ? 1 : 0)
+                .animation(.easeInOut(duration: 0.2), value: showTopBar)
                 .animation(.easeInOut(duration: 0.3), value: showTopGradient)
                 .position(x: geometry.size.width / 2, y: geometry.size.height * 0.075)
             }
@@ -310,6 +317,7 @@ struct ScrollTextView: View {
             Group {
                 if readerSettings.scrollControl == .wheel {
                     ScrollWheel { direction in
+                        hideTopBarIfNeeded()
                         showTopGradient = abs(scrollState.offset) > topGradientThreshold
                         let chunk: CGFloat? = readerSettings.scrollMode == .paginated ? readerSettings.paginatedChunkHeight : nil
                         if direction < 0 && scrollState.isAtBottom {
@@ -326,6 +334,7 @@ struct ScrollTextView: View {
                 } else {
                     TrackpadScrollView(
                         onDrag: { delta in
+                            hideTopBarIfNeeded()
                             if delta < 0 && scrollState.isAtBottom {
                                 advanceToNextChapter()
                                 return
@@ -334,6 +343,7 @@ struct ScrollTextView: View {
                             showTopGradient = abs(scrollState.offset) > topGradientThreshold
                         },
                         onFlick: { direction in
+                            hideTopBarIfNeeded()
                             if direction < 0 && scrollState.isAtBottom {
                                 advanceToNextChapter()
                                 return
@@ -355,19 +365,14 @@ struct ScrollTextView: View {
             if !visibleParagraphs.isEmpty {
                 let trackpadLeadingX = geometry.size.width * 0.5 - geometry.size.width * 0.3 / 2
                 let buttonTrackpadGap: CGFloat = 54
+                let topFadeHeight = geometry.size.height * topFadeFraction
                 Button {
                     cycleHighlightForTopVisibleParagraph(
                         viewportWidth: geometry.size.width,
-                        scrollViewHeight: scrollViewHeight
+                        scrollViewHeight: scrollViewHeight,
+                        topFadeHeight: topFadeHeight
                     )
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        autoHighlightAnimating = true
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            autoHighlightAnimating = false
-                        }
-                    }
+                    flashAutoHighlightFeedback()
                 } label: {
                     ZStack {
                         Circle()
@@ -381,6 +386,20 @@ struct ScrollTextView: View {
                     }
                     .scaleEffect(autoHighlightAnimating ? 1.1 : 1.0)
                 }
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: highlightSwipeMinDistance)
+                        .onEnded { value in
+                            let dy = value.translation.height
+                            let dx = value.translation.width
+                            guard dy > highlightSwipeActivationDY, dy > abs(dx) else { return }
+                            extendHighlightForTopVisibleParagraph(
+                                viewportWidth: geometry.size.width,
+                                scrollViewHeight: scrollViewHeight,
+                                topFadeHeight: topFadeHeight
+                            )
+                            flashAutoHighlightFeedback()
+                        }
+                )
                 .position(x: trackpadLeadingX - buttonTrackpadGap, y: geometry.size.height * 0.76)
             }
 
@@ -417,42 +436,60 @@ struct ScrollTextView: View {
             }
 
             if showsBackButton {
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.55))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .position(x: 30, y: 30)
+                Group {
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.55))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .position(x: 30, y: 30)
 
-                Button {
-                    showHighlightsList = true
-                } label: {
-                    Image(systemName: "highlighter")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.55))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .position(x: geometry.size.width - (article != nil ? 118 : 74), y: 30)
+                    Button {
+                        showHighlightsList = true
+                    } label: {
+                        Image(systemName: "highlighter")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.55))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .position(x: geometry.size.width - (article != nil ? 118 : 74), y: 30)
 
-                Button {
-                    showReaderSettings = true
-                } label: {
-                    Image(systemName: "textformat.size")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.white.opacity(0.55))
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
-                }
-                .position(x: geometry.size.width - (article != nil ? 74 : 30), y: 30)
+                    Button {
+                        showReaderSettings = true
+                    } label: {
+                        Image(systemName: "textformat.size")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundColor(.white.opacity(0.55))
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .position(x: geometry.size.width - (article != nil ? 74 : 30), y: 30)
 
-                if let article {
-                    ShareButton(article: article)
-                        .position(x: geometry.size.width - 30, y: 30)
+                    if let article {
+                        ShareButton(article: article)
+                            .position(x: geometry.size.width - 30, y: 30)
+                    }
+                }
+                .opacity(showTopBar ? 1 : 0)
+                .allowsHitTesting(showTopBar)
+                .animation(.easeInOut(duration: 0.2), value: showTopBar)
+
+                if !showTopBar {
+                    Color.clear
+                        .frame(maxWidth: .infinity)
+                        .frame(height: geometry.size.height * 0.15)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showTopBar = true
+                            }
+                        }
+                        .position(x: geometry.size.width / 2, y: geometry.size.height * 0.075)
                 }
             }
 
@@ -494,6 +531,23 @@ struct ScrollTextView: View {
         .animation(.easeInOut(duration: 0.2), value: activeFootnote)
     }
 
+    private func hideTopBarIfNeeded() {
+        guard showTopBar else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            showTopBar = false
+        }
+    }
+
+    private func flashAutoHighlightFeedback() {
+        withAnimation(.easeInOut(duration: 0.15)) {
+            autoHighlightAnimating = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            withAnimation(.easeInOut(duration: 0.15)) {
+                autoHighlightAnimating = false
+            }
+        }
+    }
 }
 
 #Preview {
