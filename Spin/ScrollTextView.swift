@@ -26,6 +26,9 @@ struct ScrollTextView: View {
     @State var activeFootnote: String? = nil
     @State var isLoadingNextChapter: Bool = false
     @State private var autoHighlightAnimating: Bool = false
+    // Hidden for now; keep the view and model in place to re-enable later.
+    @State private var showQuestion: Bool = false
+    @State private var controlPanelHeight: CGFloat = 0
     // Keyed by `items` index. Stable because new chapters only append; reordering or in-place replacement would corrupt cycle state.
     @State var autoHighlightCycleStep: [Int: Int] = [:]
     @State var autoHighlightIDs: [Int: [UUID]] = [:]
@@ -75,10 +78,8 @@ struct ScrollTextView: View {
     // Must stay same length/order as `items`. contentIDForItem(at:) silently falls back on mismatch.
     @State var itemContentIDs: [String] = []
     private let topPadding: CGFloat = 20
-    private let backButtonTopPadding: CGFloat = 64
+    private let backButtonTopPadding: CGFloat = 80
     let maxTags = 5
-    private let highlightSwipeMinDistance: CGFloat = 20
-    private let highlightSwipeActivationDY: CGFloat = 30
     private let pageAnimation: Animation = .spring(response: 0.3, dampingFraction: 0.88)
 
     init(chapters: [EpubChapter], startingIndex: Int, bookID: String = "") {
@@ -102,40 +103,12 @@ struct ScrollTextView: View {
         _itemContentIDs = State(initialValue: Array(repeating: cid, count: built.count))
     }
 
-    private struct TagView: View {
-        let text: String
-        @State private var sheetURL: IdentifiableURL?
-
-        var body: some View {
-            Text(text)
-                .font(.system(size: 14))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .foregroundColor(Color.gray.opacity(0.7))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.black)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 14)
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                )
-                .cornerRadius(14)
-                .onTapGesture {
-                    if let url = perplexityURL(for: text) {
-                        sheetURL = IdentifiableURL(url: url)
-                    }
-                }
-                .sheet(item: $sheetURL) { item in
-                    SafariView(url: item.url)
-                }
-        }
-    }
-
     var body: some View {
         GeometryReader { geometry in
-            let trackpadSize = geometry.size.width * 0.3
-            let trackpadCenterY = geometry.size.height * 0.76
-            let scrollViewHeight = trackpadCenterY - trackpadSize / 2 - 12
+            let panelTopGap: CGFloat = 8
+            let panelBottomInset: CGFloat = 24
+            let reservedBottomSpace = controlPanelHeight + panelTopGap + panelBottomInset
+            let scrollViewHeight = max(0, geometry.size.height - reservedBottomSpace)
             ZStack(alignment: .top) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 28) {
@@ -161,9 +134,10 @@ struct ScrollTextView: View {
                     .offset(y: scrollState.offset)
                 }
                 .coordinateSpace(name: "scroll")
-                .frame(maxWidth: .infinity, maxHeight: scrollViewHeight, alignment: .top)
+                .frame(maxWidth: .infinity, alignment: .top)
                 .scrollDisabled(true)
                 .onPreferenceChange(ParagraphPositionKey.self) { positions in
+                    // Viewport is the unblocked area above the panel — content under the panel is visually refracted by the glass but doesn't count as "visible" for auto-highlight.
                     let viewport = CGRect(x: 0, y: 0, width: geometry.size.width, height: scrollViewHeight)
                     let newVisible = positions
                         .filter { $0.value.intersects(viewport) }
@@ -191,17 +165,48 @@ struct ScrollTextView: View {
                         isLoadingNextChapter = false
                     }
                 }
-                .clipped()
             }
 
-            TrackpadScrollView(
-                onPageUp: {
+            // Top fade: scrolled content dissolves into black before reaching the status bar / top controls.
+            LinearGradient(
+                stops: [
+                    .init(color: .black, location: 0),
+                    .init(color: .black, location: 0.6),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 100)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .ignoresSafeArea(edges: .top)
+            .allowsHitTesting(false)
+
+            ControlPanel(
+                highlightAnimating: autoHighlightAnimating,
+                onHighlight: {
+                    cycleHighlightForTopVisibleParagraph(
+                        viewportWidth: geometry.size.width,
+                        scrollViewHeight: scrollViewHeight,
+                        topFadeHeight: 0
+                    )
+                    flashAutoHighlightFeedback()
+                },
+                onHighlightSwipeDown: {
+                    extendHighlightForTopVisibleParagraph(
+                        viewportWidth: geometry.size.width,
+                        scrollViewHeight: scrollViewHeight,
+                        topFadeHeight: 0
+                    )
+                    flashAutoHighlightFeedback()
+                },
+                onTrackpadPageUp: {
                     hideTopBarIfNeeded()
                     withAnimation(pageAnimation) {
                         scrollState.goToPreviousPage()
                     }
                 },
-                onPageDown: {
+                onTrackpadPageDown: {
                     hideTopBarIfNeeded()
                     if scrollState.isAtBottom {
                         advanceToNextChapter()
@@ -215,80 +220,35 @@ struct ScrollTextView: View {
                         spinCount = 0
                         handleAnalysisRequest()
                     }
+                },
+                tags: readerSettings.showAIQuestions ? Array(tags.prefix(maxTags)) : [],
+                showQuestion: showQuestion && readerSettings.showAIQuestions,
+                currentQuestion: currentQuestion,
+                isLoadingQuestion: isLoadingQuestion,
+                onQuestionTap: {
+                    if let url = perplexityURL(for: currentQuestion) {
+                        explainerURL = IdentifiableURL(url: url)
+                    }
+                },
+                onTagTap: { tag in
+                    if let url = perplexityURL(for: tag) {
+                        explainerURL = IdentifiableURL(url: url)
+                    }
                 }
             )
-            .frame(width: geometry.size.width * 0.3, height: geometry.size.width * 0.3)
-            .position(x: geometry.size.width / 2, y: geometry.size.height * 0.76)
-
-            if !visibleParagraphs.isEmpty {
-                let trackpadLeadingX = geometry.size.width * 0.5 - geometry.size.width * 0.3 / 2
-                let buttonTrackpadGap: CGFloat = 54
-                Button {
-                    cycleHighlightForTopVisibleParagraph(
-                        viewportWidth: geometry.size.width,
-                        scrollViewHeight: scrollViewHeight,
-                        topFadeHeight: 0
-                    )
-                    flashAutoHighlightFeedback()
-                } label: {
-                    ZStack {
-                        Circle()
-                            .fill(Color.white.opacity(0.06))
-                            .frame(width: 52, height: 52)
-                        Image(systemName: autoHighlightAnimating ? "checkmark" : "highlighter")
-                            .font(.system(size: 19, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.75))
-                            .padding(14)
-                    }
-                    .scaleEffect(autoHighlightAnimating ? 1.1 : 1.0)
+            .background(
+                GeometryReader { geo in
+                    // Panel height drives the scroll viewport so reading content never sits behind the panel.
+                    Color.clear.preference(key: ControlPanelHeightKey.self, value: geo.size.height)
                 }
-                .highPriorityGesture(
-                    DragGesture(minimumDistance: highlightSwipeMinDistance)
-                        .onEnded { value in
-                            let dy = value.translation.height
-                            let dx = value.translation.width
-                            guard dy > highlightSwipeActivationDY, dy > abs(dx) else { return }
-                            extendHighlightForTopVisibleParagraph(
-                                viewportWidth: geometry.size.width,
-                                scrollViewHeight: scrollViewHeight,
-                                topFadeHeight: 0
-                            )
-                            flashAutoHighlightFeedback()
-                        }
-                )
-                .position(x: trackpadLeadingX - buttonTrackpadGap, y: geometry.size.height * 0.76)
-            }
-
-            if readerSettings.showAIQuestions {
-                VStack(spacing: 4) {
-                    if !tags.isEmpty {
-                        FlowLayout(spacing: 6) {
-                            ForEach(tags.prefix(maxTags), id: \.self) { tag in
-                                TagView(text: tag)
-                            }
-                        }
-                        .frame(maxHeight: 70)
-                        .padding(.horizontal, 16)
-                    }
-
-                    Text(currentQuestion)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundColor(.gray.opacity(0.7))
-                        .padding(.top, 4)
-                        .opacity(isLoadingQuestion ? 0.5 : 1.0)
-                        .animation(.easeInOut(duration: 0.2), value: isLoadingQuestion)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity)
-                        .onTapGesture {
-                            if let url = perplexityURL(for: currentQuestion) {
-                                explainerURL = IdentifiableURL(url: url)
-                            }
-                        }
-                        .sheet(item: $explainerURL) { item in
-                            SafariView(url: item.url)
-                        }
+            )
+            .padding(.horizontal, 34)
+            .padding(.bottom, 24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            .onPreferenceChange(ControlPanelHeightKey.self) { value in
+                if abs(value - controlPanelHeight) > 0.5 {
+                    controlPanelHeight = value
                 }
-                .position(x: geometry.size.width / 2, y: geometry.size.height * 0.91)
             }
 
             if showsBackButton {
@@ -370,6 +330,9 @@ struct ScrollTextView: View {
         }
         .sheet(isPresented: $showHighlightsList) {
             HighlightsListView(contentIDs: Array(Set(itemContentIDs)))
+        }
+        .sheet(item: $explainerURL) { item in
+            SafariView(url: item.url)
         }
         .overlay(alignment: .bottom) {
             if let footnote = activeFootnote {

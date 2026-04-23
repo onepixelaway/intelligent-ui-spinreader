@@ -59,6 +59,11 @@ struct ContentHeightKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }
 
+struct ControlPanelHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
+}
+
 struct ParagraphPositionKey: PreferenceKey {
     typealias Value = [Int: CGRect]
 
@@ -66,93 +71,6 @@ struct ParagraphPositionKey: PreferenceKey {
 
     static func reduce(value: inout [Int: CGRect], nextValue: () -> [Int: CGRect]) {
         value.merge(nextValue(), uniquingKeysWith: { $1 })
-    }
-}
-
-struct FlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let result = FlowResult(in: proposal.width ?? 0, subviews: subviews, spacing: spacing)
-        return CGSize(width: proposal.width ?? 0, height: result.height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let result = FlowResult(in: bounds.width, subviews: subviews, spacing: spacing)
-
-        for row in result.rows {
-            for item in row {
-                let position = CGPoint(
-                    x: bounds.minX + item.x,
-                    y: bounds.minY + item.y
-                )
-
-                item.subview.place(
-                    at: position,
-                    proposal: ProposedViewSize(item.size)
-                )
-            }
-        }
-    }
-
-    struct FlowResult {
-        var height: CGFloat = 0
-        var rows: [[Item]] = []
-
-        struct Item {
-            let subview: LayoutSubview
-            var size: CGSize
-            var x: CGFloat
-            var y: CGFloat
-        }
-
-        init(in width: CGFloat, subviews: LayoutSubviews, spacing: CGFloat) {
-            var currentX: CGFloat = 0
-            var currentRow: [Item] = []
-            var currentY: CGFloat = 0
-            var maxRowHeight: CGFloat = 0
-
-            for subview in subviews {
-                let size = subview.sizeThatFits(.unspecified)
-
-                if currentX + size.width > width && !currentRow.isEmpty {
-                    let rowWidth = currentX - spacing
-                    let leftPadding = (width - rowWidth) / 2
-                    for index in currentRow.indices {
-                        currentRow[index].x += leftPadding
-                    }
-
-                    rows.append(currentRow)
-                    currentRow = []
-                    currentX = 0
-                    currentY += maxRowHeight + spacing
-                    maxRowHeight = 0
-                }
-
-                currentRow.append(Item(
-                    subview: subview,
-                    size: size,
-                    x: currentX,
-                    y: currentY
-                ))
-
-                currentX += size.width + spacing
-                maxRowHeight = max(maxRowHeight, size.height)
-            }
-
-            if !currentRow.isEmpty {
-                let rowWidth = currentX - spacing
-                let leftPadding = (width - rowWidth) / 2
-                for index in currentRow.indices {
-                    currentRow[index].x += leftPadding
-                }
-
-                rows.append(currentRow)
-                currentY += maxRowHeight
-            }
-
-            height = currentY
-        }
     }
 }
 
