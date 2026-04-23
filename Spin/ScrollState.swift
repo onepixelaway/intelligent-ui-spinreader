@@ -4,17 +4,14 @@ import SwiftUI
 final class ScrollState: ObservableObject {
     @Published var currentPage: Int = 0
 
-    private(set) var contentHeight: Double = 0
-    private(set) var viewportHeight: Double = 0
-    private(set) var pageOffsets: [Double] = [0]
-    private(set) var pageVisibleHeights: [Double] = [0]
-    private var itemBounds: [(minY: Double, maxY: Double)] = []
+    // Page-start y offsets in scroll-content space; first is always 0.
+    private(set) var pageStarts: [Double] = [0]
 
-    var totalPages: Int { pageOffsets.count }
+    var totalPages: Int { pageStarts.count }
 
     var offset: Double {
-        guard currentPage < pageOffsets.count else { return -(pageOffsets.last ?? 0) }
-        return -pageOffsets[currentPage]
+        guard currentPage < pageStarts.count else { return -(pageStarts.last ?? 0) }
+        return -pageStarts[currentPage]
     }
 
     var isAtBottom: Bool {
@@ -25,74 +22,34 @@ final class ScrollState: ObservableObject {
         currentPage <= 0
     }
 
-    var visibleHeight: Double {
-        guard currentPage < pageVisibleHeights.count else { return viewportHeight }
-        return pageVisibleHeights[currentPage]
+    func setPageStarts(_ starts: [Double]) {
+        let normalized = normalize(starts)
+        guard normalized != pageStarts else { return }
+        let oldCurrentY = pageStarts.indices.contains(currentPage) ? pageStarts[currentPage] : 0
+        pageStarts = normalized
+        // Re-anchor currentPage to the page containing the old y-position so font/margin changes
+        // preserve the reader's visible line rather than resetting to page 0.
+        currentPage = pageContaining(y: oldCurrentY)
     }
 
-    func setScrollBounds(contentHeight: Double, viewportHeight: Double) {
-        self.contentHeight = contentHeight
-        self.viewportHeight = viewportHeight
-        recomputePages()
+    private func normalize(_ starts: [Double]) -> [Double] {
+        var out: [Double] = []
+        for s in starts.sorted() {
+            let clamped = max(0, s)
+            if let last = out.last, clamped - last < 1 { continue }
+            out.append(clamped)
+        }
+        if out.first != 0 { out.insert(0, at: 0) }
+        return out
     }
 
-    func setItemBounds(_ bounds: [(minY: Double, maxY: Double)]) {
-        self.itemBounds = bounds
-        recomputePages()
-    }
-
-    private func recomputePages() {
-        guard viewportHeight > 0, !itemBounds.isEmpty else {
-            updatePageOffsets([0])
-            return
+    private func pageContaining(y: Double) -> Int {
+        guard !pageStarts.isEmpty else { return 0 }
+        var best = 0
+        for (i, start) in pageStarts.enumerated() {
+            if start <= y + 0.5 { best = i } else { break }
         }
-
-        let sorted = itemBounds.sorted { $0.minY < $1.minY }
-        guard let contentEnd = sorted.map(\.maxY).max() else {
-            updatePageOffsets([0])
-            return
-        }
-
-        var offsets: [Double] = [0]
-        var pageStart: Double = 0
-
-        while pageStart + viewportHeight < contentEnd {
-            let pageEnd = pageStart + viewportHeight
-
-            var lastFittingIdx: Int? = nil
-            for (i, item) in sorted.enumerated() {
-                if item.minY >= pageEnd { break }
-                if item.maxY <= pageEnd {
-                    lastFittingIdx = i
-                }
-            }
-
-            if let idx = lastFittingIdx {
-                let nextIdx = idx + 1
-                if nextIdx < sorted.count {
-                    let nextStart = sorted[nextIdx].minY
-                    if nextStart > pageStart {
-                        offsets.append(nextStart)
-                        pageStart = nextStart
-                        continue
-                    }
-                }
-            }
-
-            // Item taller than viewport — advance by viewport height
-            offsets.append(pageStart + viewportHeight)
-            pageStart += viewportHeight
-        }
-
-        updatePageOffsets(offsets)
-    }
-
-    private func updatePageOffsets(_ offsets: [Double]) {
-        guard offsets != pageOffsets else { return }
-        pageOffsets = offsets
-        if currentPage >= totalPages {
-            currentPage = max(0, totalPages - 1)
-        }
+        return min(best, pageStarts.count - 1)
     }
 
     func goToNextPage() {

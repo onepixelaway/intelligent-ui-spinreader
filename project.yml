@@ -26,6 +26,8 @@ targets:
       base:
         SWIFT_VERSION: 6.0.3
         ENABLE_TESTABILITY: YES
+        DEVELOPMENT_TEAM: 72P6RBSM9C
+        CODE_SIGN_STYLE: Automatic
     info:
       path: Sources/Info.plist
       properties:

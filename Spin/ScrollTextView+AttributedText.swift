@@ -16,6 +16,29 @@ extension ScrollTextView {
         }
     }
 
+    // Exact NSAttributedString that HighlightableTextView renders for a splittable item.
+    // Used by Paginator to measure line fragments so page breaks land on real line boundaries.
+    // Returns nil for items that are not rendered via HighlightableTextView.
+    func renderedAttributedText(for item: ReadableItem) -> NSAttributedString? {
+        switch item {
+        case .title(let text):
+            return nsStyledText(text, size: readerSettings.titleSize, weight: .bold)
+        case .byline(let text):
+            return nsStyledText(text, size: readerSettings.bylineSize, weight: .semibold)
+        case .paragraph(let text):
+            return nsStyledText(text, size: readerSettings.paragraphSize, weight: .regular)
+        case .richParagraph(let rt):
+            return nsRichAttributedText(rt, size: readerSettings.paragraphSize)
+        case .subheading(let text):
+            return nsStyledText(text, size: readerSettings.titleSize - 4, weight: .bold)
+        case .listItem(let text, let ordered, let listIdx):
+            let prefix = ordered ? "\(listIdx). " : "\u{2022} "
+            return nsStyledText(prefix + text, size: readerSettings.paragraphSize, weight: .regular)
+        case .image, .blockquote, .code, .divider, .callout, .paragraphWithFootnotes, .chapterTOC:
+            return nil
+        }
+    }
+
     private func styledFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
         var font = UIFont.systemFont(ofSize: size, weight: weight)
         if let descriptor = font.fontDescriptor.withDesign(readerSettings.fontFamily.uiDesign) {

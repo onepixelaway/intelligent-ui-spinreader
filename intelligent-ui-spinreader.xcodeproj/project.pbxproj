@@ -10,9 +10,11 @@
 		04C3910CBE1B91E63E7ED7A2 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 244CC314B9E59A9C97420A20 /* AppDelegate.swift */; };
 		0B7CBA310B11C5BB31FC9422 /* SpinApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6DBEF2C370158A139D205E /* SpinApp.swift */; };
 		0CECB721E301C953FFE7E68C /* ReaderTagPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 819E6FC5944D913820F5F8E9 /* ReaderTagPill.swift */; };
+		0FF0FBCF5AAA35EB8FE6C585 /* ScrollTextView+Pagination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C85DCFECDF1DB621AD739E /* ScrollTextView+Pagination.swift */; };
 		1D41A129AD5604B8A17A1F83 /* ScrollTextView+Chapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5DE67C712A0481369D3D790E /* ScrollTextView+Chapters.swift */; };
 		2256E94A5D3693CD4AE97057 /* ScrollInputViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9965582666A149C761267CDE /* ScrollInputViews.swift */; };
 		2C20F943CCC15B45AB2480E6 /* EpubLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F9EDFD087441380ACB497E /* EpubLibraryView.swift */; };
+		2E4096303B3515FBFEE1A2EE /* Paginator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */; };
 		4164ABF4568234949AD132AF /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C5E5F3D7E21E592A851242 /* Config.swift */; };
 		47C31C21F7BEEAEE65C959D7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B8C2821EE55C5AD6773ED71C /* Assets.xcassets */; };
 		4879BDFAEEF07E58309061D2 /* ReaderContentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EBA3FBBD27DED12803F8085 /* ReaderContentViews.swift */; };
@@ -50,6 +52,7 @@
 		2241C458D35528A038EAE7C4 /* ScrollTextView+ContentRendering.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+ContentRendering.swift"; sourceTree = "<group>"; };
 		244CC314B9E59A9C97420A20 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		31D63BC5A3B0EBAD515446C8 /* ScrollTextView+Analysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Analysis.swift"; sourceTree = "<group>"; };
+		40C85DCFECDF1DB621AD739E /* ScrollTextView+Pagination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Pagination.swift"; sourceTree = "<group>"; };
 		4E8B463DE1593C722957A035 /* ScrollState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollState.swift; sourceTree = "<group>"; };
 		5379D0CFF1B4BE3E9175B6D1 /* Spin.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Spin.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5BEBA0672B53D6527FC022DD /* HighlightableTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlightableTextView.swift; sourceTree = "<group>"; };
@@ -67,6 +70,7 @@
 		A87BCCC8BD100C4230F823EF /* TrackpadSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackpadSurface.swift; sourceTree = "<group>"; };
 		A9F9EDFD087441380ACB497E /* EpubLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubLibraryView.swift; sourceTree = "<group>"; };
 		B8C2821EE55C5AD6773ED71C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paginator.swift; sourceTree = "<group>"; };
 		BF805B39867A0BCE8A172ECC /* ScrollTextView+AttributedText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+AttributedText.swift"; sourceTree = "<group>"; };
 		D0E864B792179C0ECDC3B94E /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		DD95C47247F9A942E420D6A3 /* ScrollTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollTextView.swift; sourceTree = "<group>"; };
@@ -127,6 +131,7 @@
 				5BEBA0672B53D6527FC022DD /* HighlightableTextView.swift */,
 				70562CEDAC69322951D76474 /* HighlightsListView.swift */,
 				E55BEE1BE155E70B87D6E48C /* Models.swift */,
+				BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */,
 				8A98CD6C3F8B0DBFC2670BD3 /* ReadableItem+Classification.swift */,
 				0EBA3FBBD27DED12803F8085 /* ReaderContentViews.swift */,
 				9890C234F5B38111DBBA0AE5 /* ReaderSettings.swift */,
@@ -139,6 +144,7 @@
 				5DE67C712A0481369D3D790E /* ScrollTextView+Chapters.swift */,
 				2241C458D35528A038EAE7C4 /* ScrollTextView+ContentRendering.swift */,
 				E700A7CF2FF7006E8FE18AFE /* ScrollTextView+Highlights.swift */,
+				40C85DCFECDF1DB621AD739E /* ScrollTextView+Pagination.swift */,
 				1E6DBEF2C370158A139D205E /* SpinApp.swift */,
 				73A96AC97C915EB3E44A0F60 /* Controls */,
 				0DD146B77B67F44A203920F7 /* Preview Content */,
@@ -195,6 +201,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1620;
 				TargetAttributes = {
+					77DA0374B3416EEC25AA99BC = {
+						DevelopmentTeam = 72P6RBSM9C;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = E44DDBF95332A980FFDFC3EA /* Build configuration list for PBXProject "intelligent-ui-spinreader" */;
@@ -247,6 +257,7 @@
 				A9A0B113B6D7361D2ED26F42 /* HighlightsListView.swift in Sources */,
 				6FA32A38C66DCCC765BDBEF1 /* LiquidGlass.swift in Sources */,
 				63D6FC710829F1F899DDF039 /* Models.swift in Sources */,
+				2E4096303B3515FBFEE1A2EE /* Paginator.swift in Sources */,
 				7EE153032F87D12DDB56A51C /* ReadableItem+Classification.swift in Sources */,
 				4879BDFAEEF07E58309061D2 /* ReaderContentViews.swift in Sources */,
 				6AD8816A6B0810A601ECB62A /* ReaderSettings.swift in Sources */,
@@ -259,6 +270,7 @@
 				1D41A129AD5604B8A17A1F83 /* ScrollTextView+Chapters.swift in Sources */,
 				9F4D08315CFA403590F387CA /* ScrollTextView+ContentRendering.swift in Sources */,
 				B6531C56E7F53620DF034242 /* ScrollTextView+Highlights.swift in Sources */,
+				0FF0FBCF5AAA35EB8FE6C585 /* ScrollTextView+Pagination.swift in Sources */,
 				DFC5DA7DA543B46EDFFDAEAD /* ScrollTextView.swift in Sources */,
 				0B7CBA310B11C5BB31FC9422 /* SpinApp.swift in Sources */,
 				E9A40FF5626A9FB4BC13F6A9 /* TrackpadSurface.swift in Sources */,
@@ -273,6 +285,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72P6RBSM9C;
 				ENABLE_TESTABILITY = YES;
 				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -291,6 +305,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72P6RBSM9C;
 				ENABLE_TESTABILITY = YES;
 				INFOPLIST_FILE = Sources/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

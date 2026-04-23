@@ -188,14 +188,6 @@ final class ReaderSettings: ObservableObject {
     func lineSpacingPt(for size: CGFloat) -> CGFloat {
         size * (lineSpacing.multiplier - 1.0) / 2
     }
-
-    var paginatedChunkHeight: CGFloat {
-        let size = paragraphSize
-        let systemFontLineHeightRatio: CGFloat = 1.2
-        let linesPerChunk: CGFloat = 5
-        let lineToLine = size * systemFontLineHeightRatio + lineSpacingPt(for: size)
-        return lineToLine * linesPerChunk
-    }
 }
 
 final class HapticFeedback {

@@ -10,7 +10,7 @@ struct ScrollTextView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(HighlightStore.self) var highlightStore
 
-    @StateObject private var scrollState = ScrollState()
+    @StateObject var scrollState = ScrollState()
     @StateObject var readerSettings = ReaderSettings()
     @State private var showTopBar: Bool = true
     @State var visibleParagraphs: [Int] = []
@@ -35,6 +35,11 @@ struct ScrollTextView: View {
     @State var autoHighlightStartOffset: [Int: Int] = [:]
     @State var autoHighlightExtendCount: [Int: Int] = [:]
     @State var paragraphFrames: [Int: CGRect] = [:]
+    // Last content-space frames fed to the Paginator. Used to skip re-measurement during
+    // page-flip animations, where the preference key refires but content frames are unchanged.
+    @State var lastPaginationFrames: [Int: CGRect] = [:]
+    @State var lastPaginationViewportHeight: Double = 0
+    @State var lastPaginationViewportWidth: Double = 0
 
     struct RichText: Hashable, @unchecked Sendable {
         let attributedString: NSAttributedString
@@ -77,8 +82,16 @@ struct ScrollTextView: View {
     let bookID: String?
     // Must stay same length/order as `items`. contentIDForItem(at:) silently falls back on mismatch.
     @State var itemContentIDs: [String] = []
-    private let topPadding: CGFloat = 20
-    private let backButtonTopPadding: CGFloat = 80
+    // Editorial whitespace between the status bar/safe area and the first line of body text.
+    private let editorialTopPadding: CGFloat = 0
+    // Height of the top-bar black band when the nav buttons are showing. Covers status bar and
+    // the 44pt button row, preventing text from ghosting under the buttons.
+    private let topBarBandHeight: CGFloat = 50
+    // Gap between the text viewport's bottom and the top of the control panel so no text sits
+    // behind the liquid-glass material.
+    private let viewportToPanelGap: CGFloat = 16
+    private let panelTopGap: CGFloat = 8
+    private let panelBottomInset: CGFloat = 24
     let maxTags = 5
     private let pageAnimation: Animation = .spring(response: 0.3, dampingFraction: 0.88)
 
@@ -105,89 +118,103 @@ struct ScrollTextView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            let panelTopGap: CGFloat = 8
-            let panelBottomInset: CGFloat = 24
-            let reservedBottomSpace = controlPanelHeight + panelTopGap + panelBottomInset
-            let scrollViewHeight = max(0, geometry.size.height - reservedBottomSpace)
-            ZStack(alignment: .top) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 28) {
-                        ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                            readableItemView(item, index: index)
-                                .id(index)
-                                .padding(.horizontal, horizontalPadding(for: item))
-                                .background(
-                                    GeometryReader { geo in
-                                        Color.clear
-                                            .preference(key: ParagraphPositionKey.self, value: [index: geo.frame(in: .named("scroll"))])
-                                    }
-                                )
-                        }
+            // GeometryReader is already inside the safe area by default, so y=0 in its
+            // coordinate space is flush against the bottom of the status bar.
+            let topInset = editorialTopPadding
+            let reservedBottomSpace = controlPanelHeight + panelTopGap + panelBottomInset + viewportToPanelGap
+            let viewportHeight = max(0, geometry.size.height - topInset - reservedBottomSpace)
+            let viewportWidth = geometry.size.width
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 28) {
+                    ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                        readableItemView(item, index: index)
+                            .id(index)
+                            .padding(.horizontal, horizontalPadding(for: item))
+                            .background(
+                                GeometryReader { geo in
+                                    Color.clear
+                                        .preference(key: ParagraphPositionKey.self, value: [index: geo.frame(in: .named("scroll"))])
+                                }
+                            )
                     }
-                    .padding(.top, showsBackButton ? backButtonTopPadding : topPadding)
-                    .padding(.bottom, 100)
-                    .background(
-                        GeometryReader { geo in
-                            Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
-                        }
-                    )
-                    .offset(y: scrollState.offset)
                 }
-                .coordinateSpace(name: "scroll")
-                .frame(maxWidth: .infinity, alignment: .top)
-                .scrollDisabled(true)
-                .onPreferenceChange(ParagraphPositionKey.self) { positions in
-                    // Viewport is the unblocked area above the panel — content under the panel is visually refracted by the glass but doesn't count as "visible" for auto-highlight.
-                    let viewport = CGRect(x: 0, y: 0, width: geometry.size.width, height: scrollViewHeight)
-                    let newVisible = positions
-                        .filter { $0.value.intersects(viewport) }
-                        .map { $0.key }
-                        .sorted()
-                    if newVisible != visibleParagraphs {
-                        visibleParagraphs = newVisible
+                .background(
+                    GeometryReader { geo in
+                        Color.clear.preference(key: ContentHeightKey.self, value: geo.size.height)
                     }
-                    if positions != paragraphFrames {
-                        paragraphFrames = positions
-                    }
-                    let currentOffset = scrollState.offset
-                    let contentBounds = positions.values.map { frame in
-                        (minY: Double(frame.minY) - currentOffset,
-                         maxY: Double(frame.maxY) - currentOffset)
-                    }
-                    scrollState.setItemBounds(contentBounds)
+                )
+                .offset(y: scrollState.offset)
+            }
+            .coordinateSpace(name: "scroll")
+            .frame(width: viewportWidth, height: viewportHeight, alignment: .top)
+            .clipped()
+            .mask(bottomLineFadeMask(viewportHeight: viewportHeight))
+            .position(x: viewportWidth / 2, y: topInset + viewportHeight / 2)
+            .scrollDisabled(true)
+            .onPreferenceChange(ParagraphPositionKey.self) { positions in
+                let viewport = CGRect(x: 0, y: 0, width: viewportWidth, height: viewportHeight)
+                let newVisible = positions
+                    .filter { $0.value.intersects(viewport) }
+                    .map { $0.key }
+                    .sorted()
+                if newVisible != visibleParagraphs {
+                    visibleParagraphs = newVisible
                 }
-                .onPreferenceChange(ContentHeightKey.self) { h in
-                    scrollState.setScrollBounds(
-                        contentHeight: Double(h),
-                        viewportHeight: Double(scrollViewHeight)
-                    )
-                    if isLoadingNextChapter {
-                        isLoadingNextChapter = false
-                    }
+                if positions != paragraphFrames {
+                    paragraphFrames = positions
+                }
+                recomputePageStarts(
+                    positions: positions,
+                    viewportHeight: Double(viewportHeight),
+                    viewportWidth: Double(viewportWidth)
+                )
+            }
+            .onPreferenceChange(ContentHeightKey.self) { _ in
+                if isLoadingNextChapter {
+                    isLoadingNextChapter = false
                 }
             }
-
-            // Top fade: scrolled content dissolves into black before reaching the status bar / top controls.
-            LinearGradient(
-                stops: [
-                    .init(color: .black, location: 0),
-                    .init(color: .black, location: 0.6),
-                    .init(color: .clear, location: 1)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .frame(height: 100)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .ignoresSafeArea(edges: .top)
-            .allowsHitTesting(false)
+            .onChange(of: readerSettings.fontSize) { _, _ in
+                recomputePageStartsWithCurrentFrames(
+                    viewportHeight: Double(viewportHeight),
+                    viewportWidth: Double(viewportWidth)
+                )
+            }
+            .onChange(of: readerSettings.lineSpacing) { _, _ in
+                recomputePageStartsWithCurrentFrames(
+                    viewportHeight: Double(viewportHeight),
+                    viewportWidth: Double(viewportWidth)
+                )
+            }
+            .onChange(of: readerSettings.margins) { _, _ in
+                recomputePageStartsWithCurrentFrames(
+                    viewportHeight: Double(viewportHeight),
+                    viewportWidth: Double(viewportWidth)
+                )
+            }
+            .onChange(of: readerSettings.fontFamily) { _, _ in
+                recomputePageStartsWithCurrentFrames(
+                    viewportHeight: Double(viewportHeight),
+                    viewportWidth: Double(viewportWidth)
+                )
+            }
+            // Viewport shrinks when the control panel reports its real height after first render.
+            // Item frames don't move in "scroll" space, so the preference key doesn't re-fire;
+            // trigger an explicit recompute against the new viewport height.
+            .onChange(of: controlPanelHeight) { _, _ in
+                recomputePageStartsWithCurrentFrames(
+                    viewportHeight: Double(viewportHeight),
+                    viewportWidth: Double(viewportWidth)
+                )
+            }
 
             ControlPanel(
                 highlightAnimating: autoHighlightAnimating,
                 onHighlight: {
                     cycleHighlightForTopVisibleParagraph(
                         viewportWidth: geometry.size.width,
-                        scrollViewHeight: scrollViewHeight,
+                        scrollViewHeight: viewportHeight,
                         topFadeHeight: 0
                     )
                     flashAutoHighlightFeedback()
@@ -195,7 +222,7 @@ struct ScrollTextView: View {
                 onHighlightSwipeDown: {
                     extendHighlightForTopVisibleParagraph(
                         viewportWidth: geometry.size.width,
-                        scrollViewHeight: scrollViewHeight,
+                        scrollViewHeight: viewportHeight,
                         topFadeHeight: 0
                     )
                     flashAutoHighlightFeedback()
@@ -253,6 +280,12 @@ struct ScrollTextView: View {
 
             if showsBackButton {
                 Group {
+                    Color.black
+                        .frame(height: topBarBandHeight)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .ignoresSafeArea(edges: .top)
+                        .allowsHitTesting(false)
+
                     Button {
                         dismiss()
                     } label: {
@@ -262,7 +295,7 @@ struct ScrollTextView: View {
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
-                    .position(x: 30, y: 30)
+                    .position(x: 30, y: 24)
 
                     Button {
                         showHighlightsList = true
@@ -273,7 +306,7 @@ struct ScrollTextView: View {
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
-                    .position(x: geometry.size.width - 74, y: 30)
+                    .position(x: geometry.size.width - 74, y: 24)
 
                     Button {
                         showReaderSettings = true
@@ -284,7 +317,7 @@ struct ScrollTextView: View {
                             .frame(width: 44, height: 44)
                             .contentShape(Rectangle())
                     }
-                    .position(x: geometry.size.width - 30, y: 30)
+                    .position(x: geometry.size.width - 30, y: 24)
                 }
                 .opacity(showTopBar ? 1 : 0)
                 .allowsHitTesting(showTopBar)
@@ -343,6 +376,25 @@ struct ScrollTextView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: activeFootnote)
+    }
+
+    // Fades the bottom of the text viewport down to 25% opacity over the last line's height,
+    // so the final line on each page dims before the control panel — signals "more below"
+    // without gradient-bleeding into several lines.
+    @ViewBuilder
+    private func bottomLineFadeMask(viewportHeight: CGFloat) -> some View {
+        let lineHeight = readerSettings.paragraphSize * 1.2
+            + readerSettings.lineSpacingPt(for: readerSettings.paragraphSize)
+        let fadeStart = max(0, viewportHeight - lineHeight) / max(1, viewportHeight)
+        LinearGradient(
+            stops: [
+                .init(color: .white, location: 0),
+                .init(color: .white, location: fadeStart),
+                .init(color: .white.opacity(0.25), location: 1)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     private func hideTopBarIfNeeded() {
