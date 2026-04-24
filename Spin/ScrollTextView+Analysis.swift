@@ -3,11 +3,44 @@ import NaturalLanguage
 @preconcurrency import OpenAI
 
 extension ScrollTextView {
-    func handleAnalysisRequest() {
-        let visibleText = visibleParagraphs
+    enum PerplexityAction {
+        case learnMore
+        case factCheck
+    }
+
+    func visibleTextOnScreen() -> String {
+        visibleParagraphs
             .compactMap { items.indices.contains($0) ? textForAnalysis(items[$0]) : nil }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
             .joined(separator: " ")
+    }
+
+    func openPerplexity(for action: PerplexityAction) {
+        let visibleText = visibleTextOnScreen()
+        guard !visibleText.isEmpty else { return }
+
+        let query: String
+        switch action {
+        case .learnMore:
+            query = """
+            Help me learn more about this passage and explain any important context:
+
+            \(visibleText)
+            """
+        case .factCheck:
+            query = """
+            Is this true or not? Fact-check this passage and explain why:
+
+            \(visibleText)
+            """
+        }
+
+        presentExplainer(for: query)
+    }
+
+    func handleAnalysisRequest() {
+        let visibleText = visibleTextOnScreen()
         guard !visibleText.isEmpty, visibleText != lastAnalyzedText else { return }
         lastAnalyzedText = visibleText
 

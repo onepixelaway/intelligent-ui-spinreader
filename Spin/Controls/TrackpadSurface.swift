@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TrackpadSurface: View {
     private let cornerRadius: CGFloat = 16
+    private let borderColor = Color.white.opacity(0.08)
 
     var body: some View {
         GeometryReader { geo in
@@ -11,6 +12,10 @@ struct TrackpadSurface: View {
         .liquidGlass(
             in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous),
             tint: Color.black.opacity(0.6)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .stroke(borderColor, lineWidth: 1)
         )
         .allowsHitTesting(true)
     }

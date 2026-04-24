@@ -29,11 +29,8 @@ struct ScrollTextView: View {
     // Hidden for now; keep the view and model in place to re-enable later.
     @State private var showQuestion: Bool = false
     @State private var controlPanelHeight: CGFloat = 0
-    // Keyed by `items` index. Stable because new chapters only append; reordering or in-place replacement would corrupt cycle state.
-    @State var autoHighlightCycleStep: [Int: Int] = [:]
-    @State var autoHighlightIDs: [Int: [UUID]] = [:]
-    @State var autoHighlightStartOffset: [Int: Int] = [:]
-    @State var autoHighlightExtendCount: [Int: Int] = [:]
+    // The highlight key moves a single active selection sentence-by-sentence through the text.
+    @State var autoHighlightSelection: AutoHighlightSelection?
     @State var paragraphFrames: [Int: CGRect] = [:]
     // Last content-space frames fed to the Paginator. Used to skip re-measurement during
     // page-flip animations, where the preference key refires but content frames are unchanged.
@@ -121,8 +118,9 @@ struct ScrollTextView: View {
             // GeometryReader is already inside the safe area by default, so y=0 in its
             // coordinate space is flush against the bottom of the status bar.
             let topInset = editorialTopPadding
+            let clippedBottomLineHeight = reservedBottomLineHeight()
             let reservedBottomSpace = controlPanelHeight + panelTopGap + panelBottomInset + viewportToPanelGap
-            let viewportHeight = max(0, geometry.size.height - topInset - reservedBottomSpace)
+            let viewportHeight = max(0, geometry.size.height - topInset - reservedBottomSpace - clippedBottomLineHeight)
             let viewportWidth = geometry.size.width
 
             ScrollView {
@@ -149,7 +147,6 @@ struct ScrollTextView: View {
             .coordinateSpace(name: "scroll")
             .frame(width: viewportWidth, height: viewportHeight, alignment: .top)
             .clipped()
-            .mask(bottomLineFadeMask(viewportHeight: viewportHeight))
             .position(x: viewportWidth / 2, y: topInset + viewportHeight / 2)
             .scrollDisabled(true)
             .onPreferenceChange(ParagraphPositionKey.self) { positions in
@@ -208,24 +205,28 @@ struct ScrollTextView: View {
                     viewportWidth: Double(viewportWidth)
                 )
             }
+            .onChange(of: showTopBar) { _, _ in
+                recomputePageStartsWithCurrentFrames(
+                    viewportHeight: Double(viewportHeight),
+                    viewportWidth: Double(viewportWidth)
+                )
+            }
 
             ControlPanel(
                 highlightAnimating: autoHighlightAnimating,
                 onHighlight: {
-                    cycleHighlightForTopVisibleParagraph(
+                    handleAutoHighlightUpdate(cycleHighlightForTopVisibleParagraph(
                         viewportWidth: geometry.size.width,
                         scrollViewHeight: viewportHeight,
                         topFadeHeight: 0
-                    )
-                    flashAutoHighlightFeedback()
+                    ))
                 },
                 onHighlightSwipeDown: {
-                    extendHighlightForTopVisibleParagraph(
+                    handleAutoHighlightUpdate(extendHighlightForTopVisibleParagraph(
                         viewportWidth: geometry.size.width,
                         scrollViewHeight: viewportHeight,
                         topFadeHeight: 0
-                    )
-                    flashAutoHighlightFeedback()
+                    ))
                 },
                 onTrackpadPageUp: {
                     hideTopBarIfNeeded()
@@ -249,6 +250,12 @@ struct ScrollTextView: View {
                     }
                 },
                 tags: readerSettings.showAIQuestions ? Array(tags.prefix(maxTags)) : [],
+                onLearnMoreTap: {
+                    openPerplexity(for: .learnMore)
+                },
+                onFactCheckTap: {
+                    openPerplexity(for: .factCheck)
+                },
                 showQuestion: showQuestion && readerSettings.showAIQuestions,
                 currentQuestion: currentQuestion,
                 isLoadingQuestion: isLoadingQuestion,
@@ -346,6 +353,7 @@ struct ScrollTextView: View {
         }
         .background(Color.black)
         .portraitOnly()
+        .statusBar(hidden: !showTopBar)
         .gesture(
             DragGesture(minimumDistance: 20, coordinateSpace: .global)
                 .onEnded { value in
@@ -378,23 +386,9 @@ struct ScrollTextView: View {
         .animation(.easeInOut(duration: 0.2), value: activeFootnote)
     }
 
-    // Fades the bottom of the text viewport down to 25% opacity over the last line's height,
-    // so the final line on each page dims before the control panel — signals "more below"
-    // without gradient-bleeding into several lines.
-    @ViewBuilder
-    private func bottomLineFadeMask(viewportHeight: CGFloat) -> some View {
-        let lineHeight = readerSettings.paragraphSize * 1.2
-            + readerSettings.lineSpacingPt(for: readerSettings.paragraphSize)
-        let fadeStart = max(0, viewportHeight - lineHeight) / max(1, viewportHeight)
-        LinearGradient(
-            stops: [
-                .init(color: .white, location: 0),
-                .init(color: .white, location: fadeStart),
-                .init(color: .white.opacity(0.25), location: 1)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+    func presentExplainer(for query: String) {
+        guard let url = perplexityURL(for: query) else { return }
+        explainerURL = IdentifiableURL(url: url)
     }
 
     private func hideTopBarIfNeeded() {
@@ -402,6 +396,15 @@ struct ScrollTextView: View {
         withAnimation(.easeInOut(duration: 0.2)) {
             showTopBar = false
         }
+    }
+
+    private func reservedBottomLineHeight() -> CGFloat {
+        let sample = nsStyledText("Ag", size: readerSettings.paragraphSize, weight: .regular)
+        if let line = Paginator.measureLines(for: sample, width: 1000).first {
+            return CGFloat(line.maxY - line.minY)
+        }
+        return readerSettings.paragraphSize * 1.2
+            + readerSettings.lineSpacingPt(for: readerSettings.paragraphSize)
     }
 
     private func flashAutoHighlightFeedback() {
@@ -413,6 +416,21 @@ struct ScrollTextView: View {
                 autoHighlightAnimating = false
             }
         }
+    }
+
+    private func handleAutoHighlightUpdate(_ update: AutoHighlightUpdate) {
+        guard case .changed(let shouldAdvancePage) = update else { return }
+        if shouldAdvancePage {
+            hideTopBarIfNeeded()
+            if scrollState.isAtBottom {
+                advanceToNextChapter()
+            } else {
+                withAnimation(pageAnimation) {
+                    scrollState.goToNextPage()
+                }
+            }
+        }
+        flashAutoHighlightFeedback()
     }
 }
 

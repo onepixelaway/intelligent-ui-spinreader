@@ -7,6 +7,8 @@ struct ControlPanel: View {
     let onTrackpadPageUp: () -> Void
     let onTrackpadPageDown: () -> Void
     let tags: [String]
+    let onLearnMoreTap: () -> Void
+    let onFactCheckTap: () -> Void
     let showQuestion: Bool
     let currentQuestion: String
     let isLoadingQuestion: Bool
@@ -95,10 +97,10 @@ struct ControlPanel: View {
     private var actionPillsRow: some View {
         HStack(spacing: 8) {
             ActionPill(title: "Learn more") {
-                // TODO: wire AI actions
+                onLearnMoreTap()
             }
             ActionPill(title: "Is this true?") {
-                // TODO: wire AI actions
+                onFactCheckTap()
             }
         }
         .padding(.horizontal, 24)

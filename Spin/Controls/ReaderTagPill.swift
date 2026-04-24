@@ -28,7 +28,7 @@ private struct ReaderTagPillStyle: ButtonStyle {
             )
             .overlay(
                 Capsule()
-                    .stroke(Color(white: 0.45), lineWidth: 1)
+                    .stroke(Color.white.opacity(0.11), lineWidth: 1)
             )
             .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)
     }

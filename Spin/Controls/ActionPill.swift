@@ -29,7 +29,7 @@ private struct ActionPillStyle: ButtonStyle {
         configuration.label
             .overlay(
                 Capsule()
-                    .stroke(Color(red: 0.65, green: 0.55, blue: 0.98).opacity(0.30), lineWidth: 1)
+                    .stroke(Color(red: 0.65, green: 0.55, blue: 0.98).opacity(0.09), lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .animation(.easeInOut(duration: 0.12), value: configuration.isPressed)

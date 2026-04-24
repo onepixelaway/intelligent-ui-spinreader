@@ -5,6 +5,8 @@ struct CircularReaderButton: View {
     let accessibilityLabel: String
     let action: () -> Void
 
+    private let borderColor = Color.white.opacity(0.08)
+
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
@@ -12,6 +14,10 @@ struct CircularReaderButton: View {
                 .foregroundColor(Color(white: 0.83))
                 .frame(width: 56, height: 56)
                 .liquidGlass(in: Circle(), tint: Color.black.opacity(0.6))
+                .overlay(
+                    Circle()
+                        .stroke(borderColor, lineWidth: 1)
+                )
                 .contentShape(Circle())
         }
         .buttonStyle(CircularReaderButtonStyle())
