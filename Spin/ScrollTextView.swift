@@ -83,7 +83,7 @@ struct ScrollTextView: View {
     // Must stay same length/order as `items`. contentIDForItem(at:) silently falls back on mismatch.
     @State var itemContentIDs: [String] = []
     // Editorial whitespace between the status bar/safe area and the first line of body text.
-    private let editorialTopPadding: CGFloat = 0
+    private let editorialTopPadding: CGFloat = 6
     // Height of the top-bar black band when the nav buttons are showing. Covers status bar and
     // the 44pt button row, preventing text from ghosting under the buttons.
     private let topBarBandHeight: CGFloat = 50
