@@ -49,16 +49,25 @@ extension ScrollTextView {
     func wholeItemHighlight<Content: View>(
         text: String,
         itemIndex: Int,
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping () -> Content
     ) -> some View {
         let isHighlighted = !highlightsForParagraph(text, itemIndex: itemIndex).isEmpty
-        content()
-            .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.yellow.opacity(isHighlighted ? 0.25 : 0))
-                    .padding(.horizontal, -6)
-                    .padding(.vertical, -4)
-            )
+        let pendingHighlight = pendingHighlightForParagraph(text, itemIndex: itemIndex)
+        TimelineView(.animation) { timeline in
+            let pendingOpacity = pendingHighlightOpacity(at: timeline.date)
+            let pendingColor = pendingHighlight.flatMap { HighlightColorChoice(rawValue: $0.color)?.fillColor } ?? .clear
+            content()
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(
+                            pendingHighlight == nil
+                            ? Color.yellow.opacity(isHighlighted ? 0.25 : 0)
+                            : pendingColor.opacity(pendingOpacity)
+                        )
+                        .padding(.horizontal, -6)
+                        .padding(.vertical, -4)
+                )
+        }
     }
 
     func horizontalPadding(for item: ReadableItem) -> CGFloat {
@@ -70,18 +79,33 @@ extension ScrollTextView {
     func highlightableBlock(_ text: String, attributedText: NSAttributedString, itemIndex: Int, extraLeading: CGFloat = 0) -> some View {
         let matching = highlightsForParagraph(text, itemIndex: itemIndex)
         let cid = contentIDForItem(at: itemIndex)
-        HighlightableTextView(
-            text: text,
-            attributedText: attributedText,
-            highlights: matching,
-            onHighlightCreated: { selectedText, start, end in
-                highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
-            },
-            onHighlightRemoved: { id in
-                highlightStore.remove(id: id)
-            }
-        )
+        let pendingHighlight = pendingHighlightForParagraph(text, itemIndex: itemIndex)
+        TimelineView(.animation) { timeline in
+            HighlightableTextView(
+                text: text,
+                attributedText: attributedText,
+                highlights: matching,
+                pendingHighlight: pendingHighlight,
+                pendingOpacity: pendingHighlightOpacity(at: timeline.date),
+                showsPendingCursor: pendingHighlight != nil && pendingHighlightCursorVisible(at: timeline.date),
+                onHighlightCreated: { selectedText, start, end in
+                    highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
+                },
+                onHighlightRemoved: { id in
+                    highlightStore.remove(id: id)
+                }
+            )
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, extraLeading)
+    }
+
+    private func pendingHighlightOpacity(at date: Date) -> CGFloat {
+        let phase = (sin(date.timeIntervalSinceReferenceDate * 2.0 * Double.pi / 1.4) + 1.0) / 2.0
+        return 0.16 + CGFloat(phase) * 0.12
+    }
+
+    private func pendingHighlightCursorVisible(at date: Date) -> Bool {
+        Int(date.timeIntervalSinceReferenceDate * 2.0) % 2 == 0
     }
 }

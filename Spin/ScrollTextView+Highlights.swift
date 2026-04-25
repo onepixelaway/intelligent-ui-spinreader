@@ -6,12 +6,18 @@ extension ScrollTextView {
     struct AutoHighlightSelection {
         let itemIndex: Int
         let sentenceRange: ClosedRange<Int>?
-        let highlightIDs: [UUID]
+        var highlight: Highlight
+    }
+
+    enum AutoHighlightPageTurn {
+        case none
+        case previous
+        case next
     }
 
     enum AutoHighlightUpdate {
         case none
-        case changed(shouldAdvancePage: Bool)
+        case changed(pageTurn: AutoHighlightPageTurn)
     }
 
     private struct HighlightContext {
@@ -24,8 +30,7 @@ extension ScrollTextView {
 
     private struct HighlightTarget {
         let selection: AutoHighlightSelection
-        let highlights: [Highlight]
-        let shouldAdvancePage: Bool
+        let pageTurn: AutoHighlightPageTurn
     }
 
     private struct TextLayoutContext {
@@ -60,19 +65,14 @@ extension ScrollTextView {
         )
         guard viewport.width > 0, viewport.height > 0 else { return .none }
 
-        let target: HighlightTarget?
-        if let selection = autoHighlightSelection, shouldContinueAutoHighlight(selection, viewport: viewport) {
-            target = nextHighlightTarget(after: selection, viewport: viewport)
-        } else {
-            target = startingHighlightTarget(viewport: viewport)
-        }
+        let target = nextAutoHighlightTarget(viewport: viewport)
 
         guard let target else { return .none }
-        applyAutoHighlightTarget(target)
-        return .changed(shouldAdvancePage: target.shouldAdvancePage)
+        autoHighlightSelection = target.selection
+        return .changed(pageTurn: target.pageTurn)
     }
 
-    func extendHighlightForTopVisibleParagraph(
+    func previousHighlightForTopVisibleParagraph(
         viewportWidth: CGFloat,
         scrollViewHeight: CGFloat,
         topFadeHeight: CGFloat
@@ -84,22 +84,39 @@ extension ScrollTextView {
         )
         guard viewport.width > 0, viewport.height > 0 else { return .none }
 
-        guard let selection = autoHighlightSelection,
-              shouldContinueAutoHighlight(selection, viewport: viewport),
-              items.indices.contains(selection.itemIndex),
-              items[selection.itemIndex].isHighlightableBody else {
-            return cycleHighlightForTopVisibleParagraph(
-                viewportWidth: viewportWidth,
-                scrollViewHeight: scrollViewHeight,
-                topFadeHeight: topFadeHeight
-            )
-        }
+        guard let target = previousAutoHighlightTarget(viewport: viewport) else { return .none }
+        autoHighlightSelection = target.selection
+        return .changed(pageTurn: target.pageTurn)
+    }
 
-        guard let target = extendedHighlightTarget(from: selection, viewport: viewport) else {
-            return .none
+    func updatePendingHighlightColor(_ color: HighlightColorChoice) {
+        guard var selection = autoHighlightSelection else { return }
+        selection.highlight.color = color.rawValue
+        autoHighlightSelection = selection
+    }
+
+    func confirmPendingHighlight() {
+        guard let selection = autoHighlightSelection else { return }
+        highlightStore.add(selection.highlight)
+        autoHighlightSelection = nil
+    }
+
+    func cancelPendingHighlight() {
+        autoHighlightSelection = nil
+    }
+
+    func pendingHighlightForParagraph(_ text: String, itemIndex: Int) -> Highlight? {
+        guard let selection = autoHighlightSelection,
+              selection.itemIndex == itemIndex else { return nil }
+        let highlight = selection.highlight
+        let nsText = text as NSString
+        guard highlight.startOffset >= 0,
+              highlight.endOffset <= nsText.length,
+              highlight.startOffset < highlight.endOffset,
+              nsText.substring(with: NSRange(location: highlight.startOffset, length: highlight.endOffset - highlight.startOffset)) == highlight.text else {
+            return nil
         }
-        applyAutoHighlightTarget(target)
-        return .changed(shouldAdvancePage: target.shouldAdvancePage)
+        return highlight
     }
 
     private func highlightViewport(
@@ -135,10 +152,6 @@ extension ScrollTextView {
     private func shouldContinueAutoHighlight(_ selection: AutoHighlightSelection, viewport: CGRect) -> Bool {
         guard items.indices.contains(selection.itemIndex) else { return false }
         let item = items[selection.itemIndex]
-        let cid = contentIDForItem(at: selection.itemIndex)
-        let activeHighlightIDs = Set(highlightStore.highlights(for: cid).map(\.id))
-        guard !selection.highlightIDs.isEmpty,
-              selection.highlightIDs.allSatisfy(activeHighlightIDs.contains) else { return false }
 
         if item.isHighlightableBody,
            let sentenceRange = selection.sentenceRange,
@@ -194,6 +207,20 @@ extension ScrollTextView {
         return sentenceHighlightTarget(ctx: ctx, sentenceRange: sentenceIndex...sentenceIndex, viewport: viewport)
     }
 
+    private func nextAutoHighlightTarget(viewport: CGRect) -> HighlightTarget? {
+        if let selection = autoHighlightSelection, shouldContinueAutoHighlight(selection, viewport: viewport) {
+            return nextHighlightTarget(after: selection, viewport: viewport)
+        }
+        return startingHighlightTarget(viewport: viewport)
+    }
+
+    private func previousAutoHighlightTarget(viewport: CGRect) -> HighlightTarget? {
+        if let selection = autoHighlightSelection, shouldContinueAutoHighlight(selection, viewport: viewport) {
+            return previousHighlightTarget(before: selection, viewport: viewport)
+        }
+        return startingHighlightTarget(viewport: viewport)
+    }
+
     private func nextHighlightTarget(after selection: AutoHighlightSelection, viewport: CGRect) -> HighlightTarget? {
         guard items.indices.contains(selection.itemIndex) else { return nil }
 
@@ -213,6 +240,38 @@ extension ScrollTextView {
         return nextHighlightTarget(afterItemIndex: selection.itemIndex, viewport: viewport)
     }
 
+    private func previousHighlightTarget(before selection: AutoHighlightSelection, viewport: CGRect) -> HighlightTarget? {
+        guard items.indices.contains(selection.itemIndex) else { return nil }
+
+        if items[selection.itemIndex].isHighlightableBody,
+           let sentenceRange = selection.sentenceRange,
+           let ctx = resolveHighlightContext(for: selection.itemIndex, viewport: viewport) {
+            let previousSentenceIndex = sentenceRange.lowerBound - 1
+            if previousSentenceIndex >= 0 {
+                return sentenceHighlightTarget(
+                    ctx: ctx,
+                    sentenceRange: previousSentenceIndex...previousSentenceIndex,
+                    viewport: viewport
+                )
+            }
+        }
+
+        return previousHighlightTarget(beforeItemIndex: selection.itemIndex, viewport: viewport)
+    }
+
+    private func previousHighlightTarget(beforeItemIndex itemIndex: Int, viewport: CGRect) -> HighlightTarget? {
+        for previousIndex in items.indices.reversed() where previousIndex < itemIndex {
+            guard let ctx = resolveHighlightContext(for: previousIndex, viewport: viewport) else { continue }
+            if items[previousIndex].isWholeItemHighlightable {
+                return wholeItemHighlightTarget(ctx: ctx, viewport: viewport)
+            }
+            if let lastSentenceIndex = ctx.sentences.indices.last {
+                return sentenceHighlightTarget(ctx: ctx, sentenceRange: lastSentenceIndex...lastSentenceIndex, viewport: viewport)
+            }
+        }
+        return nil
+    }
+
     private func nextHighlightTarget(afterItemIndex itemIndex: Int, viewport: CGRect) -> HighlightTarget? {
         for nextIndex in items.indices where nextIndex > itemIndex {
             guard let ctx = resolveHighlightContext(for: nextIndex, viewport: viewport) else { continue }
@@ -224,21 +283,6 @@ extension ScrollTextView {
             }
         }
         return nil
-    }
-
-    private func extendedHighlightTarget(
-        from selection: AutoHighlightSelection,
-        viewport: CGRect
-    ) -> HighlightTarget? {
-        guard let sentenceRange = selection.sentenceRange,
-              let ctx = resolveHighlightContext(for: selection.itemIndex, viewport: viewport) else { return nil }
-        let nextSentenceIndex = sentenceRange.upperBound + 1
-        guard nextSentenceIndex < ctx.sentences.count else { return nil }
-        return sentenceHighlightTarget(
-            ctx: ctx,
-            sentenceRange: sentenceRange.lowerBound...nextSentenceIndex,
-            viewport: viewport
-        )
     }
 
     private func sentenceHighlightTarget(
@@ -260,38 +304,46 @@ extension ScrollTextView {
             contentID: ctx.cid,
             text: highlightText,
             startOffset: startSentence.start,
-            endOffset: endSentence.end
+            endOffset: endSentence.end,
+            color: autoHighlightSelection?.highlight.color ?? HighlightColorChoice.yellow.rawValue
         )
-        let shouldAdvancePage = (highlightRect(for: sentenceRange, in: ctx)?.minY ?? -.greatestFiniteMagnitude) >= viewport.maxY - 0.5
+        let pageTurn = pageTurn(for: highlightRect(for: sentenceRange, in: ctx), viewport: viewport)
         return HighlightTarget(
             selection: AutoHighlightSelection(
                 itemIndex: ctx.index,
                 sentenceRange: sentenceRange,
-                highlightIDs: [highlight.id]
+                highlight: highlight
             ),
-            highlights: [highlight],
-            shouldAdvancePage: shouldAdvancePage
+            pageTurn: pageTurn
         )
     }
 
     private func wholeItemHighlightTarget(ctx: HighlightContext, viewport: CGRect) -> HighlightTarget? {
         let endOffset = (ctx.text as NSString).length
         guard endOffset > 0 else { return nil }
-        let highlight = Highlight(contentID: ctx.cid, text: ctx.text, startOffset: 0, endOffset: endOffset)
-        let shouldAdvancePage = (paragraphFrames[ctx.index]?.minY ?? -.greatestFiniteMagnitude) >= viewport.maxY - 0.5
+        let highlight = Highlight(
+            contentID: ctx.cid,
+            text: ctx.text,
+            startOffset: 0,
+            endOffset: endOffset,
+            color: autoHighlightSelection?.highlight.color ?? HighlightColorChoice.yellow.rawValue
+        )
+        let pageTurn = pageTurn(for: paragraphFrames[ctx.index], viewport: viewport)
         return HighlightTarget(
-            selection: AutoHighlightSelection(itemIndex: ctx.index, sentenceRange: nil, highlightIDs: [highlight.id]),
-            highlights: [highlight],
-            shouldAdvancePage: shouldAdvancePage
+            selection: AutoHighlightSelection(itemIndex: ctx.index, sentenceRange: nil, highlight: highlight),
+            pageTurn: pageTurn
         )
     }
 
-    private func applyAutoHighlightTarget(_ target: HighlightTarget) {
-        if let existing = autoHighlightSelection?.highlightIDs, !existing.isEmpty {
-            highlightStore.removeBatch(ids: Set(existing))
+    private func pageTurn(for rect: CGRect?, viewport: CGRect) -> AutoHighlightPageTurn {
+        guard let rect else { return .none }
+        if rect.minY >= viewport.maxY - 0.5 {
+            return .next
         }
-        highlightStore.addBatch(target.highlights)
-        autoHighlightSelection = target.selection
+        if rect.maxY <= viewport.minY + 0.5 {
+            return .previous
+        }
+        return .none
     }
 
     private func textLayoutContext(for itemIndex: Int, viewport: CGRect) -> TextLayoutContext? {

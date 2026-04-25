@@ -1,5 +1,30 @@
 import Foundation
+import SwiftUI
+import UIKit
 import Observation
+
+enum HighlightColorChoice: String, CaseIterable, Identifiable {
+    case green
+    case yellow
+    case blue
+
+    var id: String { rawValue }
+
+    var fillColor: Color {
+        switch self {
+        case .green:
+            return Color(red: 0.42, green: 0.88, blue: 0.55)
+        case .yellow:
+            return Color(red: 1.0, green: 0.86, blue: 0.25)
+        case .blue:
+            return Color(red: 0.34, green: 0.67, blue: 1.0)
+        }
+    }
+
+    var uiColor: UIColor {
+        UIColor(fillColor)
+    }
+}
 
 struct Highlight: Identifiable, Codable {
     var id: UUID

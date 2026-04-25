@@ -25,7 +25,7 @@ struct ScrollTextView: View {
     @State private var showHighlightsList: Bool = false
     @State var activeFootnote: String? = nil
     @State var isLoadingNextChapter: Bool = false
-    @State private var autoHighlightAnimating: Bool = false
+    @State private var selectedHighlightColor: HighlightColorChoice = .yellow
     // Hidden for now; keep the view and model in place to re-enable later.
     @State private var showQuestion: Bool = false
     @State private var controlPanelHeight: CGFloat = 0
@@ -213,28 +213,51 @@ struct ScrollTextView: View {
             }
 
             ControlPanel(
-                highlightAnimating: autoHighlightAnimating,
+                isHighlightMode: autoHighlightSelection != nil,
+                selectedHighlightColor: selectedHighlightColor,
                 onHighlight: {
-                    handleAutoHighlightUpdate(cycleHighlightForTopVisibleParagraph(
-                        viewportWidth: geometry.size.width,
-                        scrollViewHeight: viewportHeight,
-                        topFadeHeight: 0
-                    ))
+                    if autoHighlightSelection != nil {
+                        confirmPendingHighlight()
+                    } else {
+                        let update = cycleHighlightForTopVisibleParagraph(
+                            viewportWidth: geometry.size.width,
+                            scrollViewHeight: viewportHeight,
+                            topFadeHeight: 0
+                        )
+                        handleAutoHighlightUpdate(update)
+                        updatePendingHighlightColor(selectedHighlightColor)
+                    }
                 },
-                onHighlightSwipeDown: {
-                    handleAutoHighlightUpdate(extendHighlightForTopVisibleParagraph(
-                        viewportWidth: geometry.size.width,
-                        scrollViewHeight: viewportHeight,
-                        topFadeHeight: 0
-                    ))
+                onHighlightColorSelected: { color in
+                    selectedHighlightColor = color
+                    updatePendingHighlightColor(color)
+                },
+                onCancelHighlight: {
+                    cancelPendingHighlight()
                 },
                 onTrackpadPageUp: {
+                    if autoHighlightSelection != nil {
+                        handleAutoHighlightUpdate(cycleHighlightForTopVisibleParagraph(
+                            viewportWidth: geometry.size.width,
+                            scrollViewHeight: viewportHeight,
+                            topFadeHeight: 0
+                        ))
+                        return
+                    }
                     hideTopBarIfNeeded()
                     withAnimation(pageAnimation) {
                         scrollState.goToPreviousPage()
                     }
                 },
                 onTrackpadPageDown: {
+                    if autoHighlightSelection != nil {
+                        handleAutoHighlightUpdate(previousHighlightForTopVisibleParagraph(
+                            viewportWidth: geometry.size.width,
+                            scrollViewHeight: viewportHeight,
+                            topFadeHeight: 0
+                        ))
+                        return
+                    }
                     hideTopBarIfNeeded()
                     if scrollState.isAtBottom {
                         advanceToNextChapter()
@@ -407,20 +430,10 @@ struct ScrollTextView: View {
             + readerSettings.lineSpacingPt(for: readerSettings.paragraphSize)
     }
 
-    private func flashAutoHighlightFeedback() {
-        withAnimation(.easeInOut(duration: 0.15)) {
-            autoHighlightAnimating = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            withAnimation(.easeInOut(duration: 0.15)) {
-                autoHighlightAnimating = false
-            }
-        }
-    }
-
     private func handleAutoHighlightUpdate(_ update: AutoHighlightUpdate) {
-        guard case .changed(let shouldAdvancePage) = update else { return }
-        if shouldAdvancePage {
+        guard case .changed(let pageTurn) = update else { return }
+        switch pageTurn {
+        case .next:
             hideTopBarIfNeeded()
             if scrollState.isAtBottom {
                 advanceToNextChapter()
@@ -429,8 +442,14 @@ struct ScrollTextView: View {
                     scrollState.goToNextPage()
                 }
             }
+        case .previous:
+            hideTopBarIfNeeded()
+            withAnimation(pageAnimation) {
+                scrollState.goToPreviousPage()
+            }
+        case .none:
+            break
         }
-        flashAutoHighlightFeedback()
     }
 }
 
