@@ -53,17 +53,22 @@ extension ScrollTextView {
     ) -> some View {
         let isHighlighted = !highlightsForParagraph(text, itemIndex: itemIndex).isEmpty
         let pendingHighlight = pendingHighlightForParagraph(text, itemIndex: itemIndex)
-        TimelineView(.animation) { timeline in
-            let pendingOpacity = pendingHighlightOpacity(at: timeline.date)
-            let pendingColor = pendingHighlight.flatMap { HighlightColorChoice(rawValue: $0.color)?.fillColor } ?? .clear
+        if let pendingHighlight {
+            let pendingColor = HighlightColorChoice(rawValue: pendingHighlight.color)?.fillColor ?? .yellow
+            TimelineView(.animation) { timeline in
+                content()
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(pendingColor.opacity(pendingHighlightOpacity(at: timeline.date)))
+                            .padding(.horizontal, -6)
+                            .padding(.vertical, -4)
+                    )
+            }
+        } else {
             content()
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(
-                            pendingHighlight == nil
-                            ? Color.yellow.opacity(isHighlighted ? 0.25 : 0)
-                            : pendingColor.opacity(pendingOpacity)
-                        )
+                        .fill(Color.yellow.opacity(isHighlighted ? 0.25 : 0))
                         .padding(.horizontal, -6)
                         .padding(.vertical, -4)
                 )
@@ -80,21 +85,40 @@ extension ScrollTextView {
         let matching = highlightsForParagraph(text, itemIndex: itemIndex)
         let cid = contentIDForItem(at: itemIndex)
         let pendingHighlight = pendingHighlightForParagraph(text, itemIndex: itemIndex)
-        TimelineView(.animation) { timeline in
-            HighlightableTextView(
-                text: text,
-                attributedText: attributedText,
-                highlights: matching,
-                pendingHighlight: pendingHighlight,
-                pendingOpacity: pendingHighlightOpacity(at: timeline.date),
-                showsPendingCursor: pendingHighlight != nil && pendingHighlightCursorVisible(at: timeline.date),
-                onHighlightCreated: { selectedText, start, end in
-                    highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
-                },
-                onHighlightRemoved: { id in
-                    highlightStore.remove(id: id)
+        Group {
+            if pendingHighlight != nil {
+                TimelineView(.animation) { timeline in
+                    HighlightableTextView(
+                        text: text,
+                        attributedText: attributedText,
+                        highlights: matching,
+                        pendingHighlight: pendingHighlight,
+                        pendingOpacity: pendingHighlightOpacity(at: timeline.date),
+                        showsPendingCursor: pendingHighlightCursorVisible(at: timeline.date),
+                        onHighlightCreated: { selectedText, start, end in
+                            highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
+                        },
+                        onHighlightRemoved: { id in
+                            highlightStore.remove(id: id)
+                        }
+                    )
                 }
-            )
+            } else {
+                HighlightableTextView(
+                    text: text,
+                    attributedText: attributedText,
+                    highlights: matching,
+                    pendingHighlight: nil,
+                    pendingOpacity: 0.25,
+                    showsPendingCursor: false,
+                    onHighlightCreated: { selectedText, start, end in
+                        highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
+                    },
+                    onHighlightRemoved: { id in
+                        highlightStore.remove(id: id)
+                    }
+                )
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.leading, extraLeading)

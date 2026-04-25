@@ -86,13 +86,7 @@ struct HighlightableTextView: UIViewRepresentable {
         c.onHighlightCreated = onHighlightCreated
         c.onHighlightRemoved = onHighlightRemoved
         if c.isDragging { return }
-        tv.attributedText = buildHighlightDisplayText(
-            base: attributedText,
-            highlights: highlights,
-            pendingHighlight: pendingHighlight,
-            pendingOpacity: pendingOpacity
-        )
-        c.updatePendingCursor(in: tv)
+        c.refreshDisplayText(in: tv)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
@@ -114,6 +108,16 @@ struct HighlightableTextView: UIViewRepresentable {
         var isDragging = false
         private var dragStart: Int?
         private let cursorView = UIView()
+
+        func refreshDisplayText(in tv: UITextView) {
+            tv.attributedText = buildHighlightDisplayText(
+                base: baseAttributedText,
+                highlights: highlights,
+                pendingHighlight: pendingHighlight,
+                pendingOpacity: pendingOpacity
+            )
+            updatePendingCursor(in: tv)
+        }
 
         func installCursor(in tv: UITextView) {
             cursorView.isHidden = true
@@ -200,23 +204,11 @@ struct HighlightableTextView: UIViewRepresentable {
                 }
                 isDragging = false
                 dragStart = nil
-                tv.attributedText = buildHighlightDisplayText(
-                    base: baseAttributedText,
-                    highlights: highlights,
-                    pendingHighlight: pendingHighlight,
-                    pendingOpacity: pendingOpacity
-                )
-                updatePendingCursor(in: tv)
+                refreshDisplayText(in: tv)
             default:
                 isDragging = false
                 dragStart = nil
-                tv.attributedText = buildHighlightDisplayText(
-                    base: baseAttributedText,
-                    highlights: highlights,
-                    pendingHighlight: pendingHighlight,
-                    pendingOpacity: pendingOpacity
-                )
-                updatePendingCursor(in: tv)
+                refreshDisplayText(in: tv)
             }
         }
 

@@ -119,6 +119,10 @@ extension ScrollTextView {
         return highlight
     }
 
+    private var currentHighlightColorRaw: String {
+        autoHighlightSelection?.highlight.color ?? HighlightColorChoice.yellow.rawValue
+    }
+
     private func highlightViewport(
         viewportWidth: CGFloat,
         scrollViewHeight: CGFloat,
@@ -305,7 +309,7 @@ extension ScrollTextView {
             text: highlightText,
             startOffset: startSentence.start,
             endOffset: endSentence.end,
-            color: autoHighlightSelection?.highlight.color ?? HighlightColorChoice.yellow.rawValue
+            color: currentHighlightColorRaw
         )
         let pageTurn = pageTurn(for: highlightRect(for: sentenceRange, in: ctx), viewport: viewport)
         return HighlightTarget(
@@ -326,7 +330,7 @@ extension ScrollTextView {
             text: ctx.text,
             startOffset: 0,
             endOffset: endOffset,
-            color: autoHighlightSelection?.highlight.color ?? HighlightColorChoice.yellow.rawValue
+            color: currentHighlightColorRaw
         )
         let pageTurn = pageTurn(for: paragraphFrames[ctx.index], viewport: viewport)
         return HighlightTarget(
