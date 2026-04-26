@@ -25,7 +25,7 @@ struct ScrollTextView: View {
     @State private var showHighlightsList: Bool = false
     @State var activeFootnote: String? = nil
     @State var isLoadingNextChapter: Bool = false
-    @State private var selectedHighlightColor: HighlightColorChoice = .yellow
+    @State var selectedHighlightColor: HighlightColorChoice = .yellow
     // Hidden for now; keep the view and model in place to re-enable later.
     @State private var showQuestion: Bool = false
     @State private var controlPanelHeight: CGFloat = 0

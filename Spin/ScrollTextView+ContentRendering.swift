@@ -51,7 +51,7 @@ extension ScrollTextView {
         itemIndex: Int,
         @ViewBuilder content: @escaping () -> Content
     ) -> some View {
-        let isHighlighted = !highlightsForParagraph(text, itemIndex: itemIndex).isEmpty
+        let confirmedHighlights = highlightsForParagraph(text, itemIndex: itemIndex)
         let pendingHighlight = pendingHighlightForParagraph(text, itemIndex: itemIndex)
         if let pendingHighlight {
             let pendingColor = HighlightColorChoice(rawValue: pendingHighlight.color)?.fillColor ?? .yellow
@@ -65,10 +65,11 @@ extension ScrollTextView {
                     )
             }
         } else {
+            let confirmedColor = confirmedHighlights.first.flatMap { HighlightColorChoice(rawValue: $0.color)?.fillColor } ?? .yellow
             content()
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.yellow.opacity(isHighlighted ? 0.25 : 0))
+                        .fill(confirmedColor.opacity(confirmedHighlights.isEmpty ? 0 : 0.25))
                         .padding(.horizontal, -6)
                         .padding(.vertical, -4)
                 )
@@ -96,7 +97,7 @@ extension ScrollTextView {
                         pendingOpacity: pendingHighlightOpacity(at: timeline.date),
                         showsPendingCursor: pendingHighlightCursorVisible(at: timeline.date),
                         onHighlightCreated: { selectedText, start, end in
-                            highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
+                            highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end, color: selectedHighlightColor.rawValue))
                         },
                         onHighlightRemoved: { id in
                             highlightStore.remove(id: id)

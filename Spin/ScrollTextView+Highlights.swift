@@ -120,7 +120,7 @@ extension ScrollTextView {
     }
 
     private var currentHighlightColorRaw: String {
-        autoHighlightSelection?.highlight.color ?? HighlightColorChoice.yellow.rawValue
+        selectedHighlightColor.rawValue
     }
 
     private func highlightViewport(
