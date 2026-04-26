@@ -236,7 +236,7 @@ struct ScrollTextView: View {
                 },
                 onTrackpadPageUp: {
                     if autoHighlightSelection != nil {
-                        handleAutoHighlightUpdate(previousHighlightForTopVisibleParagraph(
+                        handleAutoHighlightUpdate(cycleHighlightForTopVisibleParagraph(
                             viewportWidth: geometry.size.width,
                             scrollViewHeight: viewportHeight,
                             topFadeHeight: 0
@@ -250,7 +250,7 @@ struct ScrollTextView: View {
                 },
                 onTrackpadPageDown: {
                     if autoHighlightSelection != nil {
-                        handleAutoHighlightUpdate(cycleHighlightForTopVisibleParagraph(
+                        handleAutoHighlightUpdate(previousHighlightForTopVisibleParagraph(
                             viewportWidth: geometry.size.width,
                             scrollViewHeight: viewportHeight,
                             topFadeHeight: 0

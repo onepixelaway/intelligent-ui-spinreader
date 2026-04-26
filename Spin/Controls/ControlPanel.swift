@@ -21,10 +21,9 @@ struct ControlPanel: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            if isHighlightMode {
-                highlightModeOptionsRow
-                    .transition(.move(edge: .top).combined(with: .opacity))
-            }
+            highlightModeOptionsRow
+                .opacity(isHighlightMode ? 1 : 0)
+                .allowsHitTesting(isHighlightMode)
 
             readerControlsRow
 
