@@ -39,6 +39,28 @@
          </BuildableReference>
       </MacroExpansion>
       <Testables>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A10000000000000000000050"
+               BuildableName = "SpinTests.xctest"
+               BlueprintName = "SpinTests"
+               ReferencedContainer = "container:intelligent-ui-spinreader.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "A10000000000000000000051"
+               BuildableName = "SpinUITests.xctest"
+               BlueprintName = "SpinUITests"
+               ReferencedContainer = "container:intelligent-ui-spinreader.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

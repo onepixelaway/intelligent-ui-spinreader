@@ -77,7 +77,7 @@ struct ScrollTextView: View {
     private let showsBackButton: Bool
     let contentID: String
     let bookID: String?
-    // Must stay same length/order as `items`. contentIDForItem(at:) silently falls back on mismatch.
+    // Must stay same length/order as `items`. Each entry scopes persisted highlights to one rendered item.
     @State var itemContentIDs: [String] = []
     // Editorial whitespace between the status bar/safe area and the first line of body text.
     private let editorialTopPadding: CGFloat = 6
@@ -103,14 +103,22 @@ struct ScrollTextView: View {
         if !hasLeadingTitle && !trimmedTitle.isEmpty {
             built.insert(.title(trimmedTitle), at: 0)
         }
-        let cid = "\(bookID):\(chapter.xhtmlPath)"
+        let cid = Self.chapterContentID(bookID: bookID, xhtmlPath: chapter.xhtmlPath)
         _items = State(initialValue: built)
         self.chapters = chapters
         _chapterIndex = State(initialValue: startingIndex)
         self.showsBackButton = true
         self.contentID = cid
         self.bookID = bookID
-        _itemContentIDs = State(initialValue: Array(repeating: cid, count: built.count))
+        _itemContentIDs = State(initialValue: Self.itemContentIDs(for: built, chapterContentID: cid))
+    }
+
+    static func chapterContentID(bookID: String, xhtmlPath: String) -> String {
+        "\(bookID):\(xhtmlPath)"
+    }
+
+    static func itemContentIDs(for items: [ReadableItem], chapterContentID: String) -> [String] {
+        items.indices.map { "\(chapterContentID)#item-\($0)" }
     }
 
     var body: some View {
@@ -454,4 +462,3 @@ struct ScrollTextView: View {
         }
     }
 }
-

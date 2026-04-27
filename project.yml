@@ -36,6 +36,27 @@ targets:
         UILaunchStoryboardName: LaunchScreen
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
+  SpinTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [SpinTests]
+    dependencies:
+      - target: Spin
+    settings:
+      base:
+        SWIFT_VERSION: 6.0.3
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Spin.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Spin"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+  SpinUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [SpinUITests]
+    dependencies:
+      - target: Spin
+    settings:
+      base:
+        SWIFT_VERSION: 6.0.3
+        TEST_TARGET_NAME: Spin
 
 schemes:
   Spin:
@@ -44,6 +65,11 @@ schemes:
         Spin: all
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - SpinTests
+        - SpinUITests
 
 configs:
   Debug: debug

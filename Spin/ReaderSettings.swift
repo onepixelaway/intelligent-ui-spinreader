@@ -28,10 +28,16 @@ extension View {
 
 func perplexityURL(for query: String) -> URL? {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty,
-          let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed)
-    else { return nil }
-    return URL(string: "https://www.perplexity.ai/search/new?q=\(encoded)")
+    guard !trimmed.isEmpty else { return nil }
+
+    var components = URLComponents()
+    components.scheme = "https"
+    components.host = "www.perplexity.ai"
+    components.path = "/search/new"
+    components.queryItems = [
+        URLQueryItem(name: "q", value: trimmed)
+    ]
+    return components.url
 }
 
 struct IdentifiableURL: Identifiable {

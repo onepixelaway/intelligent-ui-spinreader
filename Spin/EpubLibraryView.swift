@@ -366,12 +366,20 @@ final class EpubLibrary: ObservableObject {
 
         let book: EpubBook = try await Task.detached {
             let fm = FileManager.default
-            if fm.fileExists(atPath: dest.path) {
-                try? fm.removeItem(at: dest)
-            }
+            let tempURL = dir.appendingPathComponent(".import-\(UUID().uuidString)-\(sourceURL.lastPathComponent)")
+            defer { try? fm.removeItem(at: tempURL) }
+
             let didStart = sourceURL.startAccessingSecurityScopedResource()
             defer { if didStart { sourceURL.stopAccessingSecurityScopedResource() } }
-            try fm.copyItem(at: sourceURL, to: dest)
+
+            try fm.copyItem(at: sourceURL, to: tempURL)
+            _ = try EpubParser.parse(fileURL: tempURL)
+
+            if fm.fileExists(atPath: dest.path) {
+                _ = try fm.replaceItemAt(dest, withItemAt: tempURL)
+            } else {
+                try fm.moveItem(at: tempURL, to: dest)
+            }
             return try EpubParser.parse(fileURL: dest)
         }.value
 

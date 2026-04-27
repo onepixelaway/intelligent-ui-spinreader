@@ -6,11 +6,6 @@ enum Config {
            !envKey.isEmpty {
             return envKey
         }
-        if let plistKey = Bundle.main.object(forInfoDictionaryKey: "OpenAIAPIKey") as? String,
-           !plistKey.isEmpty,
-           !plistKey.hasPrefix("$(") {
-            return plistKey
-        }
         return ""
     }
 }

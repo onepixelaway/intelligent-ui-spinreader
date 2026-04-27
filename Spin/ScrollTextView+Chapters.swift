@@ -41,8 +41,8 @@ extension ScrollTextView {
 
         chapterIndex = nextIndex
         items.append(contentsOf: newItems)
-        let newContentID = bookID.map { "\($0):\(chapter.xhtmlPath)" } ?? contentID
-        itemContentIDs.append(contentsOf: Array(repeating: newContentID, count: newItems.count))
+        let newContentID = Self.chapterContentID(bookID: bookID ?? "", xhtmlPath: chapter.xhtmlPath)
+        itemContentIDs.append(contentsOf: Self.itemContentIDs(for: newItems, chapterContentID: newContentID))
 
         tags = []
         currentQuestion = ""

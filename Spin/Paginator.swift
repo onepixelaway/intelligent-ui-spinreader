@@ -110,6 +110,12 @@ enum Paginator {
                             breakLineIndex += 1
                         }
 
+                        guard breakLineIndex < lines.count else {
+                            commitBreak(at: currentPageStart + input.viewportHeight)
+                            lineCursor = lines.count
+                            continue
+                        }
+
                         let breakY = itemMinY + lines[breakLineIndex].minY
                         if breakY > currentPageStart {
                             commitBreak(at: breakY)

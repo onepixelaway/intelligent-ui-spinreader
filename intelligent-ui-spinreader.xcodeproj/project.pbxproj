@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		04C3910CBE1B91E63E7ED7A2 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 244CC314B9E59A9C97420A20 /* AppDelegate.swift */; };
+		A10000000000000000000001 /* SpinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000010 /* SpinTests.swift */; };
+		A10000000000000000000002 /* SpinUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* SpinUITests.swift */; };
+		A10000000000000000000003 /* SpinUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* SpinUITestsLaunchTests.swift */; };
 		0B7CBA310B11C5BB31FC9422 /* SpinApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E6DBEF2C370158A139D205E /* SpinApp.swift */; };
 		0CECB721E301C953FFE7E68C /* ReaderTagPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 819E6FC5944D913820F5F8E9 /* ReaderTagPill.swift */; };
 		0FF0FBCF5AAA35EB8FE6C585 /* ScrollTextView+Pagination.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40C85DCFECDF1DB621AD739E /* ScrollTextView+Pagination.swift */; };
@@ -42,6 +45,23 @@
 		FF5496F6CDEB3D5355CFDA96 /* ActionPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FC182CA01D2208DFECBAB5C /* ActionPill.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		A10000000000000000000060 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11411B869AA4F318B1E2DF60 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 77DA0374B3416EEC25AA99BC;
+			remoteInfo = Spin;
+		};
+		A10000000000000000000061 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11411B869AA4F318B1E2DF60 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 77DA0374B3416EEC25AA99BC;
+			remoteInfo = Spin;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		010694351C3B0BE06E7217E8 /* CurrentQuestionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentQuestionView.swift; sourceTree = "<group>"; };
 		0EBA3FBBD27DED12803F8085 /* ReaderContentViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderContentViews.swift; sourceTree = "<group>"; };
@@ -68,6 +88,11 @@
 		9EC98AFB877549811CD73826 /* EpubParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubParser.swift; sourceTree = "<group>"; };
 		9FA3FF46EF90EA17B85BAC58 /* CircularReaderButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CircularReaderButton.swift; sourceTree = "<group>"; };
 		A87BCCC8BD100C4230F823EF /* TrackpadSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackpadSurface.swift; sourceTree = "<group>"; };
+		A10000000000000000000010 /* SpinTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpinTests.swift; sourceTree = "<group>"; };
+		A10000000000000000000011 /* SpinUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpinUITests.swift; sourceTree = "<group>"; };
+		A10000000000000000000012 /* SpinUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpinUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		A10000000000000000000013 /* SpinTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpinTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000014 /* SpinUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpinUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A9F9EDFD087441380ACB497E /* EpubLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubLibraryView.swift; sourceTree = "<group>"; };
 		B8C2821EE55C5AD6773ED71C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paginator.swift; sourceTree = "<group>"; };
@@ -84,6 +109,20 @@
 			buildActionMask = 2147483647;
 			files = (
 				750BB4082C90718C043FEA6F /* OpenAI in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000020 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000021 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -153,10 +192,29 @@
 			path = Spin;
 			sourceTree = "<group>";
 		};
+		A10000000000000000000030 /* SpinTests */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000010 /* SpinTests.swift */,
+			);
+			path = SpinTests;
+			sourceTree = "<group>";
+		};
+		A10000000000000000000031 /* SpinUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A10000000000000000000011 /* SpinUITests.swift */,
+				A10000000000000000000012 /* SpinUITestsLaunchTests.swift */,
+			);
+			path = SpinUITests;
+			sourceTree = "<group>";
+		};
 		E535285C9A6207D7264C9A0E = {
 			isa = PBXGroup;
 			children = (
 				8EE26347464DA498A93972D8 /* Spin */,
+				A10000000000000000000030 /* SpinTests */,
+				A10000000000000000000031 /* SpinUITests */,
 				F09D4FC3231AE27AAAE7796B /* Products */,
 			);
 			sourceTree = "<group>";
@@ -165,6 +223,8 @@
 			isa = PBXGroup;
 			children = (
 				5379D0CFF1B4BE3E9175B6D1 /* Spin.app */,
+				A10000000000000000000013 /* SpinTests.xctest */,
+				A10000000000000000000014 /* SpinUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -192,6 +252,40 @@
 			productReference = 5379D0CFF1B4BE3E9175B6D1 /* Spin.app */;
 			productType = "com.apple.product-type.application";
 		};
+		A10000000000000000000050 /* SpinTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000080 /* Build configuration list for PBXNativeTarget "SpinTests" */;
+			buildPhases = (
+				A10000000000000000000040 /* Sources */,
+				A10000000000000000000020 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000062 /* PBXTargetDependency */,
+			);
+			name = SpinTests;
+			productName = SpinTests;
+			productReference = A10000000000000000000013 /* SpinTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A10000000000000000000051 /* SpinUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000081 /* Build configuration list for PBXNativeTarget "SpinUITests" */;
+			buildPhases = (
+				A10000000000000000000041 /* Sources */,
+				A10000000000000000000021 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A10000000000000000000063 /* PBXTargetDependency */,
+			);
+			name = SpinUITests;
+			productName = SpinUITests;
+			productReference = A10000000000000000000014 /* SpinUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -204,6 +298,16 @@
 					77DA0374B3416EEC25AA99BC = {
 						DevelopmentTeam = 72P6RBSM9C;
 						ProvisioningStyle = Automatic;
+					};
+					A10000000000000000000050 = {
+						DevelopmentTeam = 72P6RBSM9C;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 77DA0374B3416EEC25AA99BC;
+					};
+					A10000000000000000000051 = {
+						DevelopmentTeam = 72P6RBSM9C;
+						ProvisioningStyle = Automatic;
+						TestTargetID = 77DA0374B3416EEC25AA99BC;
 					};
 				};
 			};
@@ -223,6 +327,8 @@
 			projectRoot = "";
 			targets = (
 				77DA0374B3416EEC25AA99BC /* Spin */,
+				A10000000000000000000050 /* SpinTests */,
+				A10000000000000000000051 /* SpinUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -277,7 +383,37 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		A10000000000000000000040 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000001 /* SpinTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000041 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000002 /* SpinUITests.swift in Sources */,
+				A10000000000000000000003 /* SpinUITestsLaunchTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A10000000000000000000062 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 77DA0374B3416EEC25AA99BC /* Spin */;
+			targetProxy = A10000000000000000000060 /* PBXContainerItemProxy */;
+		};
+		A10000000000000000000063 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 77DA0374B3416EEC25AA99BC /* Spin */;
+			targetProxy = A10000000000000000000061 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		03327B87F7312258B0FB5D89 /* Release */ = {
@@ -319,6 +455,72 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
+		};
+		A10000000000000000000070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72P6RBSM9C;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.SpinTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0.3;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Spin.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Spin";
+			};
+			name = Debug;
+		};
+		A10000000000000000000071 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72P6RBSM9C;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.SpinTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0.3;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Spin.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Spin";
+			};
+			name = Release;
+		};
+		A10000000000000000000072 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72P6RBSM9C;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.SpinUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0.3;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Spin;
+			};
+			name = Debug;
+		};
+		A10000000000000000000073 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72P6RBSM9C;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1.1;
+				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.SpinUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0.3;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Spin;
+			};
+			name = Release;
 		};
 		1E6605A79EB46904C808D6F5 /* Release */ = {
 			isa = XCBuildConfiguration;
@@ -447,6 +649,24 @@
 			buildConfigurations = (
 				1E5F01237284EA1CAC44EE54 /* Debug */,
 				03327B87F7312258B0FB5D89 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A10000000000000000000080 /* Build configuration list for PBXNativeTarget "SpinTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000070 /* Debug */,
+				A10000000000000000000071 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		A10000000000000000000081 /* Build configuration list for PBXNativeTarget "SpinUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000072 /* Debug */,
+				A10000000000000000000073 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

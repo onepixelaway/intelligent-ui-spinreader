@@ -94,38 +94,54 @@ enum EpubParser {
             return parsed
         }
 
-        var chapters: [EpubChapter] = []
-        for entry in tocEntries {
+        let tocEntriesByPath = Dictionary(grouping: tocEntries) { entry in
             let decodedHref = entry.href.removingPercentEncoding ?? entry.href
-            let (file, fragment) = splitFragment(decodedHref)
-            let xhtmlPath = normalize(entry.basePath + file)
-            guard let items = itemsForXHTML(xhtmlPath) else { continue }
+            let (file, _) = splitFragment(decodedHref)
+            return normalize(entry.basePath + file)
+        }
+
+        var chapters: [EpubChapter] = []
+        for itemId in opf.spineIDs {
+            guard let href = opf.manifestById[itemId] else { continue }
+            let decodedHref = href.removingPercentEncoding ?? href
+            let xhtmlPath = normalize(opfBase + decodedHref)
+            guard let items = itemsForXHTML(xhtmlPath), !items.isEmpty else { continue }
+
+            let tocEntry = tocEntriesByPath[xhtmlPath]?.first
+            let title: String = {
+                if let tocTitle = tocEntry?.title, !tocTitle.isEmpty {
+                    return tocTitle
+                }
+                if case .title(let t) = items.first { return t }
+                return "Chapter \(chapters.count + 1)"
+            }()
+            let anchor: String? = tocEntry.flatMap { entry in
+                let decodedHref = entry.href.removingPercentEncoding ?? entry.href
+                return splitFragment(decodedHref).fragment
+            }
+
             chapters.append(EpubChapter(
                 id: chapters.count,
-                title: entry.title,
+                title: title,
                 xhtmlPath: xhtmlPath,
-                anchor: fragment,
-                depth: entry.depth,
+                anchor: anchor,
+                depth: tocEntry?.depth ?? 0,
                 items: items
             ))
         }
 
         if chapters.isEmpty {
-            for itemId in opf.spineIDs {
-                guard let href = opf.manifestById[itemId] else { continue }
-                let decodedHref = href.removingPercentEncoding ?? href
-                let xhtmlPath = normalize(opfBase + decodedHref)
+            for entry in tocEntries {
+                let decodedHref = entry.href.removingPercentEncoding ?? entry.href
+                let (file, fragment) = splitFragment(decodedHref)
+                let xhtmlPath = normalize(entry.basePath + file)
                 guard let items = itemsForXHTML(xhtmlPath), !items.isEmpty else { continue }
-                let title: String = {
-                    if case .title(let t) = items.first { return t }
-                    return "Chapter \(chapters.count + 1)"
-                }()
                 chapters.append(EpubChapter(
                     id: chapters.count,
-                    title: title,
+                    title: entry.title,
                     xhtmlPath: xhtmlPath,
-                    anchor: nil,
-                    depth: 0,
+                    anchor: fragment,
+                    depth: entry.depth,
                     items: items
                 ))
             }

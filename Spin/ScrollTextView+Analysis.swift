@@ -96,7 +96,7 @@ extension ScrollTextView {
     func performOpenAIQuery(for text: String) async {
         let key = Config.openAIKey
         guard !key.isEmpty else {
-            print("OpenAI API key not configured — set OPENAI_API_KEY or Info.plist OpenAIAPIKey")
+            print("OpenAI API key not configured — set OPENAI_API_KEY")
             return
         }
 

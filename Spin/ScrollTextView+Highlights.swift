@@ -40,7 +40,7 @@ extension ScrollTextView {
     }
 
     func contentIDForItem(at index: Int) -> String {
-        guard index < itemContentIDs.count else { return contentID }
+        guard itemContentIDs.indices.contains(index) else { return contentID }
         return itemContentIDs[index]
     }
 
@@ -494,4 +494,3 @@ extension ScrollTextView {
         return 0
     }
 }
-
