@@ -56,12 +56,14 @@ extension ScrollTextView {
     func cycleHighlightForTopVisibleParagraph(
         viewportWidth: CGFloat,
         scrollViewHeight: CGFloat,
-        topFadeHeight: CGFloat
+        topFadeHeight: CGFloat,
+        scrollOffset: CGFloat
     ) -> AutoHighlightUpdate {
         let viewport = highlightViewport(
             viewportWidth: viewportWidth,
             scrollViewHeight: scrollViewHeight,
-            topFadeHeight: topFadeHeight
+            topFadeHeight: topFadeHeight,
+            scrollOffset: scrollOffset
         )
         guard viewport.width > 0, viewport.height > 0 else { return .none }
 
@@ -75,12 +77,14 @@ extension ScrollTextView {
     func previousHighlightForTopVisibleParagraph(
         viewportWidth: CGFloat,
         scrollViewHeight: CGFloat,
-        topFadeHeight: CGFloat
+        topFadeHeight: CGFloat,
+        scrollOffset: CGFloat
     ) -> AutoHighlightUpdate {
         let viewport = highlightViewport(
             viewportWidth: viewportWidth,
             scrollViewHeight: scrollViewHeight,
-            topFadeHeight: topFadeHeight
+            topFadeHeight: topFadeHeight,
+            scrollOffset: scrollOffset
         )
         guard viewport.width > 0, viewport.height > 0 else { return .none }
 
@@ -126,11 +130,12 @@ extension ScrollTextView {
     private func highlightViewport(
         viewportWidth: CGFloat,
         scrollViewHeight: CGFloat,
-        topFadeHeight: CGFloat
+        topFadeHeight: CGFloat,
+        scrollOffset: CGFloat
     ) -> CGRect {
         CGRect(
             x: 0,
-            y: topFadeHeight,
+            y: topFadeHeight - scrollOffset,
             width: viewportWidth,
             height: max(0, scrollViewHeight - topFadeHeight)
         )
@@ -474,7 +479,7 @@ extension ScrollTextView {
             for (idx, sentence) in sentences.enumerated() {
                 let glyphIdx = layout.layoutManager.glyphIndexForCharacter(at: sentence.start)
                 let lineRect = layout.layoutManager.lineFragmentRect(forGlyphAt: glyphIdx, effectiveRange: nil)
-                if lineRect.minY >= effectiveTopInParagraph {
+                if lineRect.maxY > effectiveTopInParagraph {
                     return idx
                 }
             }

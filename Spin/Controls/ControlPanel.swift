@@ -18,12 +18,17 @@ struct ControlPanel: View {
     let onTagTap: (String) -> Void
 
     private let cornerRadius: CGFloat = 36
+    private let highlightModeTopPadding: CGFloat = 20
+    private let normalTopPadding: CGFloat = 28
+    private let scaleWhenNormal: CGFloat = 0.97
+    private let offsetWhenHighlight: CGFloat = 14
+    private let offsetWhenNormal: CGFloat = -4
 
     var body: some View {
         VStack(spacing: 16) {
-            highlightModeOptionsRow
-                .opacity(isHighlightMode ? 1 : 0)
-                .allowsHitTesting(isHighlightMode)
+            if isHighlightMode {
+                highlightModeOptionsRow
+            }
 
             readerControlsRow
 
@@ -40,9 +45,12 @@ struct ControlPanel: View {
                 .padding(.horizontal, 24)
             }
         }
-        .padding(.vertical, 28)
+        .padding(.top, isHighlightMode ? highlightModeTopPadding : normalTopPadding)
+        .padding(.bottom, 28)
         .frame(maxWidth: .infinity)
         .liquidGlass(in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        .scaleEffect(isHighlightMode ? 1.0 : scaleWhenNormal)
+        .offset(y: isHighlightMode ? offsetWhenHighlight : offsetWhenNormal)
         .animation(.spring(response: 0.26, dampingFraction: 0.9), value: isHighlightMode)
     }
 

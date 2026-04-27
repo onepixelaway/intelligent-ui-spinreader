@@ -28,7 +28,7 @@ struct ScrollTextView: View {
     @State var selectedHighlightColor: HighlightColorChoice = .yellow
     // Hidden for now; keep the view and model in place to re-enable later.
     @State private var showQuestion: Bool = false
-    @State private var controlPanelHeight: CGFloat = 0
+    @State private var frozenPanelHeight: CGFloat = 0
     // The highlight key moves a single active selection sentence-by-sentence through the text.
     @State var autoHighlightSelection: AutoHighlightSelection?
     @State var paragraphFrames: [Int: CGRect] = [:]
@@ -119,7 +119,7 @@ struct ScrollTextView: View {
             // coordinate space is flush against the bottom of the status bar.
             let topInset = editorialTopPadding
             let clippedBottomLineHeight = reservedBottomLineHeight()
-            let reservedBottomSpace = controlPanelHeight + panelTopGap + panelBottomInset + viewportToPanelGap
+            let reservedBottomSpace = frozenPanelHeight + panelTopGap + panelBottomInset + viewportToPanelGap
             let viewportHeight = max(0, geometry.size.height - topInset - reservedBottomSpace - clippedBottomLineHeight)
             let viewportWidth = geometry.size.width
 
@@ -199,7 +199,7 @@ struct ScrollTextView: View {
             // Viewport shrinks when the control panel reports its real height after first render.
             // Item frames don't move in "scroll" space, so the preference key doesn't re-fire;
             // trigger an explicit recompute against the new viewport height.
-            .onChange(of: controlPanelHeight) { _, _ in
+            .onChange(of: frozenPanelHeight) { _, _ in
                 recomputePageStartsWithCurrentFrames(
                     viewportHeight: Double(viewportHeight),
                     viewportWidth: Double(viewportWidth)
@@ -222,7 +222,8 @@ struct ScrollTextView: View {
                         _ = cycleHighlightForTopVisibleParagraph(
                             viewportWidth: geometry.size.width,
                             scrollViewHeight: viewportHeight,
-                            topFadeHeight: 0
+                            topFadeHeight: 0,
+                            scrollOffset: scrollState.offset
                         )
                         updatePendingHighlightColor(selectedHighlightColor)
                     }
@@ -239,7 +240,8 @@ struct ScrollTextView: View {
                         handleAutoHighlightUpdate(cycleHighlightForTopVisibleParagraph(
                             viewportWidth: geometry.size.width,
                             scrollViewHeight: viewportHeight,
-                            topFadeHeight: 0
+                            topFadeHeight: 0,
+                            scrollOffset: scrollState.offset
                         ))
                         return
                     }
@@ -253,7 +255,8 @@ struct ScrollTextView: View {
                         handleAutoHighlightUpdate(previousHighlightForTopVisibleParagraph(
                             viewportWidth: geometry.size.width,
                             scrollViewHeight: viewportHeight,
-                            topFadeHeight: 0
+                            topFadeHeight: 0,
+                            scrollOffset: scrollState.offset
                         ))
                         return
                     }
@@ -302,8 +305,8 @@ struct ScrollTextView: View {
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .onPreferenceChange(ControlPanelHeightKey.self) { value in
-                if abs(value - controlPanelHeight) > 0.5 {
-                    controlPanelHeight = value
+                if autoHighlightSelection == nil && abs(value - frozenPanelHeight) > 0.5 {
+                    frozenPanelHeight = value
                 }
             }
 

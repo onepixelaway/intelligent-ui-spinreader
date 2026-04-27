@@ -95,6 +95,21 @@ enum Paginator {
                             }
                         }
 
+                        // The break line must start strictly after viewport end, otherwise the
+                        // line straddles the page edge and would render on both pages. Exception:
+                        // if it starts exactly at viewport end and the prior line fully fits,
+                        // the boundary is clean.
+                        let viewportEnd = currentPageStart + input.viewportHeight
+                        while breakLineIndex < lines.count {
+                            let lineTop = itemMinY + lines[breakLineIndex].minY
+                            if lineTop > viewportEnd { break }
+                            if lineTop == viewportEnd,
+                               breakLineIndex == 0 || itemMinY + lines[breakLineIndex - 1].maxY <= viewportEnd {
+                                break
+                            }
+                            breakLineIndex += 1
+                        }
+
                         let breakY = itemMinY + lines[breakLineIndex].minY
                         if breakY > currentPageStart {
                             commitBreak(at: breakY)
@@ -127,7 +142,7 @@ enum Paginator {
         pageStart: Double
     ) -> Int {
         for (i, l) in lines.enumerated() {
-            if itemMinY + l.maxY > pageStart {
+            if itemMinY + l.maxY >= pageStart {
                 return i
             }
         }
