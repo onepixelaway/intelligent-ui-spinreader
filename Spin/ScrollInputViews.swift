@@ -8,6 +8,7 @@ struct TrackpadScrollView: View {
     @State private var haptics = HapticFeedback()
     @State private var gestureConsumed = false
     @State private var lastPageTurnTime: CFTimeInterval = 0
+    @State private var resetGeneration = 0
 
     private let swipeThreshold: CGFloat = 50.0
     private let cooldownSeconds: CFTimeInterval = 0.35
@@ -29,6 +30,7 @@ struct TrackpadScrollView: View {
                             }
                             gestureConsumed = true
                             lastPageTurnTime = now
+                            scheduleGestureReset()
                             if dy < 0 {
                                 onPageDown()
                             } else {
@@ -38,8 +40,18 @@ struct TrackpadScrollView: View {
                         }
                     }
                     .onEnded { _ in
+                        resetGeneration += 1
                         gestureConsumed = false
                     }
             )
+    }
+
+    private func scheduleGestureReset() {
+        resetGeneration += 1
+        let generation = resetGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + cooldownSeconds) {
+            guard resetGeneration == generation else { return }
+            gestureConsumed = false
+        }
     }
 }

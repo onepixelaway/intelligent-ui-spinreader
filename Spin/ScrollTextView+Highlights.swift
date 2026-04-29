@@ -9,15 +9,9 @@ extension ScrollTextView {
         var highlight: Highlight
     }
 
-    enum AutoHighlightPageTurn {
-        case none
-        case previous
-        case next
-    }
-
     enum AutoHighlightUpdate {
         case none
-        case changed(pageTurn: AutoHighlightPageTurn)
+        case changed(targetOffset: Double?)
     }
 
     private struct HighlightContext {
@@ -30,7 +24,13 @@ extension ScrollTextView {
 
     private struct HighlightTarget {
         let selection: AutoHighlightSelection
-        let pageTurn: AutoHighlightPageTurn
+        let targetOffset: Double?
+    }
+
+    private enum HighlightNavigationDirection {
+        case none
+        case previous
+        case next
     }
 
     private struct TextLayoutContext {
@@ -71,7 +71,7 @@ extension ScrollTextView {
 
         guard let target else { return .none }
         autoHighlightSelection = target.selection
-        return .changed(pageTurn: target.pageTurn)
+        return .changed(targetOffset: target.targetOffset)
     }
 
     func previousHighlightForTopVisibleParagraph(
@@ -90,7 +90,7 @@ extension ScrollTextView {
 
         guard let target = previousAutoHighlightTarget(viewport: viewport) else { return .none }
         autoHighlightSelection = target.selection
-        return .changed(pageTurn: target.pageTurn)
+        return .changed(targetOffset: target.targetOffset)
     }
 
     func updatePendingHighlightColor(_ color: HighlightColorChoice) {
@@ -141,6 +141,13 @@ extension ScrollTextView {
         )
     }
 
+    private func contentFrame(for itemIndex: Int) -> CGRect? {
+        if let frame = lastPaginationFrames[itemIndex] {
+            return frame
+        }
+        return paragraphFrames[itemIndex]
+    }
+
     private func resolveHighlightContext(viewport: CGRect) -> HighlightContext? {
         guard let index = pickHighlightTarget(viewport: viewport) else { return nil }
         return resolveHighlightContext(for: index, viewport: viewport)
@@ -177,10 +184,11 @@ extension ScrollTextView {
 
     private func pickHighlightTarget(viewport: CGRect) -> Int? {
         let epsilon: CGFloat = 1
-        let eligibleFrames = paragraphFrames
-            .compactMap { index, frame -> (index: Int, frame: CGRect)? in
+        let eligibleFrames = items.indices
+            .compactMap { index -> (index: Int, frame: CGRect)? in
                 guard items.indices.contains(index),
                       items[index].isHighlightableBody || items[index].isWholeItemHighlightable,
+                      let frame = contentFrame(for: index),
                       frame.height > 0 else { return nil }
                 return (index, frame)
             }
@@ -209,11 +217,16 @@ extension ScrollTextView {
     private func startingHighlightTarget(viewport: CGRect) -> HighlightTarget? {
         guard let ctx = resolveHighlightContext(viewport: viewport) else { return nil }
         if items[ctx.index].isWholeItemHighlightable {
-            return wholeItemHighlightTarget(ctx: ctx, viewport: viewport)
+            return wholeItemHighlightTarget(ctx: ctx, viewport: viewport, direction: .none)
         }
         guard !ctx.sentences.isEmpty else { return nil }
         let sentenceIndex = startingSentenceIndex(itemIndex: ctx.index, viewport: viewport, sentences: ctx.sentences)
-        return sentenceHighlightTarget(ctx: ctx, sentenceRange: sentenceIndex...sentenceIndex, viewport: viewport)
+        return sentenceHighlightTarget(
+            ctx: ctx,
+            sentenceRange: sentenceIndex...sentenceIndex,
+            viewport: viewport,
+            direction: .none
+        )
     }
 
     private func nextAutoHighlightTarget(viewport: CGRect) -> HighlightTarget? {
@@ -241,7 +254,8 @@ extension ScrollTextView {
                 return sentenceHighlightTarget(
                     ctx: ctx,
                     sentenceRange: nextSentenceIndex...nextSentenceIndex,
-                    viewport: viewport
+                    viewport: viewport,
+                    direction: .next
                 )
             }
         }
@@ -260,7 +274,8 @@ extension ScrollTextView {
                 return sentenceHighlightTarget(
                     ctx: ctx,
                     sentenceRange: previousSentenceIndex...previousSentenceIndex,
-                    viewport: viewport
+                    viewport: viewport,
+                    direction: .previous
                 )
             }
         }
@@ -272,10 +287,15 @@ extension ScrollTextView {
         for previousIndex in items.indices.reversed() where previousIndex < itemIndex {
             guard let ctx = resolveHighlightContext(for: previousIndex, viewport: viewport) else { continue }
             if items[previousIndex].isWholeItemHighlightable {
-                return wholeItemHighlightTarget(ctx: ctx, viewport: viewport)
+                return wholeItemHighlightTarget(ctx: ctx, viewport: viewport, direction: .previous)
             }
             if let lastSentenceIndex = ctx.sentences.indices.last {
-                return sentenceHighlightTarget(ctx: ctx, sentenceRange: lastSentenceIndex...lastSentenceIndex, viewport: viewport)
+                return sentenceHighlightTarget(
+                    ctx: ctx,
+                    sentenceRange: lastSentenceIndex...lastSentenceIndex,
+                    viewport: viewport,
+                    direction: .previous
+                )
             }
         }
         return nil
@@ -285,10 +305,15 @@ extension ScrollTextView {
         for nextIndex in items.indices where nextIndex > itemIndex {
             guard let ctx = resolveHighlightContext(for: nextIndex, viewport: viewport) else { continue }
             if items[nextIndex].isWholeItemHighlightable {
-                return wholeItemHighlightTarget(ctx: ctx, viewport: viewport)
+                return wholeItemHighlightTarget(ctx: ctx, viewport: viewport, direction: .next)
             }
             if !ctx.sentences.isEmpty {
-                return sentenceHighlightTarget(ctx: ctx, sentenceRange: 0...0, viewport: viewport)
+                return sentenceHighlightTarget(
+                    ctx: ctx,
+                    sentenceRange: 0...0,
+                    viewport: viewport,
+                    direction: .next
+                )
             }
         }
         return nil
@@ -297,7 +322,8 @@ extension ScrollTextView {
     private func sentenceHighlightTarget(
         ctx: HighlightContext,
         sentenceRange: ClosedRange<Int>,
-        viewport: CGRect
+        viewport: CGRect,
+        direction: HighlightNavigationDirection
     ) -> HighlightTarget? {
         guard sentenceRange.lowerBound >= 0,
               sentenceRange.upperBound < ctx.sentences.count else { return nil }
@@ -316,18 +342,27 @@ extension ScrollTextView {
             endOffset: endSentence.end,
             color: currentHighlightColorRaw
         )
-        let pageTurn = pageTurn(for: highlightRect(for: sentenceRange, in: ctx), viewport: viewport)
+        let rectForPaging = highlightRect(for: sentenceRange, in: ctx) ?? contentFrame(for: ctx.index)
+        let targetOffset = targetOffsetForOffscreenHighlight(
+            for: rectForPaging,
+            viewport: viewport,
+            direction: direction
+        )
         return HighlightTarget(
             selection: AutoHighlightSelection(
                 itemIndex: ctx.index,
                 sentenceRange: sentenceRange,
                 highlight: highlight
             ),
-            pageTurn: pageTurn
+            targetOffset: targetOffset
         )
     }
 
-    private func wholeItemHighlightTarget(ctx: HighlightContext, viewport: CGRect) -> HighlightTarget? {
+    private func wholeItemHighlightTarget(
+        ctx: HighlightContext,
+        viewport: CGRect,
+        direction: HighlightNavigationDirection
+    ) -> HighlightTarget? {
         let endOffset = (ctx.text as NSString).length
         guard endOffset > 0 else { return nil }
         let highlight = Highlight(
@@ -337,27 +372,61 @@ extension ScrollTextView {
             endOffset: endOffset,
             color: currentHighlightColorRaw
         )
-        let pageTurn = pageTurn(for: paragraphFrames[ctx.index], viewport: viewport)
+        let targetOffset = targetOffsetForOffscreenHighlight(
+            for: contentFrame(for: ctx.index),
+            viewport: viewport,
+            direction: direction
+        )
         return HighlightTarget(
             selection: AutoHighlightSelection(itemIndex: ctx.index, sentenceRange: nil, highlight: highlight),
-            pageTurn: pageTurn
+            targetOffset: targetOffset
         )
     }
 
-    private func pageTurn(for rect: CGRect?, viewport: CGRect) -> AutoHighlightPageTurn {
-        guard let rect else { return .none }
-        if rect.minY >= viewport.maxY - 0.5 {
-            return .next
+    // Highlight paging is intentionally based on the selected highlight's content-space rect,
+    // not on transient view frames. If cycling lands on a highlight that is not fully visible,
+    // move to the page that can show it.
+    private func targetOffsetForOffscreenHighlight(
+        for rect: CGRect?,
+        viewport: CGRect,
+        direction: HighlightNavigationDirection
+    ) -> Double? {
+        guard let rect else { return nil }
+        let epsilon: CGFloat = 0.5
+
+        switch direction {
+        case .none:
+            return nil
+        case .previous:
+            guard rect.maxY <= viewport.minY + epsilon else { return nil }
+            return contentOffsetShowing(rect, moving: .previous, viewportHeight: viewport.height)
+        case .next:
+            guard rect.maxY > viewport.maxY - epsilon else { return nil }
+            return contentOffsetShowing(rect, moving: .next, viewportHeight: viewport.height)
         }
-        if rect.maxY <= viewport.minY + 0.5 {
-            return .previous
+    }
+
+    private func contentOffsetShowing(
+        _ rect: CGRect,
+        moving direction: HighlightNavigationDirection,
+        viewportHeight: CGFloat
+    ) -> Double? {
+        guard viewportHeight > 0 else { return nil }
+        let idealY: CGFloat
+        switch direction {
+        case .none:
+            return nil
+        case .next:
+            idealY = rect.minY
+        case .previous:
+            idealY = rect.height <= viewportHeight ? rect.minY : rect.maxY - viewportHeight
         }
-        return .none
+        return Double(max(0, idealY))
     }
 
     private func textLayoutContext(for itemIndex: Int, viewport: CGRect) -> TextLayoutContext? {
         guard items.indices.contains(itemIndex),
-              let frame = paragraphFrames[itemIndex],
+              let frame = contentFrame(for: itemIndex),
               frame.height > 0 else { return nil }
         let item = items[itemIndex]
         guard let attributedText = renderedAttributedText(for: item) else { return nil }
@@ -405,40 +474,41 @@ extension ScrollTextView {
     }
 
     private func firstVisibleCharacterIndex(itemIndex: Int, viewport: CGRect, text: String) -> Int? {
-        guard let frame = paragraphFrames[itemIndex],
+        guard let frame = contentFrame(for: itemIndex),
               let layout = textLayoutContext(for: itemIndex, viewport: viewport) else { return nil }
 
         let visibleTop = max(0, viewport.minY - frame.minY)
         let visibleBottom = min(frame.height, max(visibleTop + 1, viewport.maxY - frame.minY))
         guard visibleBottom > visibleTop else { return nil }
-
-        let visibleRect = CGRect(
-            x: 0,
-            y: visibleTop,
-            width: layout.textContainer.size.width,
-            height: visibleBottom - visibleTop
-        )
-        let glyphRange = layout.layoutManager.glyphRange(forBoundingRect: visibleRect, in: layout.textContainer)
-        guard glyphRange.length > 0 else { return nil }
-
-        let charRange = layout.layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
         let nsText = text as NSString
         guard nsText.length > 0 else { return nil }
 
-        let start = min(max(0, charRange.location), max(0, nsText.length - 1))
-        let end = min(NSMaxRange(charRange), nsText.length)
+        let fullGlyphRange = layout.layoutManager.glyphRange(for: layout.textContainer)
+        guard fullGlyphRange.length > 0 else { return nil }
+
+        var firstVisibleRange: NSRange?
+        layout.layoutManager.enumerateLineFragments(forGlyphRange: fullGlyphRange) { lineRect, _, _, glyphRange, stop in
+            guard lineRect.maxY > visibleTop + 0.5,
+                  lineRect.minY < visibleBottom - 0.5 else { return }
+            firstVisibleRange = layout.layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+            stop.pointee = true
+        }
+
+        guard let rawRange = firstVisibleRange else { return nil }
+        let start = min(max(0, rawRange.location), max(0, nsText.length - 1))
+        let end = min(NSMaxRange(rawRange), nsText.length)
         guard end > start else { return start }
 
-        let visibleRange = NSRange(location: start, length: end - start)
+        let lineRange = NSRange(location: start, length: end - start)
         let firstNonWhitespace = nsText.rangeOfCharacter(
             from: CharacterSet.whitespacesAndNewlines.inverted,
             options: [],
-            range: visibleRange
+            range: lineRange
         )
         if firstNonWhitespace.location != NSNotFound {
             return firstNonWhitespace.location
         }
-        return visibleRange.location
+        return lineRange.location
     }
 
     private func tokenizeSentences(in text: String) -> [(text: String, start: Int, end: Int)] {
@@ -469,7 +539,7 @@ extension ScrollTextView {
             return sentenceIndex
         }
 
-        guard let frame = paragraphFrames[itemIndex], frame.height > 0 else { return 0 }
+        guard let frame = contentFrame(for: itemIndex), frame.height > 0 else { return 0 }
         if frame.minY >= viewport.minY {
             return 0
         }

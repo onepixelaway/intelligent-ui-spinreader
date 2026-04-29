@@ -2,27 +2,15 @@ import SwiftUI
 import UIKit
 
 extension ScrollTextView {
-    // Reported frames are in the ScrollView's "scroll" space and shift with the VStack's
-    // `.offset(y:)` for paging. Convert back to content space first, then skip the Paginator
-    // entirely if those frames haven't actually changed since last run (the hot path during
-    // a page-flip animation fires this closure repeatedly with only the offset changing).
+    // Frames arrive normalized into scroll-content space, so pagination and highlighting both use
+    // the same coordinate system: page 0 starts at y=0, page 1 starts at `pageStarts[1]`, and so on.
     func recomputePageStarts(
         positions: [Int: CGRect],
         viewportHeight: Double,
         viewportWidth: Double
     ) {
-        let offset = CGFloat(scrollState.offset)
-        var contentFrames: [Int: CGRect] = [:]
-        contentFrames.reserveCapacity(positions.count)
-        for (idx, frame) in positions {
-            contentFrames[idx] = CGRect(
-                x: frame.minX,
-                y: frame.minY - offset,
-                width: frame.width,
-                height: frame.height
-            )
-        }
-        if contentFrames == lastPaginationFrames
+        let contentFrames = positions
+        if paginationFramesMatchLast(contentFrames)
             && viewportHeight == lastPaginationViewportHeight
             && viewportWidth == lastPaginationViewportWidth {
             return
@@ -51,6 +39,30 @@ extension ScrollTextView {
             }
         ))
         scrollState.setPageStarts(starts)
+    }
+
+    private func paginationFramesMatchLast(_ frames: [Int: CGRect]) -> Bool {
+        if frames == lastPaginationFrames {
+            return true
+        }
+        guard frames.count == lastPaginationFrames.count, !frames.isEmpty else {
+            return false
+        }
+
+        for (idx, frame) in frames {
+            guard let previous = lastPaginationFrames[idx] else { return false }
+            guard framesApproximatelyEqual(frame, previous) else {
+                return false
+            }
+        }
+        return true
+    }
+
+    private func framesApproximatelyEqual(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        abs(lhs.minX - rhs.minX) <= 0.5
+            && abs(lhs.minY - rhs.minY) <= 0.5
+            && abs(lhs.width - rhs.width) <= 0.5
+            && abs(lhs.height - rhs.height) <= 0.5
     }
 
     // Typography and viewport-size changes don't always move item frames in the same pass —

@@ -28,12 +28,12 @@ struct ScrollTextView: View {
     @State var selectedHighlightColor: HighlightColorChoice = .yellow
     // Hidden for now; keep the view and model in place to re-enable later.
     @State private var showQuestion: Bool = false
+    @State private var measuredPanelHeight: CGFloat = 0
     @State private var frozenPanelHeight: CGFloat = 0
     // The highlight key moves a single active selection sentence-by-sentence through the text.
     @State var autoHighlightSelection: AutoHighlightSelection?
     @State var paragraphFrames: [Int: CGRect] = [:]
-    // Last content-space frames fed to the Paginator. Used to skip re-measurement during
-    // page-flip animations, where the preference key refires but content frames are unchanged.
+    // Authoritative content-space frames for pagination and highlight geometry.
     @State var lastPaginationFrames: [Int: CGRect] = [:]
     @State var lastPaginationViewportHeight: Double = 0
     @State var lastPaginationViewportWidth: Double = 0
@@ -129,6 +129,20 @@ struct ScrollTextView: View {
             let clippedBottomLineHeight = reservedBottomLineHeight()
             let reservedBottomSpace = frozenPanelHeight + panelTopGap + panelBottomInset + viewportToPanelGap
             let viewportHeight = max(0, geometry.size.height - topInset - reservedBottomSpace - clippedBottomLineHeight)
+            let isHighlightMode = autoHighlightSelection != nil
+            let activePanelHeight = measuredPanelHeight > 0 ? measuredPanelHeight : frozenPanelHeight
+            let highlightSelectionViewportHeight = isHighlightMode
+                ? max(
+                    0,
+                    geometry.size.height
+                        - topInset
+                        - activePanelHeight
+                        - panelTopGap
+                        - panelBottomInset
+                        - viewportToPanelGap
+                        - clippedBottomLineHeight
+                )
+                : viewportHeight
             let viewportWidth = geometry.size.width
 
             ScrollView {
@@ -158,21 +172,26 @@ struct ScrollTextView: View {
             .position(x: viewportWidth / 2, y: topInset + viewportHeight / 2)
             .scrollDisabled(true)
             .onPreferenceChange(ParagraphPositionKey.self) { positions in
-                let viewport = CGRect(x: 0, y: 0, width: viewportWidth, height: viewportHeight)
-                let newVisible = positions
-                    .filter { $0.value.intersects(viewport) }
-                    .map { $0.key }
-                    .sorted()
-                if newVisible != visibleParagraphs {
-                    visibleParagraphs = newVisible
-                }
-                if positions != paragraphFrames {
-                    paragraphFrames = positions
+                let contentPositions = contentFrames(from: positions)
+                updateVisibleParagraphs(
+                    positions: contentPositions,
+                    viewportWidth: viewportWidth,
+                    viewportHeight: viewportHeight
+                )
+                if contentPositions != paragraphFrames {
+                    paragraphFrames = contentPositions
                 }
                 recomputePageStarts(
-                    positions: positions,
+                    positions: contentPositions,
                     viewportHeight: Double(viewportHeight),
                     viewportWidth: Double(viewportWidth)
+                )
+            }
+            .onChange(of: scrollState.currentPage) { _, _ in
+                updateVisibleParagraphs(
+                    positions: paragraphFrames,
+                    viewportWidth: viewportWidth,
+                    viewportHeight: viewportHeight
                 )
             }
             .onPreferenceChange(ContentHeightKey.self) { _ in
@@ -204,9 +223,8 @@ struct ScrollTextView: View {
                     viewportWidth: Double(viewportWidth)
                 )
             }
-            // Viewport shrinks when the control panel reports its real height after first render.
-            // Item frames don't move in "scroll" space, so the preference key doesn't re-fire;
-            // trigger an explicit recompute against the new viewport height.
+            // The text viewport is locked to the normal panel height so entering highlight mode
+            // never shifts the page. Only normal-mode panel measurement can change pagination.
             .onChange(of: frozenPanelHeight) { _, _ in
                 recomputePageStartsWithCurrentFrames(
                     viewportHeight: Double(viewportHeight),
@@ -221,20 +239,13 @@ struct ScrollTextView: View {
             }
 
             ControlPanel(
-                isHighlightMode: autoHighlightSelection != nil,
+                isHighlightMode: isHighlightMode,
                 selectedHighlightColor: selectedHighlightColor,
                 onHighlight: {
-                    if autoHighlightSelection != nil {
-                        confirmPendingHighlight()
-                    } else {
-                        _ = cycleHighlightForTopVisibleParagraph(
-                            viewportWidth: geometry.size.width,
-                            scrollViewHeight: viewportHeight,
-                            topFadeHeight: 0,
-                            scrollOffset: scrollState.offset
-                        )
-                        updatePendingHighlightColor(selectedHighlightColor)
-                    }
+                    activateOrCommitHighlight(
+                        viewportWidth: geometry.size.width,
+                        viewportHeight: highlightSelectionViewportHeight
+                    )
                 },
                 onHighlightColorSelected: { color in
                     selectedHighlightColor = color
@@ -244,13 +255,13 @@ struct ScrollTextView: View {
                     cancelPendingHighlight()
                 },
                 onTrackpadPageUp: {
-                    if autoHighlightSelection != nil {
-                        handleAutoHighlightUpdate(cycleHighlightForTopVisibleParagraph(
+                    if isHighlightMode {
+                        // In highlight mode the trackpad acts like direct selection movement:
+                        // swiping down advances the highlight down the page, which feels natural.
+                        selectNextHighlight(
                             viewportWidth: geometry.size.width,
-                            scrollViewHeight: viewportHeight,
-                            topFadeHeight: 0,
-                            scrollOffset: scrollState.offset
-                        ))
+                            viewportHeight: highlightSelectionViewportHeight
+                        )
                         return
                     }
                     hideTopBarIfNeeded()
@@ -259,13 +270,13 @@ struct ScrollTextView: View {
                     }
                 },
                 onTrackpadPageDown: {
-                    if autoHighlightSelection != nil {
-                        handleAutoHighlightUpdate(previousHighlightForTopVisibleParagraph(
+                    if isHighlightMode {
+                        // In highlight mode the trackpad acts like direct selection movement:
+                        // swiping up moves the highlight back up the page, which feels natural.
+                        selectPreviousHighlight(
                             viewportWidth: geometry.size.width,
-                            scrollViewHeight: viewportHeight,
-                            topFadeHeight: 0,
-                            scrollOffset: scrollState.offset
-                        ))
+                            viewportHeight: highlightSelectionViewportHeight
+                        )
                         return
                     }
                     hideTopBarIfNeeded()
@@ -305,7 +316,8 @@ struct ScrollTextView: View {
             )
             .background(
                 GeometryReader { geo in
-                    // Panel height drives the scroll viewport so reading content never sits behind the panel.
+                    // Normal-mode panel height drives pagination. Highlight-mode panel growth
+                    // intentionally overlays the page without changing the text viewport.
                     Color.clear.preference(key: ControlPanelHeightKey.self, value: geo.size.height)
                 }
             )
@@ -313,6 +325,9 @@ struct ScrollTextView: View {
             .padding(.bottom, 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .onPreferenceChange(ControlPanelHeightKey.self) { value in
+                if abs(value - measuredPanelHeight) > 0.5 {
+                    measuredPanelHeight = value
+                }
                 if autoHighlightSelection == nil && abs(value - frozenPanelHeight) > 0.5 {
                     frozenPanelHeight = value
                 }
@@ -431,6 +446,46 @@ struct ScrollTextView: View {
         }
     }
 
+    private func activateOrCommitHighlight(
+        viewportWidth: CGFloat,
+        viewportHeight: CGFloat
+    ) {
+        if autoHighlightSelection != nil {
+            confirmPendingHighlight()
+            return
+        }
+
+        selectNextHighlight(
+            viewportWidth: viewportWidth,
+            viewportHeight: viewportHeight
+        )
+        updatePendingHighlightColor(selectedHighlightColor)
+    }
+
+    private func selectNextHighlight(
+        viewportWidth: CGFloat,
+        viewportHeight: CGFloat
+    ) {
+        handleAutoHighlightUpdate(cycleHighlightForTopVisibleParagraph(
+            viewportWidth: viewportWidth,
+            scrollViewHeight: viewportHeight,
+            topFadeHeight: 0,
+            scrollOffset: scrollState.offset
+        ))
+    }
+
+    private func selectPreviousHighlight(
+        viewportWidth: CGFloat,
+        viewportHeight: CGFloat
+    ) {
+        handleAutoHighlightUpdate(previousHighlightForTopVisibleParagraph(
+            viewportWidth: viewportWidth,
+            scrollViewHeight: viewportHeight,
+            topFadeHeight: 0,
+            scrollOffset: scrollState.offset
+        ))
+    }
+
     private func reservedBottomLineHeight() -> CGFloat {
         let sample = nsStyledText("Ag", size: readerSettings.paragraphSize, weight: .regular)
         if let line = Paginator.measureLines(for: sample, width: 1000).first {
@@ -440,25 +495,47 @@ struct ScrollTextView: View {
             + readerSettings.lineSpacingPt(for: readerSettings.paragraphSize)
     }
 
+    private func contentFrames(from scrollFrames: [Int: CGRect]) -> [Int: CGRect] {
+        let offset = CGFloat(scrollState.offset)
+        return scrollFrames.mapValues { frame in
+            CGRect(
+                x: frame.minX,
+                y: frame.minY - offset,
+                width: frame.width,
+                height: frame.height
+            )
+        }
+    }
+
+    private func updateVisibleParagraphs(
+        positions: [Int: CGRect],
+        viewportWidth: CGFloat,
+        viewportHeight: CGFloat
+    ) {
+        let viewport = CGRect(
+            x: 0,
+            y: -CGFloat(scrollState.offset),
+            width: viewportWidth,
+            height: viewportHeight
+        )
+        let newVisible = positions
+            .filter { $0.value.intersects(viewport) }
+            .map { $0.key }
+            .sorted()
+        if newVisible != visibleParagraphs {
+            visibleParagraphs = newVisible
+        }
+    }
+
     private func handleAutoHighlightUpdate(_ update: AutoHighlightUpdate) {
-        guard case .changed(let pageTurn) = update else { return }
-        switch pageTurn {
-        case .next:
-            hideTopBarIfNeeded()
-            if scrollState.isAtBottom {
-                advanceToNextChapter()
-            } else {
-                withAnimation(pageAnimation) {
-                    scrollState.goToNextPage()
-                }
-            }
-        case .previous:
-            hideTopBarIfNeeded()
-            withAnimation(pageAnimation) {
-                scrollState.goToPreviousPage()
-            }
-        case .none:
-            break
+        guard case .changed(let targetOffset) = update,
+              let offset = targetOffset else {
+            return
+        }
+
+        hideTopBarIfNeeded()
+        withAnimation(pageAnimation) {
+            scrollState.goToContentOffset(offset)
         }
     }
 }
