@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 
+@MainActor
 private func buildHighlightDisplayText(
     base: NSAttributedString,
     highlights: [Highlight],
@@ -14,7 +15,7 @@ private func buildHighlightDisplayText(
         guard range.location >= 0, NSMaxRange(range) <= mutable.length else { continue }
         mutable.addAttribute(
             .backgroundColor,
-            value: highlightUIColor(for: h.color).withAlphaComponent(0.30),
+            value: h.displayUIColor.withAlphaComponent(0.30),
             range: range
         )
     }
@@ -24,18 +25,29 @@ private func buildHighlightDisplayText(
     if let pendingHighlight {
         let range = NSRange(location: pendingHighlight.startOffset, length: pendingHighlight.endOffset - pendingHighlight.startOffset)
         guard range.location >= 0, NSMaxRange(range) <= mutable.length else { return mutable }
-        let color = highlightUIColor(for: pendingHighlight.color)
         mutable.addAttribute(
             .backgroundColor,
-            value: color.withAlphaComponent(pendingOpacity),
+            value: pendingHighlight.displayUIColor.withAlphaComponent(pendingOpacity),
             range: range
         )
     }
     return mutable
 }
 
-private func highlightUIColor(for color: String) -> UIColor {
-    HighlightColorChoice(rawValue: color)?.uiColor ?? HighlightColorChoice.yellow.uiColor
+final class HighlightLayoutTextView: UITextView {
+    var onLayout: (() -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout?()
+    }
+}
+
+private enum EmojiMarginLayout {
+    static let fontSize: CGFloat = 16
+    static let labelSize: CGFloat = 22
+    static let leftOffset: CGFloat = -28
+    static let previewAlpha: CGFloat = 0.6
 }
 
 struct HighlightableTextView: UIViewRepresentable {
@@ -53,16 +65,22 @@ struct HighlightableTextView: UIViewRepresentable {
     }
 
     func makeUIView(context: Context) -> UITextView {
-        let tv = UITextView()
+        let tv = HighlightLayoutTextView()
         tv.isEditable = false
         tv.isSelectable = false
         tv.isScrollEnabled = false
         tv.backgroundColor = .clear
         tv.textContainerInset = .zero
         tv.textContainer.lineFragmentPadding = 0
+        tv.clipsToBounds = false
         tv.setContentHuggingPriority(.required, for: .vertical)
         tv.setContentCompressionResistancePriority(.required, for: .vertical)
         context.coordinator.installCursor(in: tv)
+
+        tv.onLayout = { [weak tv] in
+            guard let tv else { return }
+            context.coordinator.updateEmojiMarginLabels(in: tv)
+        }
 
         let pan = UIPanGestureRecognizer(target: context.coordinator, action: #selector(Coordinator.handlePan(_:)))
         pan.minimumNumberOfTouches = 1
@@ -108,6 +126,8 @@ struct HighlightableTextView: UIViewRepresentable {
         var isDragging = false
         private var dragStart: Int?
         private let cursorView = UIView()
+        private var emojiLabels: [UUID: UILabel] = [:]
+        private var previewEmojiLabel: UILabel?
 
         func refreshDisplayText(in tv: UITextView) {
             tv.attributedText = buildHighlightDisplayText(
@@ -117,6 +137,7 @@ struct HighlightableTextView: UIViewRepresentable {
                 pendingOpacity: pendingOpacity
             )
             updatePendingCursor(in: tv)
+            updateEmojiMarginLabels(in: tv)
         }
 
         func installCursor(in tv: UITextView) {
@@ -150,7 +171,7 @@ struct HighlightableTextView: UIViewRepresentable {
             let glyphRect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
             let lineRect = layoutManager.lineFragmentUsedRect(forGlyphAt: glyphRange.location, effectiveRange: nil)
             let height = max(12, min(lineRect.height, glyphRect.height * 1.25))
-            cursorView.backgroundColor = highlightUIColor(for: pendingHighlight.color)
+            cursorView.backgroundColor = pendingHighlight.displayUIColor
             cursorView.frame = CGRect(
                 x: glyphRect.maxX + tv.textContainerInset.left + 1,
                 y: lineRect.midY - height / 2 + tv.textContainerInset.top,
@@ -158,6 +179,110 @@ struct HighlightableTextView: UIViewRepresentable {
                 height: height
             )
             cursorView.isHidden = false
+        }
+
+        func updateEmojiMarginLabels(in tv: UITextView) {
+            let hasEmojiHighlight = highlights.contains { $0.emoji != nil }
+            let hasPendingEmoji = pendingHighlight?.emoji != nil
+            if !hasEmojiHighlight && !hasPendingEmoji && emojiLabels.isEmpty && previewEmojiLabel == nil {
+                return
+            }
+
+            var activeIDs: Set<UUID> = []
+            for h in highlights where h.emoji != nil {
+                activeIDs.insert(h.id)
+            }
+
+            for (id, label) in emojiLabels where !activeIDs.contains(id) {
+                label.removeFromSuperview()
+                emojiLabels.removeValue(forKey: id)
+            }
+
+            tv.layoutManager.ensureLayout(for: tv.textContainer)
+
+            for h in highlights {
+                guard let emoji = h.emoji else { continue }
+                guard let firstLineRect = firstLineRect(in: tv, startOffset: h.startOffset, endOffset: h.endOffset) else {
+                    emojiLabels[h.id]?.isHidden = true
+                    continue
+                }
+                let label = emojiLabels[h.id] ?? makeEmojiLabel(in: tv)
+                emojiLabels[h.id] = label
+                positionEmojiLabel(label, emoji: emoji, firstLineRect: firstLineRect)
+            }
+
+            updatePreviewEmojiLabel(in: tv)
+        }
+
+        private func updatePreviewEmojiLabel(in tv: UITextView) {
+            guard let pending = pendingHighlight,
+                  let emoji = pending.emoji,
+                  let firstLineRect = firstLineRect(in: tv, startOffset: pending.startOffset, endOffset: pending.endOffset) else {
+                previewEmojiLabel?.removeFromSuperview()
+                previewEmojiLabel = nil
+                return
+            }
+
+            let label = previewEmojiLabel ?? makeEmojiLabel(in: tv, alpha: EmojiMarginLayout.previewAlpha)
+            previewEmojiLabel = label
+            positionEmojiLabel(label, emoji: emoji, firstLineRect: firstLineRect)
+        }
+
+        private func makeEmojiLabel(in tv: UITextView, alpha: CGFloat = 1.0) -> UILabel {
+            let label = UILabel()
+            label.font = UIFont.systemFont(ofSize: EmojiMarginLayout.fontSize)
+            label.textAlignment = .center
+            label.adjustsFontSizeToFitWidth = false
+            label.alpha = alpha
+            tv.addSubview(label)
+            return label
+        }
+
+        private func positionEmojiLabel(_ label: UILabel, emoji: String, firstLineRect: CGRect) {
+            label.text = emoji
+            label.isHidden = false
+            let size = EmojiMarginLayout.labelSize
+            label.frame = CGRect(
+                x: EmojiMarginLayout.leftOffset,
+                y: firstLineRect.midY - size / 2,
+                width: size,
+                height: size
+            )
+        }
+
+        private func firstLineRect(in tv: UITextView, startOffset: Int, endOffset: Int) -> CGRect? {
+            let nsLength = tv.attributedText.length
+            guard startOffset >= 0, endOffset <= nsLength, startOffset < endOffset else { return nil }
+            let range = NSRange(location: startOffset, length: endOffset - startOffset)
+            let layoutManager = tv.layoutManager
+            let container = tv.textContainer
+            let glyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            guard glyphRange.length > 0 else { return nil }
+
+            var firstFragment: CGRect?
+            layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, usedRect, _, _, stop in
+                firstFragment = usedRect
+                stop.pointee = true
+            }
+
+            let inset = tv.textContainerInset
+            if let used = firstFragment {
+                return CGRect(
+                    x: used.minX + inset.left,
+                    y: used.minY + inset.top,
+                    width: used.width,
+                    height: used.height
+                )
+            }
+
+            let bounding = layoutManager.boundingRect(forGlyphRange: glyphRange, in: container)
+            guard !bounding.isNull, !bounding.isEmpty else { return nil }
+            return CGRect(
+                x: bounding.minX + inset.left,
+                y: bounding.minY + inset.top,
+                width: bounding.width,
+                height: bounding.height
+            )
         }
 
         // Returns a UTF-16 index (NSString length units), matching NSRange math and Highlight.startOffset/endOffset.

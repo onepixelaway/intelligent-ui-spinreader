@@ -96,6 +96,13 @@ extension ScrollTextView {
     func updatePendingHighlightColor(_ color: HighlightColorChoice) {
         guard var selection = autoHighlightSelection else { return }
         selection.highlight.color = color.rawValue
+        selection.highlight.emoji = nil
+        autoHighlightSelection = selection
+    }
+
+    func updatePendingHighlightEmoji(_ emoji: HighlightEmojiChoice) {
+        guard var selection = autoHighlightSelection else { return }
+        selection.highlight.emoji = emoji.rawValue
         autoHighlightSelection = selection
     }
 
@@ -125,6 +132,10 @@ extension ScrollTextView {
 
     private var currentHighlightColorRaw: String {
         selectedHighlightColor.rawValue
+    }
+
+    private var currentHighlightEmojiRaw: String? {
+        selectedHighlightEmoji?.rawValue
     }
 
     private func highlightViewport(
@@ -340,7 +351,8 @@ extension ScrollTextView {
             text: highlightText,
             startOffset: startSentence.start,
             endOffset: endSentence.end,
-            color: currentHighlightColorRaw
+            color: currentHighlightColorRaw,
+            emoji: currentHighlightEmojiRaw
         )
         let rectForPaging = highlightRect(for: sentenceRange, in: ctx) ?? contentFrame(for: ctx.index)
         let targetOffset = targetOffsetForOffscreenHighlight(
@@ -370,7 +382,8 @@ extension ScrollTextView {
             text: ctx.text,
             startOffset: 0,
             endOffset: endOffset,
-            color: currentHighlightColorRaw
+            color: currentHighlightColorRaw,
+            emoji: currentHighlightEmojiRaw
         )
         let targetOffset = targetOffsetForOffscreenHighlight(
             for: contentFrame(for: ctx.index),

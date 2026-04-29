@@ -41,10 +41,10 @@
       <Testables>
          <TestableReference
             skipped = "NO"
-            parallelizable = "YES">
+            parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A10000000000000000000050"
+               BlueprintIdentifier = "6A3727CE31FBB7AB16F74EA2"
                BuildableName = "SpinTests.xctest"
                BlueprintName = "SpinTests"
                ReferencedContainer = "container:intelligent-ui-spinreader.xcodeproj">
@@ -52,16 +52,18 @@
          </TestableReference>
          <TestableReference
             skipped = "NO"
-            parallelizable = "YES">
+            parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "A10000000000000000000051"
+               BlueprintIdentifier = "ADD116A5CD319106F7F3BC9D"
                BuildableName = "SpinUITests.xctest"
                BlueprintName = "SpinUITests"
                ReferencedContainer = "container:intelligent-ui-spinreader.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
+      <CommandLineArguments>
+      </CommandLineArguments>
    </TestAction>
    <LaunchAction
       buildConfiguration = "Debug"

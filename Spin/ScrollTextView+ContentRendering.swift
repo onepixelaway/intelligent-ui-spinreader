@@ -17,7 +17,7 @@ extension ScrollTextView {
         case .listItem(let text, let ordered, let listIdx):
             let prefix = ordered ? "\(listIdx). " : "\u{2022} "
             let fullText = prefix + text
-            highlightableBlock(fullText, attributedText: nsStyledText(fullText, size: readerSettings.paragraphSize, weight: .regular), itemIndex: index, extraLeading: 16)
+            highlightableBlock(fullText, attributedText: nsStyledText(fullText, size: readerSettings.paragraphSize, weight: .regular), itemIndex: index, extraLeading: extraLeading(for: item))
         case .image(let url, let alt, let caption):
             ArticleImageView(url: url, alt: alt, caption: caption)
         case .blockquote(let text):
@@ -54,7 +54,7 @@ extension ScrollTextView {
         let confirmedHighlights = highlightsForParagraph(text, itemIndex: itemIndex)
         let pendingHighlight = pendingHighlightForParagraph(text, itemIndex: itemIndex)
         if let pendingHighlight {
-            let pendingColor = HighlightColorChoice(rawValue: pendingHighlight.color)?.fillColor ?? .yellow
+            let pendingColor = pendingHighlight.displayFillColor
             TimelineView(.animation) { timeline in
                 content()
                     .background(
@@ -65,7 +65,7 @@ extension ScrollTextView {
                     )
             }
         } else {
-            let confirmedColor = confirmedHighlights.first.flatMap { HighlightColorChoice(rawValue: $0.color)?.fillColor } ?? .yellow
+            let confirmedColor = confirmedHighlights.first?.displayFillColor ?? .yellow
             content()
                 .background(
                     RoundedRectangle(cornerRadius: 6, style: .continuous)
@@ -81,11 +81,36 @@ extension ScrollTextView {
         return item.usesWideHorizontalPadding ? max(8, base - 12) : base
     }
 
+    // Indent applied at render time inside the item's horizontal padding (e.g. list-item bullets).
+    // Pagination must subtract this from the measurement width so wrapped line counts match what
+    // HighlightableTextView actually renders.
+    func extraLeading(for item: ReadableItem) -> CGFloat {
+        switch item {
+        case .listItem:
+            return 16
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .image, .blockquote, .code, .divider, .callout, .paragraphWithFootnotes, .chapterTOC:
+            return 0
+        }
+    }
+
     @ViewBuilder
     func highlightableBlock(_ text: String, attributedText: NSAttributedString, itemIndex: Int, extraLeading: CGFloat = 0) -> some View {
         let matching = highlightsForParagraph(text, itemIndex: itemIndex)
         let cid = contentIDForItem(at: itemIndex)
         let pendingHighlight = pendingHighlightForParagraph(text, itemIndex: itemIndex)
+        let onCreated: (String, Int, Int) -> Void = { selectedText, start, end in
+            highlightStore.add(Highlight(
+                contentID: cid,
+                text: selectedText,
+                startOffset: start,
+                endOffset: end,
+                color: selectedHighlightColor.rawValue,
+                emoji: selectedHighlightEmoji?.rawValue
+            ))
+        }
+        let onRemoved: (UUID) -> Void = { id in
+            highlightStore.remove(id: id)
+        }
         Group {
             if pendingHighlight != nil {
                 TimelineView(.animation) { timeline in
@@ -96,12 +121,8 @@ extension ScrollTextView {
                         pendingHighlight: pendingHighlight,
                         pendingOpacity: pendingHighlightOpacity(at: timeline.date),
                         showsPendingCursor: pendingHighlightCursorVisible(at: timeline.date),
-                        onHighlightCreated: { selectedText, start, end in
-                            highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end, color: selectedHighlightColor.rawValue))
-                        },
-                        onHighlightRemoved: { id in
-                            highlightStore.remove(id: id)
-                        }
+                        onHighlightCreated: onCreated,
+                        onHighlightRemoved: onRemoved
                     )
                 }
             } else {
@@ -112,12 +133,8 @@ extension ScrollTextView {
                     pendingHighlight: nil,
                     pendingOpacity: 0.25,
                     showsPendingCursor: false,
-                    onHighlightCreated: { selectedText, start, end in
-                        highlightStore.add(Highlight(contentID: cid, text: selectedText, startOffset: start, endOffset: end))
-                    },
-                    onHighlightRemoved: { id in
-                        highlightStore.remove(id: id)
-                    }
+                    onHighlightCreated: onCreated,
+                    onHighlightRemoved: onRemoved
                 )
             }
         }

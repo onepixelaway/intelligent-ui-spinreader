@@ -26,6 +26,15 @@ enum HighlightColorChoice: String, CaseIterable, Identifiable {
     }
 }
 
+enum HighlightEmojiChoice: String, CaseIterable, Identifiable {
+    case heart = "❤️"
+    case thinking = "🤔"
+    case exclamation = "❗"
+
+    var id: String { rawValue }
+    var emoji: String { rawValue }
+}
+
 struct Highlight: Identifiable, Codable {
     var id: UUID
     var contentID: String
@@ -33,16 +42,45 @@ struct Highlight: Identifiable, Codable {
     var startOffset: Int
     var endOffset: Int
     var color: String
+    var emoji: String?
     var createdAt: Date
 
-    init(id: UUID = UUID(), contentID: String, text: String, startOffset: Int, endOffset: Int, color: String = "yellow", createdAt: Date = Date()) {
+    init(
+        id: UUID = UUID(),
+        contentID: String,
+        text: String,
+        startOffset: Int,
+        endOffset: Int,
+        color: String = "yellow",
+        emoji: String? = nil,
+        createdAt: Date = Date()
+    ) {
         self.id = id
         self.contentID = contentID
         self.text = text
         self.startOffset = startOffset
         self.endOffset = endOffset
         self.color = color
+        self.emoji = emoji
         self.createdAt = createdAt
+    }
+}
+
+extension Highlight {
+    @MainActor
+    var displayUIColor: UIColor {
+        if let emoji {
+            return EmojiColorExtractor.shared.color(for: emoji)
+        }
+        return HighlightColorChoice(rawValue: color)?.uiColor ?? HighlightColorChoice.yellow.uiColor
+    }
+
+    @MainActor
+    var displayFillColor: Color {
+        if emoji != nil {
+            return Color(displayUIColor)
+        }
+        return HighlightColorChoice(rawValue: color)?.fillColor ?? HighlightColorChoice.yellow.fillColor
     }
 }
 

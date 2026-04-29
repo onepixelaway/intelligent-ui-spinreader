@@ -16,8 +16,7 @@ extension ScrollTextView {
         }
     }
 
-    // Exact NSAttributedString that HighlightableTextView renders for a splittable item.
-    // Used by Paginator to measure line fragments so page breaks land on real line boundaries.
+    // Exact NSAttributedString that HighlightableTextView renders.
     // Returns nil for items that are not rendered via HighlightableTextView.
     func renderedAttributedText(for item: ReadableItem) -> NSAttributedString? {
         switch item {
@@ -35,6 +34,21 @@ extension ScrollTextView {
             let prefix = ordered ? "\(listIdx). " : "\u{2022} "
             return nsStyledText(prefix + text, size: readerSettings.paragraphSize, weight: .regular)
         case .image, .blockquote, .code, .divider, .callout, .paragraphWithFootnotes, .chapterTOC:
+            return nil
+        }
+    }
+
+    // Text attributes used only for measuring page breaks. This includes custom SwiftUI text
+    // renderers like block quotes so they can still avoid mid-line clipping.
+    func paginationAttributedText(for item: ReadableItem) -> NSAttributedString? {
+        switch item {
+        case .blockquote(let text), .callout(let text):
+            return nsBlockquoteText(text)
+        case .paragraphWithFootnotes(let text, _):
+            return nsStyledText(text, size: readerSettings.paragraphSize, weight: .regular)
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem:
+            return renderedAttributedText(for: item)
+        case .image, .code, .divider, .chapterTOC:
             return nil
         }
     }
@@ -83,5 +97,19 @@ extension ScrollTextView {
             result.append(chunk)
         }
         return result
+    }
+
+    private func nsBlockquoteText(_ text: String) -> NSAttributedString {
+        let size = readerSettings.blockquoteSize
+        var font = styledFont(size: size, weight: .regular)
+        if let italicDescriptor = font.fontDescriptor.withSymbolicTraits(.traitItalic) {
+            font = UIFont(descriptor: italicDescriptor, size: size)
+        }
+
+        return NSAttributedString(string: text, attributes: [
+            .font: font,
+            .foregroundColor: UIColor(white: 0.78, alpha: 1.0),
+            .paragraphStyle: paragraphStyle(for: size)
+        ])
     }
 }

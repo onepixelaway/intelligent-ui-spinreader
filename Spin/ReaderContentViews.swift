@@ -105,13 +105,9 @@ struct AccentedQuoteView: View {
                 .fill(Color.white.opacity(barOpacity))
                 .frame(width: 3)
 
-            Text(text)
-                .font(.system(size: settings.blockquoteSize, weight: .regular, design: settings.fontFamily.design).italic())
-                .foregroundColor(Color(white: textWhite))
-                .lineSpacing(settings.lineSpacingPt(for: settings.blockquoteSize))
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.leading)
+            StaticAttributedTextView(attributedText: attributedText)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityLabel(text)
         }
         .padding(.horizontal, hasBackground ? 12 : 0)
         .padding(.vertical, hasBackground ? 14 : 0)
@@ -120,6 +116,55 @@ struct AccentedQuoteView: View {
                 .fill(Color.white.opacity(hasBackground ? 0.06 : 0))
         )
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var attributedText: NSAttributedString {
+        let size = settings.blockquoteSize
+        var font = UIFont.systemFont(ofSize: size, weight: .regular)
+        if let descriptor = font.fontDescriptor.withDesign(settings.fontFamily.uiDesign) {
+            font = UIFont(descriptor: descriptor, size: size)
+        }
+        if let italicDescriptor = font.fontDescriptor.withSymbolicTraits(.traitItalic) {
+            font = UIFont(descriptor: italicDescriptor, size: size)
+        }
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = settings.lineSpacingPt(for: size)
+
+        return NSAttributedString(string: text, attributes: [
+            .font: font,
+            .foregroundColor: UIColor(white: textWhite, alpha: 1.0),
+            .paragraphStyle: paragraphStyle
+        ])
+    }
+}
+
+struct StaticAttributedTextView: UIViewRepresentable {
+    let attributedText: NSAttributedString
+
+    func makeUIView(context: Context) -> UITextView {
+        let textView = UITextView()
+        textView.isEditable = false
+        textView.isSelectable = false
+        textView.isScrollEnabled = false
+        textView.backgroundColor = .clear
+        textView.textContainerInset = .zero
+        textView.textContainer.lineFragmentPadding = 0
+        textView.clipsToBounds = true
+        textView.setContentHuggingPriority(.required, for: .vertical)
+        textView.setContentCompressionResistancePriority(.required, for: .vertical)
+        return textView
+    }
+
+    func updateUIView(_ textView: UITextView, context: Context) {
+        guard !textView.attributedText.isEqual(to: attributedText) else { return }
+        textView.attributedText = attributedText
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UITextView, context: Context) -> CGSize? {
+        let width = proposal.width ?? UIView.layoutFittingCompressedSize.width
+        let size = uiView.sizeThatFits(CGSize(width: width, height: CGFloat.greatestFiniteMagnitude))
+        return CGSize(width: width, height: size.height)
     }
 }
 
@@ -297,4 +342,3 @@ struct CodeBlockView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
-

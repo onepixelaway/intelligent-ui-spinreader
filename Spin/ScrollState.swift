@@ -6,7 +6,7 @@ final class ScrollState: ObservableObject {
     @Published private var transientOffset: Double?
 
     // Page-start y offsets in scroll-content space; first is always 0.
-    private(set) var pageStarts: [Double] = [0]
+    @Published private(set) var pageStarts: [Double] = [0]
 
     var totalPages: Int { pageStarts.count }
 
@@ -20,6 +20,19 @@ final class ScrollState: ObservableObject {
 
     var isAtTop: Bool {
         currentPage <= 0
+    }
+
+    // Page breaks can land before the physical viewport bottom so the next line starts cleanly
+    // on the following page. Clip the current page to that boundary to avoid sliced lines.
+    func visiblePageHeight(for viewportHeight: Double) -> Double {
+        guard viewportHeight > 0 else { return 0 }
+
+        let startY = effectiveStartY
+        guard let nextStartY = pageStarts.first(where: { $0 > startY + 1 }) else {
+            return viewportHeight
+        }
+        guard nextStartY > startY else { return viewportHeight }
+        return min(viewportHeight, nextStartY - startY)
     }
 
     private var effectiveStartY: Double {

@@ -10,6 +10,9 @@ struct SpinApp: App {
         WindowGroup {
             EpubLibraryView()
                 .environment(highlightStore)
+                .task {
+                    EmojiColorExtractor.shared.preloadDefaults()
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {

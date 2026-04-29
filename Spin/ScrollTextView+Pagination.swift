@@ -28,9 +28,19 @@ extension ScrollTextView {
                 guard itemsSnapshot.indices.contains(idx) else { return nil }
                 let item = itemsSnapshot[idx]
                 guard item.isSplittable,
-                      let attributed = renderedAttributedText(for: item) else { return nil }
-                let textWidth = viewportWidth - 2 * Double(horizontalPadding(for: item))
-                return Paginator.measureLines(for: attributed, width: textWidth)
+                      let attributed = paginationAttributedText(for: item) else { return nil }
+                let measuredLines = Paginator.measureLines(
+                    for: attributed,
+                    width: paginationTextWidth(for: item, viewportWidth: viewportWidth)
+                )
+                let yOffset = paginationLineYOffset(for: item)
+                guard yOffset != 0 else { return measuredLines }
+                return measuredLines.map { line in
+                    Paginator.LineFragment(
+                        minY: line.minY + yOffset,
+                        maxY: line.maxY + yOffset
+                    )
+                }
             },
             forcesPageBreak: { idx in
                 guard itemsSnapshot.indices.contains(idx) else { return false }
@@ -39,6 +49,31 @@ extension ScrollTextView {
             }
         ))
         scrollState.setPageStarts(starts)
+    }
+
+    private func paginationTextWidth(for item: ReadableItem, viewportWidth: Double) -> Double {
+        let itemWidth = viewportWidth - 2 * Double(horizontalPadding(for: item))
+        switch item {
+        case .blockquote:
+            return itemWidth - 15
+        case .callout:
+            return itemWidth - 15 - 24
+        case .listItem:
+            return itemWidth - Double(extraLeading(for: item))
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .paragraphWithFootnotes:
+            return itemWidth
+        case .image, .code, .divider, .chapterTOC:
+            return itemWidth
+        }
+    }
+
+    private func paginationLineYOffset(for item: ReadableItem) -> Double {
+        switch item {
+        case .callout:
+            return 14
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .paragraphWithFootnotes, .image, .code, .divider, .chapterTOC:
+            return 0
+        }
     }
 
     private func paginationFramesMatchLast(_ frames: [Int: CGRect]) -> Bool {

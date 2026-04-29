@@ -10,8 +10,25 @@ import Testing
 
 struct SpinTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
+    @MainActor
+    @Test func visiblePageHeightStopsAtNextPageBoundary() {
+        let state = ScrollState()
+
+        state.setPageStarts([0, 96, 220])
+
+        #expect(state.visiblePageHeight(for: 120) == 96)
+        state.goToNextPage()
+        #expect(state.visiblePageHeight(for: 120) == 120)
+    }
+
+    @MainActor
+    @Test func transientOffsetsStopAtNextPageBoundary() {
+        let state = ScrollState()
+
+        state.setPageStarts([0, 96, 220])
+        state.goToContentOffset(24)
+
+        #expect(state.visiblePageHeight(for: 120) == 72)
     }
 
 }

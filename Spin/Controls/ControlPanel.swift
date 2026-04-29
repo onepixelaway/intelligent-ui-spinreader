@@ -3,8 +3,10 @@ import SwiftUI
 struct ControlPanel: View {
     let isHighlightMode: Bool
     let selectedHighlightColor: HighlightColorChoice
+    let selectedHighlightEmoji: HighlightEmojiChoice?
     let onHighlight: () -> Void
     let onHighlightColorSelected: (HighlightColorChoice) -> Void
+    let onHighlightEmojiSelected: (HighlightEmojiChoice) -> Void
     let onCancelHighlight: () -> Void
     let onTrackpadPageUp: () -> Void
     let onTrackpadPageDown: () -> Void
@@ -58,6 +60,7 @@ struct ControlPanel: View {
         HStack(alignment: .center) {
             HStack(spacing: 10) {
                 ForEach(HighlightColorChoice.allCases) { color in
+                    let isSelected = selectedHighlightEmoji == nil && selectedHighlightColor == color
                     Button {
                         onHighlightColorSelected(color)
                     } label: {
@@ -67,14 +70,40 @@ struct ControlPanel: View {
                             .overlay(
                                 Circle()
                                     .stroke(
-                                        selectedHighlightColor == color ? Color.white.opacity(0.92) : Color.white.opacity(0.16),
-                                        lineWidth: selectedHighlightColor == color ? 3 : 1
+                                        isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.16),
+                                        lineWidth: isSelected ? 3 : 1
                                     )
                             )
-                            .shadow(color: color.fillColor.opacity(0.45), radius: selectedHighlightColor == color ? 8 : 0)
+                            .shadow(color: color.fillColor.opacity(0.45), radius: isSelected ? 8 : 0)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("\(color.rawValue.capitalized) highlight")
+                }
+
+                ForEach(HighlightEmojiChoice.allCases) { choice in
+                    let isSelected = selectedHighlightEmoji == choice
+                    let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    Button {
+                        onHighlightEmojiSelected(choice)
+                    } label: {
+                        ZStack {
+                            shape
+                                .fill(Color.white.opacity(isSelected ? 0.18 : 0.08))
+                                .frame(width: 44, height: 32)
+                            Text(choice.emoji)
+                                .font(.system(size: 16))
+                        }
+                        .overlay(
+                            shape
+                                .stroke(
+                                    isSelected ? Color.white.opacity(0.92) : Color.white.opacity(0.16),
+                                    lineWidth: isSelected ? 3 : 1
+                                )
+                                .frame(width: 44, height: 32)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(choice.rawValue) emoji highlight")
                 }
             }
 

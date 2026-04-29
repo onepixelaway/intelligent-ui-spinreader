@@ -95,21 +95,11 @@ enum Paginator {
                             }
                         }
 
-                        // The break line must start strictly after viewport end, otherwise the
-                        // line straddles the page edge and would render on both pages. Exception:
-                        // if it starts exactly at viewport end and the prior line fully fits,
-                        // the boundary is clean.
-                        let viewportEnd = currentPageStart + input.viewportHeight
-                        while breakLineIndex < lines.count {
-                            let lineTop = itemMinY + lines[breakLineIndex].minY
-                            if lineTop > viewportEnd { break }
-                            if lineTop == viewportEnd,
-                               breakLineIndex == 0 || itemMinY + lines[breakLineIndex - 1].maxY <= viewportEnd {
-                                break
-                            }
-                            breakLineIndex += 1
-                        }
-
+                        // Break at the top of the overflowing line so the line is fully
+                        // visible at the start of the next page. Advancing past it (to its
+                        // bottom) would set the next page to start AFTER the line, which —
+                        // combined with the current page's viewport clip — drops the line's
+                        // bottom portion between pages.
                         guard breakLineIndex < lines.count else {
                             commitBreak(at: currentPageStart + input.viewportHeight)
                             lineCursor = lines.count

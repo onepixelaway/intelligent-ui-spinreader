@@ -30,14 +30,13 @@ extension ScrollTextView.ReadableItem {
         }
     }
 
-    // Items that render via `HighlightableTextView` (UIKit UITextView). Their internal line
-    // fragments can be measured with TextKit and pagination may break between any two lines.
+    // Text-like items whose internal line fragments can be measured for pagination.
     // Everything else is atomic: it either fits on a page or moves whole to the next.
     var isSplittable: Bool {
         switch self {
-        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem:
+        case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem, .blockquote, .callout, .paragraphWithFootnotes:
             return true
-        case .image, .blockquote, .code, .divider, .callout, .paragraphWithFootnotes, .chapterTOC:
+        case .image, .code, .divider, .chapterTOC:
             return false
         }
     }

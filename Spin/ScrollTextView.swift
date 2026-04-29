@@ -26,6 +26,7 @@ struct ScrollTextView: View {
     @State var activeFootnote: String? = nil
     @State var isLoadingNextChapter: Bool = false
     @State var selectedHighlightColor: HighlightColorChoice = .yellow
+    @State var selectedHighlightEmoji: HighlightEmojiChoice? = nil
     // Hidden for now; keep the view and model in place to re-enable later.
     @State private var showQuestion: Bool = false
     @State private var measuredPanelHeight: CGFloat = 0
@@ -81,13 +82,14 @@ struct ScrollTextView: View {
     @State var itemContentIDs: [String] = []
     // Editorial whitespace between the status bar/safe area and the first line of body text.
     private let editorialTopPadding: CGFloat = 6
+    private let viewportTopOffset: CGFloat = 15
     // Height of the top-bar black band when the nav buttons are showing. Covers status bar and
     // the 44pt button row, preventing text from ghosting under the buttons.
     private let topBarBandHeight: CGFloat = 50
     // Gap between the text viewport's bottom and the top of the control panel so no text sits
     // behind the liquid-glass material.
-    private let viewportToPanelGap: CGFloat = 16
-    private let panelTopGap: CGFloat = 8
+    private let viewportToPanelGap: CGFloat = 8
+    private let panelTopGap: CGFloat = 4
     private let panelBottomInset: CGFloat = 24
     let maxTags = 5
     private let pageAnimation: Animation = .spring(response: 0.3, dampingFraction: 0.88)
@@ -126,23 +128,28 @@ struct ScrollTextView: View {
             // GeometryReader is already inside the safe area by default, so y=0 in its
             // coordinate space is flush against the bottom of the status bar.
             let topInset = editorialTopPadding
-            let clippedBottomLineHeight = reservedBottomLineHeight()
+            let viewportTop = topInset + viewportTopOffset
+            let bottomLineGuard = reservedBottomLineHeight() * 3
             let reservedBottomSpace = frozenPanelHeight + panelTopGap + panelBottomInset + viewportToPanelGap
-            let viewportHeight = max(0, geometry.size.height - topInset - reservedBottomSpace - clippedBottomLineHeight)
+            let viewportHeight = max(0, geometry.size.height - topInset - reservedBottomSpace - bottomLineGuard)
+            let visiblePageHeight = CGFloat(scrollState.visiblePageHeight(for: Double(viewportHeight)))
             let isHighlightMode = autoHighlightSelection != nil
             let activePanelHeight = measuredPanelHeight > 0 ? measuredPanelHeight : frozenPanelHeight
             let highlightSelectionViewportHeight = isHighlightMode
-                ? max(
-                    0,
-                    geometry.size.height
-                        - topInset
-                        - activePanelHeight
-                        - panelTopGap
-                        - panelBottomInset
-                        - viewportToPanelGap
-                        - clippedBottomLineHeight
+                ? min(
+                    visiblePageHeight,
+                    max(
+                        0,
+                        geometry.size.height
+                            - topInset
+                            - activePanelHeight
+                            - panelTopGap
+                            - panelBottomInset
+                            - viewportToPanelGap
+                            - bottomLineGuard
+                    )
                 )
-                : viewportHeight
+                : visiblePageHeight
             let viewportWidth = geometry.size.width
 
             ScrollView {
@@ -167,16 +174,16 @@ struct ScrollTextView: View {
                 .offset(y: scrollState.offset)
             }
             .coordinateSpace(name: "scroll")
-            .frame(width: viewportWidth, height: viewportHeight, alignment: .top)
+            .frame(width: viewportWidth, height: visiblePageHeight, alignment: .top)
             .clipped()
-            .position(x: viewportWidth / 2, y: topInset + viewportHeight / 2)
+            .position(x: viewportWidth / 2, y: viewportTop + visiblePageHeight / 2)
             .scrollDisabled(true)
             .onPreferenceChange(ParagraphPositionKey.self) { positions in
                 let contentPositions = contentFrames(from: positions)
                 updateVisibleParagraphs(
                     positions: contentPositions,
                     viewportWidth: viewportWidth,
-                    viewportHeight: viewportHeight
+                    viewportHeight: visiblePageHeight
                 )
                 if contentPositions != paragraphFrames {
                     paragraphFrames = contentPositions
@@ -191,7 +198,14 @@ struct ScrollTextView: View {
                 updateVisibleParagraphs(
                     positions: paragraphFrames,
                     viewportWidth: viewportWidth,
-                    viewportHeight: viewportHeight
+                    viewportHeight: visiblePageHeight
+                )
+            }
+            .onChange(of: scrollState.pageStarts) { _, _ in
+                updateVisibleParagraphs(
+                    positions: paragraphFrames,
+                    viewportWidth: viewportWidth,
+                    viewportHeight: visiblePageHeight
                 )
             }
             .onPreferenceChange(ContentHeightKey.self) { _ in
@@ -238,9 +252,23 @@ struct ScrollTextView: View {
                 )
             }
 
+            let pageBoundaryMaskOverlap: CGFloat = 6
+            let hiddenPageTop = max(0, visiblePageHeight - pageBoundaryMaskOverlap)
+            let hiddenPageHeight = max(0, viewportHeight - hiddenPageTop)
+            if hiddenPageHeight > 0 {
+                Color.black
+                    .frame(width: viewportWidth, height: hiddenPageHeight)
+                    .position(
+                        x: viewportWidth / 2,
+                        y: viewportTop + hiddenPageTop + hiddenPageHeight / 2
+                    )
+                    .allowsHitTesting(false)
+            }
+
             ControlPanel(
                 isHighlightMode: isHighlightMode,
                 selectedHighlightColor: selectedHighlightColor,
+                selectedHighlightEmoji: selectedHighlightEmoji,
                 onHighlight: {
                     activateOrCommitHighlight(
                         viewportWidth: geometry.size.width,
@@ -249,7 +277,12 @@ struct ScrollTextView: View {
                 },
                 onHighlightColorSelected: { color in
                     selectedHighlightColor = color
+                    selectedHighlightEmoji = nil
                     updatePendingHighlightColor(color)
+                },
+                onHighlightEmojiSelected: { emoji in
+                    selectedHighlightEmoji = emoji
+                    updatePendingHighlightEmoji(emoji)
                 },
                 onCancelHighlight: {
                     cancelPendingHighlight()
@@ -459,7 +492,6 @@ struct ScrollTextView: View {
             viewportWidth: viewportWidth,
             viewportHeight: viewportHeight
         )
-        updatePendingHighlightColor(selectedHighlightColor)
     }
 
     private func selectNextHighlight(
