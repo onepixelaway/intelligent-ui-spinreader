@@ -6,6 +6,8 @@ private func buildHighlightDisplayText(
     base: NSAttributedString,
     highlights: [Highlight],
     selectionRange: NSRange? = nil,
+    playbackSentenceRange: NSRange? = nil,
+    playbackWordRange: NSRange? = nil,
     pendingHighlight: Highlight? = nil,
     pendingOpacity: CGFloat = 0.25
 ) -> NSAttributedString {
@@ -21,6 +23,26 @@ private func buildHighlightDisplayText(
     }
     if let sel = selectionRange, sel.length > 0, sel.location >= 0, NSMaxRange(sel) <= mutable.length {
         mutable.addAttribute(.backgroundColor, value: UIColor.yellow.withAlphaComponent(0.25), range: sel)
+    }
+    if let playbackSentenceRange,
+       playbackSentenceRange.length > 0,
+       playbackSentenceRange.location >= 0,
+       NSMaxRange(playbackSentenceRange) <= mutable.length {
+        mutable.addAttribute(
+            .backgroundColor,
+            value: UIColor.white.withAlphaComponent(0.12),
+            range: playbackSentenceRange
+        )
+    }
+    if let playbackWordRange,
+       playbackWordRange.length > 0,
+       playbackWordRange.location >= 0,
+       NSMaxRange(playbackWordRange) <= mutable.length {
+        mutable.addAttribute(
+            .backgroundColor,
+            value: UIColor.systemBlue.withAlphaComponent(0.32),
+            range: playbackWordRange
+        )
     }
     if let pendingHighlight {
         let range = NSRange(location: pendingHighlight.startOffset, length: pendingHighlight.endOffset - pendingHighlight.startOffset)
@@ -53,12 +75,16 @@ private enum EmojiMarginLayout {
 struct HighlightableTextView: UIViewRepresentable {
     let text: String
     let attributedText: NSAttributedString
+    let itemIndex: Int
     let highlights: [Highlight]
+    let playbackHighlight: PlaybackTextHighlight?
+    let isPlaybackActive: Bool
     let pendingHighlight: Highlight?
     let pendingOpacity: CGFloat
     let showsPendingCursor: Bool
     let onHighlightCreated: (String, Int, Int) -> Void
     let onHighlightRemoved: (UUID) -> Void
+    let onPlaybackWordTapped: (Int) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -97,12 +123,16 @@ struct HighlightableTextView: UIViewRepresentable {
         let c = context.coordinator
         c.baseAttributedText = attributedText
         c.highlights = highlights
+        c.itemIndex = itemIndex
+        c.playbackHighlight = playbackHighlight?.itemIndex == c.itemIndex ? playbackHighlight : nil
+        c.isPlaybackActive = isPlaybackActive
         c.pendingHighlight = pendingHighlight
         c.pendingOpacity = pendingOpacity
         c.showsPendingCursor = showsPendingCursor
         c.text = text
         c.onHighlightCreated = onHighlightCreated
         c.onHighlightRemoved = onHighlightRemoved
+        c.onPlaybackWordTapped = onPlaybackWordTapped
         if c.isDragging { return }
         c.refreshDisplayText(in: tv)
     }
@@ -117,12 +147,16 @@ struct HighlightableTextView: UIViewRepresentable {
     final class Coordinator: NSObject {
         var baseAttributedText = NSAttributedString()
         var highlights: [Highlight] = []
+        var playbackHighlight: PlaybackTextHighlight?
+        var isPlaybackActive = false
+        var itemIndex: Int?
         var pendingHighlight: Highlight?
         var pendingOpacity: CGFloat = 0.25
         var showsPendingCursor = false
         var text: String = ""
         var onHighlightCreated: ((String, Int, Int) -> Void)?
         var onHighlightRemoved: ((UUID) -> Void)?
+        var onPlaybackWordTapped: ((Int) -> Void)?
         var isDragging = false
         private var dragStart: Int?
         private let cursorView = UIView()
@@ -133,6 +167,8 @@ struct HighlightableTextView: UIViewRepresentable {
             tv.attributedText = buildHighlightDisplayText(
                 base: baseAttributedText,
                 highlights: highlights,
+                playbackSentenceRange: playbackHighlight?.sentenceRange,
+                playbackWordRange: playbackHighlight?.wordRange,
                 pendingHighlight: pendingHighlight,
                 pendingOpacity: pendingOpacity
             )
@@ -311,7 +347,9 @@ struct HighlightableTextView: UIViewRepresentable {
                 tv.attributedText = buildHighlightDisplayText(
                     base: baseAttributedText,
                     highlights: highlights,
-                    selectionRange: NSRange(location: loc, length: len)
+                    selectionRange: NSRange(location: loc, length: len),
+                    playbackSentenceRange: playbackHighlight?.sentenceRange,
+                    playbackWordRange: playbackHighlight?.wordRange
                 )
                 cursorView.isHidden = true
             case .ended:
@@ -342,10 +380,50 @@ struct HighlightableTextView: UIViewRepresentable {
             let pt = g.location(in: tv)
             let idx = charIndex(at: pt, in: tv)
 
+            if isPlaybackActive, let range = wordRange(containingOrAdjacentTo: idx) {
+                onPlaybackWordTapped?(range.location)
+                return
+            }
+
             for h in highlights where idx >= h.startOffset && idx < h.endOffset {
                 onHighlightRemoved?(h.id)
                 return
             }
+        }
+
+        private func wordRange(containingOrAdjacentTo index: Int) -> NSRange? {
+            let nsText = text as NSString
+            guard nsText.length > 0 else { return nil }
+            let separators = CharacterSet.whitespacesAndNewlines.union(.punctuationCharacters)
+            var probe = min(max(0, index), nsText.length - 1)
+
+            if isSeparator(at: probe, in: nsText, separators: separators) {
+                let previous = probe - 1
+                if previous >= 0, !isSeparator(at: previous, in: nsText, separators: separators) {
+                    probe = previous
+                } else {
+                    return nil
+                }
+            }
+
+            var start = probe
+            while start > 0, !isSeparator(at: start - 1, in: nsText, separators: separators) {
+                start -= 1
+            }
+
+            var end = probe + 1
+            while end < nsText.length, !isSeparator(at: end, in: nsText, separators: separators) {
+                end += 1
+            }
+
+            guard end > start else { return nil }
+            return NSRange(location: start, length: end - start)
+        }
+
+        private func isSeparator(at index: Int, in nsText: NSString, separators: CharacterSet) -> Bool {
+            guard index >= 0, index < nsText.length else { return true }
+            let character = nsText.substring(with: NSRange(location: index, length: 1))
+            return character.rangeOfCharacter(from: separators) != nil
         }
     }
 }

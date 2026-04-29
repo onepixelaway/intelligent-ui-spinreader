@@ -117,24 +117,40 @@ extension ScrollTextView {
                     HighlightableTextView(
                         text: text,
                         attributedText: attributedText,
+                        itemIndex: itemIndex,
                         highlights: matching,
+                        playbackHighlight: speechCoordinator.highlight,
+                        isPlaybackActive: speechCoordinator.isPlaybackActive,
                         pendingHighlight: pendingHighlight,
                         pendingOpacity: pendingHighlightOpacity(at: timeline.date),
                         showsPendingCursor: pendingHighlightCursorVisible(at: timeline.date),
                         onHighlightCreated: onCreated,
-                        onHighlightRemoved: onRemoved
+                        onHighlightRemoved: onRemoved,
+                        onPlaybackWordTapped: { offset in
+                            startPlayback(
+                                at: PlaybackTextLocation(itemIndex: itemIndex, offset: offset)
+                            )
+                        }
                     )
                 }
             } else {
                 HighlightableTextView(
                     text: text,
                     attributedText: attributedText,
+                    itemIndex: itemIndex,
                     highlights: matching,
+                    playbackHighlight: speechCoordinator.highlight,
+                    isPlaybackActive: speechCoordinator.isPlaybackActive,
                     pendingHighlight: nil,
                     pendingOpacity: 0.25,
                     showsPendingCursor: false,
                     onHighlightCreated: onCreated,
-                    onHighlightRemoved: onRemoved
+                    onHighlightRemoved: onRemoved,
+                    onPlaybackWordTapped: { offset in
+                        startPlayback(
+                            at: PlaybackTextLocation(itemIndex: itemIndex, offset: offset)
+                        )
+                    }
                 )
             }
         }

@@ -486,7 +486,7 @@ extension ScrollTextView {
         )
     }
 
-    private func firstVisibleCharacterIndex(itemIndex: Int, viewport: CGRect, text: String) -> Int? {
+    func firstVisibleCharacterIndex(itemIndex: Int, viewport: CGRect, text: String) -> Int? {
         guard let frame = contentFrame(for: itemIndex),
               let layout = textLayoutContext(for: itemIndex, viewport: viewport) else { return nil }
 
@@ -524,7 +524,7 @@ extension ScrollTextView {
         return lineRange.location
     }
 
-    private func tokenizeSentences(in text: String) -> [(text: String, start: Int, end: Int)] {
+    func tokenizeSentences(in text: String) -> [(text: String, start: Int, end: Int)] {
         let tokenizer = NLTokenizer(unit: .sentence)
         tokenizer.string = text
         var result: [(text: String, start: Int, end: Int)] = []
@@ -534,6 +534,143 @@ extension ScrollTextView {
             let start = range.lowerBound.utf16Offset(in: text)
             let end = range.upperBound.utf16Offset(in: text)
             result.append((raw, start, end))
+            return true
+        }
+        return result
+    }
+
+    func firstVisiblePlaybackLocation(viewport: CGRect) -> PlaybackTextLocation? {
+        let candidates = items.indices
+            .compactMap { index -> (index: Int, frame: CGRect)? in
+                guard renderedAttributedText(for: items[index]) != nil,
+                      let frame = contentFrame(for: index),
+                      frame.height > 0,
+                      viewport.intersects(frame) else { return nil }
+                return (index, frame)
+            }
+            .sorted {
+                if abs($0.frame.minY - $1.frame.minY) > 0.5 {
+                    return $0.frame.minY < $1.frame.minY
+                }
+                return $0.index < $1.index
+            }
+
+        for candidate in candidates {
+            guard let text = renderedAttributedText(for: items[candidate.index])?.string else { continue }
+            let visibleOffset = firstVisibleCharacterIndex(
+                itemIndex: candidate.index,
+                viewport: viewport,
+                text: text
+            ) ?? 0
+            if let wordRange = wordRange(atOrAfter: visibleOffset, in: text) {
+                return PlaybackTextLocation(itemIndex: candidate.index, offset: wordRange.location)
+            }
+        }
+
+        return nil
+    }
+
+    func playbackSegments(startingAt location: PlaybackTextLocation?) -> [PlaybackTextSegment] {
+        guard let location,
+              items.indices.contains(location.itemIndex) else { return [] }
+
+        var segments: [PlaybackTextSegment] = []
+        for itemIndex in items.indices where itemIndex >= location.itemIndex {
+            guard let text = renderedAttributedText(for: items[itemIndex])?.string else { continue }
+            let nsText = text as NSString
+            guard nsText.length > 0 else { continue }
+
+            let requestedOffset = itemIndex == location.itemIndex ? location.offset : 0
+            guard let firstWord = wordRange(atOrAfter: requestedOffset, in: text) else { continue }
+            let sentences = tokenizeSentences(in: text)
+            let sentenceRanges: [NSRange] = sentences.isEmpty
+                ? [NSRange(location: 0, length: nsText.length)]
+                : sentences.map { NSRange(location: $0.start, length: $0.end - $0.start) }
+
+            for sentenceRange in sentenceRanges {
+                let sentenceEnd = NSMaxRange(sentenceRange)
+                guard sentenceEnd > firstWord.location else { continue }
+                let utteranceStart = max(sentenceRange.location, firstWord.location)
+                guard utteranceStart < sentenceEnd else { continue }
+                let rawUtteranceRange = NSRange(location: utteranceStart, length: sentenceEnd - utteranceStart)
+                let rawUtterance = nsText.substring(with: rawUtteranceRange)
+                let leadingOffset = (rawUtterance as NSString)
+                    .rangeOfCharacter(from: CharacterSet.whitespacesAndNewlines.inverted)
+                    .location
+                let adjustedStart = leadingOffset == NSNotFound
+                    ? utteranceStart
+                    : utteranceStart + leadingOffset
+                let adjustedRange = NSRange(location: adjustedStart, length: sentenceEnd - adjustedStart)
+                let utteranceText = nsText.substring(with: adjustedRange)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !utteranceText.isEmpty else { continue }
+
+                segments.append(PlaybackTextSegment(
+                    itemIndex: itemIndex,
+                    sentenceRange: sentenceRange,
+                    utteranceStartOffset: adjustedStart,
+                    utteranceText: utteranceText
+                ))
+            }
+        }
+
+        return segments
+    }
+
+    func targetOffsetForPlaybackHighlight(_ highlight: PlaybackTextHighlight, viewport: CGRect) -> Double? {
+        guard viewport.width > 0, viewport.height > 0 else { return nil }
+        let range = highlight.wordRange ?? highlight.sentenceRange
+        guard let rect = textRect(for: range, itemIndex: highlight.itemIndex, viewport: viewport) else { return nil }
+        let epsilon: CGFloat = 0.5
+
+        if rect.minY < viewport.minY + epsilon {
+            return Double(max(0, rect.minY))
+        }
+
+        if rect.maxY > viewport.maxY - epsilon {
+            return Double(max(0, rect.minY))
+        }
+
+        return nil
+    }
+
+    private func textRect(for range: NSRange, itemIndex: Int, viewport: CGRect) -> CGRect? {
+        guard let layout = textLayoutContext(for: itemIndex, viewport: viewport),
+              let textLength = layout.layoutManager.textStorage?.length,
+              range.location >= 0,
+              range.length > 0,
+              NSMaxRange(range) <= textLength else { return nil }
+
+        let glyphRange = layout.layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        var rect = CGRect.null
+        layout.layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, usedRect, _, _, _ in
+            rect = rect.union(usedRect)
+        }
+        if rect.isNull || rect.isEmpty {
+            rect = layout.layoutManager.boundingRect(forGlyphRange: glyphRange, in: layout.textContainer)
+        }
+        guard !rect.isNull, !rect.isEmpty else { return nil }
+
+        return CGRect(
+            x: layout.frame.minX + rect.minX,
+            y: layout.frame.minY + rect.minY,
+            width: rect.width,
+            height: rect.height
+        )
+    }
+
+    private func wordRange(atOrAfter offset: Int, in text: String) -> NSRange? {
+        let tokenizer = NLTokenizer(unit: .word)
+        tokenizer.string = text
+        var result: NSRange?
+        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+            let start = range.lowerBound.utf16Offset(in: text)
+            let end = range.upperBound.utf16Offset(in: text)
+            let tokenRange = NSRange(location: start, length: end - start)
+            if NSMaxRange(tokenRange) > offset {
+                result = tokenRange
+                return false
+            }
             return true
         }
         return result

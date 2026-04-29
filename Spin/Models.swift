@@ -2,6 +2,7 @@ import Foundation
 import SwiftUI
 import UIKit
 import Observation
+import AVFoundation
 
 enum HighlightColorChoice: String, CaseIterable, Identifiable {
     case green
@@ -63,6 +64,136 @@ struct Highlight: Identifiable, Codable {
         self.color = color
         self.emoji = emoji
         self.createdAt = createdAt
+    }
+}
+
+struct PlaybackTextSegment {
+    let itemIndex: Int
+    let sentenceRange: NSRange
+    let utteranceStartOffset: Int
+    let utteranceText: String
+}
+
+struct PlaybackTextHighlight: Equatable {
+    let itemIndex: Int
+    let sentenceRange: NSRange
+    let wordRange: NSRange?
+}
+
+struct PlaybackTextLocation {
+    let itemIndex: Int
+    let offset: Int
+}
+
+@MainActor
+final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency AVSpeechSynthesizerDelegate {
+    @Published private(set) var isSpeaking = false
+    @Published private(set) var isPaused = false
+    @Published private(set) var highlight: PlaybackTextHighlight?
+
+    private let synthesizer = AVSpeechSynthesizer()
+    private var pendingSegments: [PlaybackTextSegment] = []
+    private var activeSegment: PlaybackTextSegment?
+
+    var isPlaybackActive: Bool {
+        isSpeaking || isPaused
+    }
+
+    override init() {
+        super.init()
+        synthesizer.delegate = self
+    }
+
+    func start(segments: [PlaybackTextSegment]) {
+        stop(clearHighlight: true)
+        guard !segments.isEmpty else { return }
+        pendingSegments = segments
+        speakNextSegment()
+    }
+
+    func togglePlayback(startingWith segments: [PlaybackTextSegment]) {
+        if isSpeaking {
+            pause()
+            return
+        }
+
+        if isPaused {
+            resume()
+            return
+        }
+
+        start(segments: segments)
+    }
+
+    func pause() {
+        guard isSpeaking else { return }
+        if synthesizer.pauseSpeaking(at: .word) {
+            isSpeaking = false
+            isPaused = true
+        }
+    }
+
+    func resume() {
+        guard isPaused else { return }
+        if synthesizer.continueSpeaking() {
+            isSpeaking = true
+            isPaused = false
+        }
+    }
+
+    func stop(clearHighlight: Bool = true) {
+        pendingSegments.removeAll()
+        activeSegment = nil
+        synthesizer.stopSpeaking(at: .immediate)
+        isSpeaking = false
+        isPaused = false
+        if clearHighlight {
+            highlight = nil
+        }
+    }
+
+    private func speakNextSegment() {
+        guard !pendingSegments.isEmpty else {
+            activeSegment = nil
+            isSpeaking = false
+            isPaused = false
+            highlight = nil
+            return
+        }
+
+        let segment = pendingSegments.removeFirst()
+        activeSegment = segment
+        isSpeaking = true
+        isPaused = false
+        highlight = PlaybackTextHighlight(
+            itemIndex: segment.itemIndex,
+            sentenceRange: segment.sentenceRange,
+            wordRange: nil
+        )
+
+        let utterance = AVSpeechUtterance(string: segment.utteranceText)
+        utterance.voice = AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        synthesizer.speak(utterance)
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
+        guard let activeSegment else { return }
+        highlight = PlaybackTextHighlight(
+            itemIndex: activeSegment.itemIndex,
+            sentenceRange: activeSegment.sentenceRange,
+            wordRange: NSRange(
+                location: activeSegment.utteranceStartOffset + characterRange.location,
+                length: characterRange.length
+            )
+        )
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        speakNextSegment()
+    }
+
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
     }
 }
 

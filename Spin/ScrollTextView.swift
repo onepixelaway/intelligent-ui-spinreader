@@ -12,6 +12,7 @@ struct ScrollTextView: View {
 
     @StateObject var scrollState = ScrollState()
     @StateObject var readerSettings = ReaderSettings()
+    @StateObject var speechCoordinator = ReaderSpeechCoordinator()
     @State private var showTopBar: Bool = true
     @State var visibleParagraphs: [Int] = []
     @State var spinCount: Int = 0
@@ -326,6 +327,21 @@ struct ScrollTextView: View {
                         handleAnalysisRequest()
                     }
                 },
+                isPlaybackSpeaking: speechCoordinator.isSpeaking,
+                isPlaybackPaused: speechCoordinator.isPaused,
+                onPlaybackToggle: {
+                    let viewport = CGRect(
+                        x: 0,
+                        y: -CGFloat(scrollState.offset),
+                        width: geometry.size.width,
+                        height: visiblePageHeight
+                    )
+                    speechCoordinator.togglePlayback(
+                        startingWith: playbackSegments(
+                            startingAt: firstVisiblePlaybackLocation(viewport: viewport)
+                        )
+                    )
+                },
                 tags: readerSettings.showAIQuestions ? Array(tags.prefix(maxTags)) : [],
                 onLearnMoreTap: {
                     openPerplexity(for: .learnMore)
@@ -456,6 +472,25 @@ struct ScrollTextView: View {
         .sheet(item: $explainerURL) { item in
             SafariView(url: item.url)
         }
+        .onChange(of: speechCoordinator.highlight) { _, highlight in
+            guard let highlight else { return }
+            let viewportWidth = CGFloat(lastPaginationViewportWidth)
+            let viewportHeight = CGFloat(lastPaginationViewportHeight)
+            guard viewportWidth > 0, viewportHeight > 0 else { return }
+            let viewport = CGRect(
+                x: 0,
+                y: -CGFloat(scrollState.offset),
+                width: viewportWidth,
+                height: viewportHeight
+            )
+            guard let targetOffset = targetOffsetForPlaybackHighlight(highlight, viewport: viewport) else { return }
+            withAnimation(pageAnimation) {
+                scrollState.goToContentOffset(targetOffset)
+            }
+        }
+        .onDisappear {
+            speechCoordinator.stop()
+        }
         .overlay(alignment: .bottom) {
             if let footnote = activeFootnote {
                 FootnoteOverlay(text: footnote) {
@@ -569,5 +604,9 @@ struct ScrollTextView: View {
         withAnimation(pageAnimation) {
             scrollState.goToContentOffset(offset)
         }
+    }
+
+    func startPlayback(at location: PlaybackTextLocation) {
+        speechCoordinator.start(segments: playbackSegments(startingAt: location))
     }
 }

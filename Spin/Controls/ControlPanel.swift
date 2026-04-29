@@ -10,6 +10,9 @@ struct ControlPanel: View {
     let onCancelHighlight: () -> Void
     let onTrackpadPageUp: () -> Void
     let onTrackpadPageDown: () -> Void
+    let isPlaybackSpeaking: Bool
+    let isPlaybackPaused: Bool
+    let onPlaybackToggle: () -> Void
     let tags: [String]
     let onLearnMoreTap: () -> Void
     let onFactCheckTap: () -> Void
@@ -139,11 +142,9 @@ struct ControlPanel: View {
             .frame(width: 140, height: 110)
 
             CircularReaderButton(
-                systemImage: "mic.fill",
-                accessibilityLabel: "Record voice note",
-                action: {
-                    // TODO: implement voice note capture
-                }
+                systemImage: isPlaybackSpeaking ? "pause.fill" : "play.fill",
+                accessibilityLabel: isPlaybackSpeaking ? "Pause reading" : (isPlaybackPaused ? "Resume reading" : "Play reading"),
+                action: onPlaybackToggle
             )
         }
         .padding(.horizontal, 24)
