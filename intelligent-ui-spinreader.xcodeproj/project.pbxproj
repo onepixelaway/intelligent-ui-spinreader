@@ -17,6 +17,7 @@
 		2256E94A5D3693CD4AE97057 /* ScrollInputViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9965582666A149C761267CDE /* ScrollInputViews.swift */; };
 		2C20F943CCC15B45AB2480E6 /* EpubLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9F9EDFD087441380ACB497E /* EpubLibraryView.swift */; };
 		2E4096303B3515FBFEE1A2EE /* Paginator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */; };
+		3D3B61240264B1470699CFA0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 824245CC5F13EACD7CFCB8F8 /* SettingsView.swift */; };
 		4164ABF4568234949AD132AF /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C5E5F3D7E21E592A851242 /* Config.swift */; };
 		47C31C21F7BEEAEE65C959D7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B8C2821EE55C5AD6773ED71C /* Assets.xcassets */; };
 		4879BDFAEEF07E58309061D2 /* ReaderContentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EBA3FBBD27DED12803F8085 /* ReaderContentViews.swift */; };
@@ -28,6 +29,15 @@
 		6FA32A38C66DCCC765BDBEF1 /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E864B792179C0ECDC3B94E /* LiquidGlass.swift */; };
 		72B235AF885DD1D1407FC8DA /* SpinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15863A718A24869A18BD8340 /* SpinTests.swift */; };
 		750BB4082C90718C043FEA6F /* OpenAI in Frameworks */ = {isa = PBXBuildFile; productRef = 6225A5B46208F450EB102AC4 /* OpenAI */; };
+		A1B2C3D4E5F60001000000A3 /* KokoroSwift in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60001000000A2 /* KokoroSwift */; };
+		A1B2C3D4E5F60001000000A4 /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60001000000A2 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		A1B2C3D4E5F60001000000D3 /* MLXUtilsLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60001000000D2 /* MLXUtilsLibrary */; };
+		A1B2C3D4E5F60001000000E3 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = A1B2C3D4E5F60001000000E2 /* MLX */; };
+		A1B2C3D4E5F60001000000B2 /* voices.npz in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001000000B1 /* voices.npz */; };
+		A1B2C3D4E5F60001000000C2 /* KokoroVoices.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001000000C1 /* KokoroVoices.swift */; };
+		A1B2C3D4E5F60001000000C4 /* KokoroModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001000000C3 /* KokoroModelManager.swift */; };
+		A1B2C3D4E5F60001000000C6 /* KokoroTTSEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001000000C5 /* KokoroTTSEngine.swift */; };
+		A1B2C3D4E5F60001000000C8 /* KokoroDownloadSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001000000C7 /* KokoroDownloadSheet.swift */; };
 		7EE153032F87D12DDB56A51C /* ReadableItem+Classification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A98CD6C3F8B0DBFC2670BD3 /* ReadableItem+Classification.swift */; };
 		818CD9EC5CEBD5C322C7C561 /* UXTeamofOne.epub in Resources */ = {isa = PBXBuildFile; fileRef = 1E5CAA4D526A26418C07CB5A /* UXTeamofOne.epub */; };
 		8C3163B03E9A367FB557DA44 /* HighlightableTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5BEBA0672B53D6527FC022DD /* HighlightableTextView.swift */; };
@@ -86,6 +96,7 @@
 		70562CEDAC69322951D76474 /* HighlightsListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlightsListView.swift; sourceTree = "<group>"; };
 		79326A8051DC88E0961A8E54 /* ReaderSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettingsSheet.swift; sourceTree = "<group>"; };
 		819E6FC5944D913820F5F8E9 /* ReaderTagPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderTagPill.swift; sourceTree = "<group>"; };
+		824245CC5F13EACD7CFCB8F8 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		88EC997BEDF2681558457F31 /* SpinUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SpinUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8A98CD6C3F8B0DBFC2670BD3 /* ReadableItem+Classification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReadableItem+Classification.swift"; sourceTree = "<group>"; };
 		9890C234F5B38111DBBA0AE5 /* ReaderSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettings.swift; sourceTree = "<group>"; };
@@ -103,7 +114,26 @@
 		E4698ECE0A5FF93A040B5291 /* SpinTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SpinTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E55BEE1BE155E70B87D6E48C /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		E700A7CF2FF7006E8FE18AFE /* ScrollTextView+Highlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Highlights.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60001000000B1 /* voices.npz */ = {isa = PBXFileReference; lastKnownFileType = file; path = voices.npz; sourceTree = "<group>"; };
+		A1B2C3D4E5F60001000000C1 /* KokoroVoices.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroVoices.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60001000000C3 /* KokoroModelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroModelManager.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60001000000C5 /* KokoroTTSEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroTTSEngine.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60001000000C7 /* KokoroDownloadSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroDownloadSheet.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		A1B2C3D4E5F60001000000F1 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				A1B2C3D4E5F60001000000A4 /* KokoroSwift in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		192829E854EC275AC67D4FB0 /* Frameworks */ = {
@@ -111,6 +141,9 @@
 			buildActionMask = 2147483647;
 			files = (
 				750BB4082C90718C043FEA6F /* OpenAI in Frameworks */,
+				A1B2C3D4E5F60001000000A3 /* KokoroSwift in Frameworks */,
+				A1B2C3D4E5F60001000000D3 /* MLXUtilsLibrary in Frameworks */,
+				A1B2C3D4E5F60001000000E3 /* MLX in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -129,6 +162,7 @@
 			isa = PBXGroup;
 			children = (
 				1E5CAA4D526A26418C07CB5A /* UXTeamofOne.epub */,
+				A1B2C3D4E5F60001000000B1 /* voices.npz */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -166,6 +200,10 @@
 				9EC98AFB877549811CD73826 /* EpubParser.swift */,
 				5BEBA0672B53D6527FC022DD /* HighlightableTextView.swift */,
 				70562CEDAC69322951D76474 /* HighlightsListView.swift */,
+				A1B2C3D4E5F60001000000C7 /* KokoroDownloadSheet.swift */,
+				A1B2C3D4E5F60001000000C3 /* KokoroModelManager.swift */,
+				A1B2C3D4E5F60001000000C5 /* KokoroTTSEngine.swift */,
+				A1B2C3D4E5F60001000000C1 /* KokoroVoices.swift */,
 				E55BEE1BE155E70B87D6E48C /* Models.swift */,
 				BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */,
 				8A98CD6C3F8B0DBFC2670BD3 /* ReadableItem+Classification.swift */,
@@ -181,6 +219,7 @@
 				2241C458D35528A038EAE7C4 /* ScrollTextView+ContentRendering.swift */,
 				E700A7CF2FF7006E8FE18AFE /* ScrollTextView+Highlights.swift */,
 				40C85DCFECDF1DB621AD739E /* ScrollTextView+Pagination.swift */,
+				824245CC5F13EACD7CFCB8F8 /* SettingsView.swift */,
 				1E6DBEF2C370158A139D205E /* SpinApp.swift */,
 				73A96AC97C915EB3E44A0F60 /* Controls */,
 				0DD146B77B67F44A203920F7 /* Preview Content */,
@@ -246,6 +285,7 @@
 				6574B46424269A10B9964311 /* Sources */,
 				9D52833E515154AAA542B929 /* Resources */,
 				192829E854EC275AC67D4FB0 /* Frameworks */,
+				A1B2C3D4E5F60001000000F1 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
@@ -254,6 +294,9 @@
 			name = Spin;
 			packageProductDependencies = (
 				6225A5B46208F450EB102AC4 /* OpenAI */,
+				A1B2C3D4E5F60001000000A2 /* KokoroSwift */,
+				A1B2C3D4E5F60001000000D2 /* MLXUtilsLibrary */,
+				A1B2C3D4E5F60001000000E2 /* MLX */,
 			);
 			productName = Spin;
 			productReference = 5379D0CFF1B4BE3E9175B6D1 /* Spin.app */;
@@ -306,6 +349,9 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				8D882C1D384CEAD969C8C90C /* XCRemoteSwiftPackageReference "OpenAI" */,
+				A1B2C3D4E5F60001000000A1 /* XCRemoteSwiftPackageReference "kokoro-ios" */,
+				A1B2C3D4E5F60001000000D1 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */,
+				A1B2C3D4E5F60001000000E1 /* XCRemoteSwiftPackageReference "mlx-swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F09D4FC3231AE27AAAE7796B /* Products */;
@@ -327,6 +373,7 @@
 				47C31C21F7BEEAEE65C959D7 /* Assets.xcassets in Resources */,
 				F83589C8749C2020027AD0DD /* Preview Assets.xcassets in Resources */,
 				818CD9EC5CEBD5C322C7C561 /* UXTeamofOne.epub in Resources */,
+				A1B2C3D4E5F60001000000B2 /* voices.npz in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -365,6 +412,10 @@
 				6AD150376974E0D2CCF4F7C9 /* EpubParser.swift in Sources */,
 				8C3163B03E9A367FB557DA44 /* HighlightableTextView.swift in Sources */,
 				A9A0B113B6D7361D2ED26F42 /* HighlightsListView.swift in Sources */,
+				A1B2C3D4E5F60001000000C8 /* KokoroDownloadSheet.swift in Sources */,
+				A1B2C3D4E5F60001000000C4 /* KokoroModelManager.swift in Sources */,
+				A1B2C3D4E5F60001000000C6 /* KokoroTTSEngine.swift in Sources */,
+				A1B2C3D4E5F60001000000C2 /* KokoroVoices.swift in Sources */,
 				6FA32A38C66DCCC765BDBEF1 /* LiquidGlass.swift in Sources */,
 				63D6FC710829F1F899DDF039 /* Models.swift in Sources */,
 				2E4096303B3515FBFEE1A2EE /* Paginator.swift in Sources */,
@@ -382,6 +433,7 @@
 				B6531C56E7F53620DF034242 /* ScrollTextView+Highlights.swift in Sources */,
 				0FF0FBCF5AAA35EB8FE6C585 /* ScrollTextView+Pagination.swift in Sources */,
 				DFC5DA7DA543B46EDFFDAEAD /* ScrollTextView.swift in Sources */,
+				3D3B61240264B1470699CFA0 /* SettingsView.swift in Sources */,
 				0B7CBA310B11C5BB31FC9422 /* SpinApp.swift in Sources */,
 				E9A40FF5626A9FB4BC13F6A9 /* TrackpadSurface.swift in Sources */,
 			);
@@ -680,6 +732,30 @@
 				minimumVersion = 0.3.0;
 			};
 		};
+		A1B2C3D4E5F60001000000A1 /* XCRemoteSwiftPackageReference "kokoro-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mlalma/kokoro-ios.git";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.10;
+			};
+		};
+		A1B2C3D4E5F60001000000D1 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/mlalma/MLXUtilsLibrary.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.0.6;
+			};
+		};
+		A1B2C3D4E5F60001000000E1 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift";
+			requirement = {
+				kind = exactVersion;
+				version = 0.29.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -687,6 +763,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 8D882C1D384CEAD969C8C90C /* XCRemoteSwiftPackageReference "OpenAI" */;
 			productName = OpenAI;
+		};
+		A1B2C3D4E5F60001000000A2 /* KokoroSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1B2C3D4E5F60001000000A1 /* XCRemoteSwiftPackageReference "kokoro-ios" */;
+			productName = KokoroSwift;
+		};
+		A1B2C3D4E5F60001000000D2 /* MLXUtilsLibrary */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1B2C3D4E5F60001000000D1 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */;
+			productName = MLXUtilsLibrary;
+		};
+		A1B2C3D4E5F60001000000E2 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1B2C3D4E5F60001000000E1 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

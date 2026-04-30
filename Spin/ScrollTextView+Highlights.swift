@@ -524,13 +524,13 @@ extension ScrollTextView {
         return lineRange.location
     }
 
-    func tokenizeSentences(in text: String) -> [(text: String, start: Int, end: Int)] {
+    func tokenizeSentences(in text: String, minTrimmedLength: Int = 5) -> [(text: String, start: Int, end: Int)] {
         let tokenizer = NLTokenizer(unit: .sentence)
         tokenizer.string = text
         var result: [(text: String, start: Int, end: Int)] = []
         tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
             let raw = String(text[range])
-            guard raw.trimmingCharacters(in: .whitespacesAndNewlines).count >= 5 else { return true }
+            guard raw.trimmingCharacters(in: .whitespacesAndNewlines).count >= minTrimmedLength else { return true }
             let start = range.lowerBound.utf16Offset(in: text)
             let end = range.upperBound.utf16Offset(in: text)
             result.append((raw, start, end))
@@ -557,11 +557,21 @@ extension ScrollTextView {
 
         for candidate in candidates {
             guard let text = renderedAttributedText(for: items[candidate.index])?.string else { continue }
-            let visibleOffset = firstVisibleCharacterIndex(
+            // Items that start at or below the viewport top are read from the first word.
+            // Items that extend above the viewport need a per-line lookup; skip the candidate
+            // if visibility detection fails so we don't read text that is offscreen.
+            let visibleOffset: Int
+            if candidate.frame.minY >= viewport.minY - 0.5 {
+                visibleOffset = 0
+            } else if let computed = firstVisibleCharacterIndex(
                 itemIndex: candidate.index,
                 viewport: viewport,
                 text: text
-            ) ?? 0
+            ) {
+                visibleOffset = computed
+            } else {
+                continue
+            }
             if let wordRange = wordRange(atOrAfter: visibleOffset, in: text) {
                 return PlaybackTextLocation(itemIndex: candidate.index, offset: wordRange.location)
             }
@@ -582,7 +592,9 @@ extension ScrollTextView {
 
             let requestedOffset = itemIndex == location.itemIndex ? location.offset : 0
             guard let firstWord = wordRange(atOrAfter: requestedOffset, in: text) else { continue }
-            let sentences = tokenizeSentences(in: text)
+            // Use unfiltered sentences so that a short sentence at the visible top
+            // ("OK.", "Hi.", a fragment) isn't skipped before TTS reaches the next sentence.
+            let sentences = tokenizeSentences(in: text, minTrimmedLength: 0)
             let sentenceRanges: [NSRange] = sentences.isEmpty
                 ? [NSRange(location: 0, length: nsText.length)]
                 : sentences.map { NSRange(location: $0.start, length: $0.end - $0.start) }
@@ -617,21 +629,14 @@ extension ScrollTextView {
         return segments
     }
 
-    func targetOffsetForPlaybackHighlight(_ highlight: PlaybackTextHighlight, viewport: CGRect) -> Double? {
+    /// Content-space rect of the currently spoken word (or sentence, before the first
+    /// word fires). The reader uses this to detect when the highlight has moved past the
+    /// visible page bottom — same off-screen check the manual highlight cycle uses —
+    /// and flip to the page that contains it.
+    func playbackHighlightContentRect(_ highlight: PlaybackTextHighlight, viewport: CGRect) -> CGRect? {
         guard viewport.width > 0, viewport.height > 0 else { return nil }
         let range = highlight.wordRange ?? highlight.sentenceRange
-        guard let rect = textRect(for: range, itemIndex: highlight.itemIndex, viewport: viewport) else { return nil }
-        let epsilon: CGFloat = 0.5
-
-        if rect.minY < viewport.minY + epsilon {
-            return Double(max(0, rect.minY))
-        }
-
-        if rect.maxY > viewport.maxY - epsilon {
-            return Double(max(0, rect.minY))
-        }
-
-        return nil
+        return textRect(for: range, itemIndex: highlight.itemIndex, viewport: viewport)
     }
 
     private func textRect(for range: NSRange, itemIndex: Int, viewport: CGRect) -> CGRect? {

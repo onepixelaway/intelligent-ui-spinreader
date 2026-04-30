@@ -67,7 +67,7 @@ final class ScrollState: ObservableObject {
         return out
     }
 
-    private func pageContaining(y: Double) -> Int {
+    func pageContaining(y: Double) -> Int {
         guard !pageStarts.isEmpty else { return 0 }
         var best = 0
         for (i, start) in pageStarts.enumerated() {

@@ -472,20 +472,44 @@ struct ScrollTextView: View {
         .sheet(item: $explainerURL) { item in
             SafariView(url: item.url)
         }
+        .sheet(isPresented: Binding(
+            get: { speechCoordinator.kokoroPreparation.isPresenting },
+            set: { newValue in
+                if !newValue {
+                    speechCoordinator.cancelKokoroPreparation()
+                }
+            }
+        )) {
+            KokoroDownloadSheet(coordinator: speechCoordinator)
+                .interactiveDismissDisabled(true)
+                .presentationDetents([.medium])
+        }
         .onChange(of: speechCoordinator.highlight) { _, highlight in
             guard let highlight else { return }
             let viewportWidth = CGFloat(lastPaginationViewportWidth)
-            let viewportHeight = CGFloat(lastPaginationViewportHeight)
-            guard viewportWidth > 0, viewportHeight > 0 else { return }
-            let viewport = CGRect(
+            let paginationViewportHeight = CGFloat(lastPaginationViewportHeight)
+            guard viewportWidth > 0, paginationViewportHeight > 0 else { return }
+            let pageStartY = -CGFloat(scrollState.offset)
+            let layoutViewport = CGRect(
                 x: 0,
-                y: -CGFloat(scrollState.offset),
+                y: pageStartY,
                 width: viewportWidth,
-                height: viewportHeight
+                height: paginationViewportHeight
             )
-            guard let targetOffset = targetOffsetForPlaybackHighlight(highlight, viewport: viewport) else { return }
+            guard let rect = playbackHighlightContentRect(highlight, viewport: layoutViewport) else { return }
+            // Off-screen detection mirrors the manual highlight cycle: when the rect
+            // extends past the visible page's bottom, advance to the page that contains
+            // it. The visible page can be shorter than the pagination viewport (orphan/
+            // widow rules push the break up), so the comparison must use visible height.
+            let visibleHeight = CGFloat(scrollState.visiblePageHeight(for: Double(paginationViewportHeight)))
+            let visibleBottomY = pageStartY + visibleHeight
+            let epsilon: CGFloat = 0.5
+            guard rect.maxY > visibleBottomY - epsilon else { return }
+            let targetPage = scrollState.pageContaining(y: Double(rect.minY))
+            // TTS reads forward only — never let an early-sentence rect drag the page back.
+            guard targetPage > scrollState.currentPage else { return }
             withAnimation(pageAnimation) {
-                scrollState.goToContentOffset(targetOffset)
+                scrollState.goToPage(targetPage)
             }
         }
         .onDisappear {

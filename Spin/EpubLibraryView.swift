@@ -44,6 +44,14 @@ struct EpubLibraryView: View {
             .navigationTitle("Books")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        Image(systemName: "gearshape")
+                            .foregroundColor(.white.opacity(0.7))
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showImporter = true
