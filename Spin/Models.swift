@@ -100,6 +100,7 @@ enum KokoroPreparationState: Equatable {
 final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency AVSpeechSynthesizerDelegate {
     @Published private(set) var isSpeaking = false
     @Published private(set) var isPaused = false
+    @Published private(set) var isPreparingPlayback = false
     @Published private(set) var highlight: PlaybackTextHighlight?
     @Published var kokoroPreparation: KokoroPreparationState = .idle
 
@@ -228,6 +229,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         resetKokoroPlaybackState()
         synthesizer.stopSpeaking(at: .immediate)
         KokoroTTSEngine.shared.stop()
+        isPreparingPlayback = false
         isSpeaking = false
         isPaused = false
         if clearHighlight {
@@ -286,22 +288,31 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             kokoroPreparation = .awaitingDownloadConsent
             return
         }
-        prepareAndSpeakKokoro()
+        prepareAndSpeakKokoro(showingSheet: false)
     }
 
-    private func prepareAndSpeakKokoro() {
+    private func prepareAndSpeakKokoro(showingSheet: Bool) {
         if KokoroTTSEngine.shared.isReady {
+            isPreparingPlayback = false
             startKokoroPipeline()
             return
         }
-        kokoroPreparation = .loadingModel
+        if showingSheet {
+            kokoroPreparation = .loadingModel
+        } else {
+            isPreparingPlayback = true
+        }
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 try await KokoroTTSEngine.shared.loadIfNeeded()
-                self.kokoroPreparation = .idle
+                self.isPreparingPlayback = false
+                if showingSheet {
+                    self.kokoroPreparation = .idle
+                }
                 self.startKokoroPipeline()
             } catch {
+                self.isPreparingPlayback = false
                 self.kokoroPreparation = .error(error.localizedDescription)
                 self.stop(clearHighlight: true)
             }
@@ -329,7 +340,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
                 _ = try await KokoroModelManager.shared.download()
                 self.downloadProgressObserver?.cancel()
                 self.downloadProgressObserver = nil
-                self.prepareAndSpeakKokoro()
+                self.prepareAndSpeakKokoro(showingSheet: true)
             } catch {
                 self.downloadProgressObserver?.cancel()
                 self.downloadProgressObserver = nil
@@ -345,6 +356,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         KokoroModelManager.shared.cancel()
         kokoroPreparation = .idle
         resetKokoroPlaybackState()
+        isPreparingPlayback = false
         isSpeaking = false
         isPaused = false
         highlight = nil
@@ -355,6 +367,12 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             kokoroPreparation = .idle
         }
     }
+
+    #if DEBUG
+    func debugSetPlaybackHighlight(_ highlight: PlaybackTextHighlight) {
+        self.highlight = highlight
+    }
+    #endif
 
     private func startKokoroPipeline() {
         guard !pendingSegments.isEmpty else {

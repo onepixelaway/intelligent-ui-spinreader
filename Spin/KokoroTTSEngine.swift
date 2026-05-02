@@ -238,4 +238,12 @@ final class KokoroTTSEngine: ObservableObject {
         }
         didConnectPlayer = false
     }
+
+    func unload() {
+        stop()
+        session = nil
+        isLoaded = false
+        isLoading = false
+        loadError = nil
+    }
 }

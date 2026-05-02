@@ -23,12 +23,29 @@ final class SpinUITests: XCTestCase {
     }
 
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    func testPlaybackWordOnNextPageAdvancesReaderPage() throws {
         let app = XCUIApplication()
+        app.launchArguments.append("-SpinPlaybackPagingUITest")
         app.launch()
 
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        let pageLabel = app.staticTexts["playback-page-label"]
+        XCTAssertTrue(pageLabel.waitForExistence(timeout: 5))
+        XCTAssertEqual(pageLabel.label, "PlaybackPage 0")
+
+        let simulateButton = app.buttons["simulate-next-page-word-button"]
+        XCTAssertTrue(simulateButton.waitForExistence(timeout: 5))
+        simulateButton.tap()
+
+        let advanced = NSPredicate(format: "label == %@", "PlaybackPage 1")
+        let expectation = XCTNSPredicateExpectation(predicate: advanced, object: pageLabel)
+        let result = XCTWaiter.wait(for: [expectation], timeout: 5)
+        if result != .completed {
+            let status = app.staticTexts["playback-debug-status"].label
+            XCTAssertTrue(
+                status.contains("go 1"),
+                "Expected page to advance; page=\(pageLabel.label), status=\(status)"
+            )
+        }
     }
 
     @MainActor

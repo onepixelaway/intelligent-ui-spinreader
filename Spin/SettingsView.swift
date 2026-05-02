@@ -33,6 +33,9 @@ struct SettingsView: View {
     @AppStorage(TTSPreferenceKeys.provider) private var providerRaw: String = TTSProvider.apple.rawValue
     @AppStorage(TTSPreferenceKeys.voiceIdentifier) private var voiceIdentifier: String = ""
     @AppStorage(TTSPreferenceKeys.kokoroVoice) private var kokoroVoice: String = KokoroVoiceCatalog.defaultVoice
+    @State private var isKokoroModelDownloaded = KokoroPaths.isModelDownloaded
+    @State private var showDeleteModelConfirmation = false
+    @State private var modelDeleteError: String?
 
     private let voices: [AVSpeechSynthesisVoice] = SettingsView.loadEnglishVoices()
 
@@ -63,6 +66,29 @@ struct SettingsView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
         .preferredColorScheme(.dark)
+            .onAppear {
+                refreshKokoroModelState()
+            }
+            .confirmationDialog(
+                "Delete Kokoro model?",
+                isPresented: $showDeleteModelConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete Model", role: .destructive) {
+                    deleteKokoroModel()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("The neural model will be removed from this device. Kokoro will ask to download it again the next time you play narration.")
+            }
+            .alert("Couldn’t Delete Model", isPresented: Binding(
+                get: { modelDeleteError != nil },
+                set: { if !$0 { modelDeleteError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(modelDeleteError ?? "")
+            }
     }
 
     private var providerSection: some View {
@@ -94,7 +120,9 @@ struct SettingsView: View {
                 .listRowSeparatorTint(.white.opacity(0.06))
             }
         } header: {
-            sectionHeader("TTS Provider")
+            sectionHeader("Audio Narration")
+        } footer: {
+            sectionFooter("Choose the engine used by the Play button in the reader.")
         }
     }
 
@@ -129,7 +157,9 @@ struct SettingsView: View {
                 }
             }
         } header: {
-            sectionHeader("Voice (\(TTSPreferenceKeys.voiceLanguage))")
+            sectionHeader("Apple Voice")
+        } footer: {
+            sectionFooter("Showing English voices available on this device.")
         }
     }
 
@@ -175,14 +205,14 @@ struct SettingsView: View {
                     Text("Neural Model")
                         .font(.system(size: 15))
                         .foregroundColor(.white)
-                    Text(KokoroPaths.isModelDownloaded
+                    Text(isKokoroModelDownloaded
                          ? "Downloaded · ~312 MB"
                          : "Not downloaded · downloads on first Play")
                         .font(.system(size: 11))
                         .foregroundColor(.gray.opacity(0.6))
                 }
                 Spacer()
-                if KokoroPaths.isModelDownloaded {
+                if isKokoroModelDownloaded {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 16))
                         .foregroundColor(.green.opacity(0.8))
@@ -190,8 +220,28 @@ struct SettingsView: View {
             }
             .listRowBackground(Color.black)
             .listRowSeparatorTint(.white.opacity(0.06))
+
+            if isKokoroModelDownloaded {
+                Button(role: .destructive) {
+                    showDeleteModelConfirmation = true
+                } label: {
+                    HStack {
+                        Image(systemName: "trash")
+                        Text("Delete Downloaded Model")
+                        Spacer()
+                    }
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.red.opacity(0.9))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .listRowBackground(Color.black)
+                .listRowSeparatorTint(.white.opacity(0.06))
+            }
         } header: {
-            sectionHeader("Model")
+            sectionHeader("Kokoro Model")
+        } footer: {
+            sectionFooter("Deleting the model frees local storage. Your selected Kokoro voice is kept.")
         }
     }
 
@@ -204,6 +254,15 @@ struct SettingsView: View {
             .padding(.top, 8)
             .padding(.bottom, 4)
             .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+    }
+
+    private func sectionFooter(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 12))
+            .foregroundColor(.white.opacity(0.35))
+            .textCase(nil)
+            .padding(.top, 4)
+            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
     }
 
     private var voiceQualityGroups: [(title: String, voices: [AVSpeechSynthesisVoice])] {
@@ -229,6 +288,21 @@ struct SettingsView: View {
         case .premium: return "Premium"
         case .enhanced: return "Enhanced"
         default: return "Default"
+        }
+    }
+
+    private func refreshKokoroModelState() {
+        isKokoroModelDownloaded = KokoroPaths.isModelDownloaded
+    }
+
+    private func deleteKokoroModel() {
+        do {
+            KokoroTTSEngine.shared.unload()
+            try KokoroModelManager.shared.deleteDownloadedModel()
+            refreshKokoroModelState()
+        } catch {
+            modelDeleteError = error.localizedDescription
+            refreshKokoroModelState()
         }
     }
 

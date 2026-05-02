@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import NaturalLanguage
+import CoreText
 
 extension ScrollTextView {
     struct AutoHighlightSelection {
@@ -36,6 +37,8 @@ extension ScrollTextView {
     private struct TextLayoutContext {
         let layoutManager: NSLayoutManager
         let textContainer: NSTextContainer
+        let attributedText: NSAttributedString
+        let textWidth: CGFloat
         let frame: CGRect
     }
 
@@ -455,7 +458,13 @@ extension ScrollTextView {
         layoutManager.addTextContainer(container)
         _ = layoutManager.glyphRange(for: container)
 
-        return TextLayoutContext(layoutManager: layoutManager, textContainer: container, frame: frame)
+        return TextLayoutContext(
+            layoutManager: layoutManager,
+            textContainer: container,
+            attributedText: attributedText,
+            textWidth: paragraphWidth,
+            frame: frame
+        )
     }
 
     private func highlightRect(
@@ -639,6 +648,28 @@ extension ScrollTextView {
         return textRect(for: range, itemIndex: highlight.itemIndex, viewport: viewport)
     }
 
+    func playbackHighlightTargetPage(_ highlight: PlaybackTextHighlight, viewport: CGRect) -> Int? {
+        guard let range = highlight.wordRange,
+              items.indices.contains(highlight.itemIndex),
+              let attributedText = renderedAttributedText(for: items[highlight.itemIndex]),
+              attributedText.length > 0,
+              let frame = contentFrame(for: highlight.itemIndex) else { return nil }
+
+        let textWidth = viewport.width - 2 * horizontalPadding(for: items[highlight.itemIndex])
+        let lines = Paginator.measureLines(for: attributedText, width: Double(textWidth))
+        guard !lines.isEmpty else { return nil }
+
+        let progress = Double(min(NSMaxRange(range), attributedText.length)) / Double(attributedText.length)
+        let lineIndex = min(
+            lines.count - 1,
+            max(0, Int((progress * Double(lines.count)).rounded(.down)))
+        )
+        let lineY = frame.minY + CGFloat(lines[lineIndex].minY)
+        let targetPage = scrollState.pageContaining(y: Double(lineY) + 0.5)
+        guard targetPage > scrollState.currentPage else { return nil }
+        return targetPage
+    }
+
     private func textRect(for range: NSRange, itemIndex: Int, viewport: CGRect) -> CGRect? {
         guard let layout = textLayoutContext(for: itemIndex, viewport: viewport),
               let textLength = layout.layoutManager.textStorage?.length,
@@ -646,12 +677,27 @@ extension ScrollTextView {
               range.length > 0,
               NSMaxRange(range) <= textLength else { return nil }
 
-        let glyphRange = layout.layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        if let coreTextRect = coreTextLineRect(
+            for: range,
+            attributedText: layout.attributedText,
+            width: layout.textWidth,
+            itemFrame: layout.frame
+        ) {
+            return coreTextRect
+        }
+
+        let fullGlyphRange = layout.layoutManager.glyphRange(for: layout.textContainer)
         var rect = CGRect.null
-        layout.layoutManager.enumerateLineFragments(forGlyphRange: glyphRange) { _, usedRect, _, _, _ in
-            rect = rect.union(usedRect)
+        layout.layoutManager.enumerateLineFragments(forGlyphRange: fullGlyphRange) { lineRect, _, _, glyphRange, _ in
+            let characterRange = layout.layoutManager.characterRange(
+                forGlyphRange: glyphRange,
+                actualGlyphRange: nil
+            )
+            guard NSIntersectionRange(characterRange, range).length > 0 else { return }
+            rect = rect.union(lineRect)
         }
         if rect.isNull || rect.isEmpty {
+            let glyphRange = layout.layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
             rect = layout.layoutManager.boundingRect(forGlyphRange: glyphRange, in: layout.textContainer)
         }
         guard !rect.isNull, !rect.isEmpty else { return nil }
@@ -662,6 +708,82 @@ extension ScrollTextView {
             width: rect.width,
             height: rect.height
         )
+    }
+
+    private func coreTextLineRect(
+        for range: NSRange,
+        attributedText: NSAttributedString,
+        width: CGFloat,
+        itemFrame: CGRect
+    ) -> CGRect? {
+        guard width > 0, attributedText.length > 0 else { return nil }
+
+        let measuredLines = Paginator.measureLines(for: attributedText, width: Double(width))
+        guard !measuredLines.isEmpty else { return nil }
+        let prefixLength = min(NSMaxRange(range), attributedText.length)
+        let prefix = attributedText.attributedSubstring(from: NSRange(location: 0, length: prefixLength))
+        let prefixLineCount = Paginator.measureLines(for: prefix, width: Double(width)).count
+        let lineIndex: Int
+        if prefixLineCount > 1 || measuredLines.count <= 1 {
+            lineIndex = max(0, prefixLineCount - 1)
+        } else {
+            let progress = Double(prefixLength) / Double(max(1, attributedText.length))
+            lineIndex = min(
+                measuredLines.count - 1,
+                max(0, Int((progress * Double(measuredLines.count)).rounded(.down)))
+            )
+        }
+        if measuredLines.indices.contains(lineIndex) {
+            let fragment = measuredLines[lineIndex]
+            return CGRect(
+                x: itemFrame.minX,
+                y: itemFrame.minY + CGFloat(fragment.minY),
+                width: width,
+                height: CGFloat(fragment.maxY - fragment.minY)
+            )
+        }
+
+        let framesetter = CTFramesetterCreateWithAttributedString(attributedText)
+        let suggested = CTFramesetterSuggestFrameSizeWithConstraints(
+            framesetter,
+            CFRange(location: 0, length: attributedText.length),
+            nil,
+            CGSize(width: width, height: CGFloat.greatestFiniteMagnitude),
+            nil
+        )
+        let frameHeight = max(1, ceil(suggested.height) + 16)
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: width, height: frameHeight), transform: nil)
+        let textFrame = CTFramesetterCreateFrame(
+            framesetter,
+            CFRange(location: 0, length: attributedText.length),
+            path,
+            nil
+        )
+        let lines = CTFrameGetLines(textFrame) as NSArray as? [CTLine] ?? []
+        guard !lines.isEmpty else { return nil }
+
+        var origins = Array(repeating: CGPoint.zero, count: lines.count)
+        CTFrameGetLineOrigins(textFrame, CFRange(location: 0, length: lines.count), &origins)
+
+        var rect = CGRect.null
+        for (index, line) in lines.enumerated() {
+            guard measuredLines.indices.contains(index) else { continue }
+            let cfRange = CTLineGetStringRange(line)
+            let lineRange = NSRange(location: cfRange.location, length: cfRange.length)
+            guard NSIntersectionRange(lineRange, range).length > 0 else { continue }
+
+            let fragment = measuredLines[index]
+            let lineWidth = CGFloat(CTLineGetTypographicBounds(line, nil, nil, nil))
+            rect = rect.union(CGRect(
+                x: itemFrame.minX,
+                y: itemFrame.minY + CGFloat(fragment.minY),
+                width: lineWidth,
+                height: CGFloat(fragment.maxY - fragment.minY)
+            ))
+        }
+
+        guard !rect.isNull, !rect.isEmpty else { return nil }
+        return rect
     }
 
     private func wordRange(atOrAfter offset: Int, in text: String) -> NSRange? {
@@ -680,6 +802,77 @@ extension ScrollTextView {
         }
         return result
     }
+
+    #if DEBUG
+    func debugSimulatePlaybackWordOnNextPage() {
+        let viewport = CGRect(
+            x: 0,
+            y: -CGFloat(scrollState.offset),
+            width: CGFloat(lastPaginationViewportWidth),
+            height: CGFloat(lastPaginationViewportHeight)
+        )
+        guard viewport.width > 0, viewport.height > 0 else {
+            debugPlaybackPagingStatus = "simulate bad viewport"
+            return
+        }
+        debugPlaybackPagingStatus = "scan pages \(scrollState.totalPages)"
+        var maxWordPage = scrollState.currentPage
+        var maxWordY: CGFloat = 0
+        var debugLineCount = 0
+        var debugTextWidth: CGFloat = 0
+        var maxLinePage = scrollState.currentPage
+        var maxLineY: CGFloat = 0
+
+        for itemIndex in items.indices {
+            guard let attributed = renderedAttributedText(for: items[itemIndex]) else { continue }
+            let textWidth = viewport.width - 2 * horizontalPadding(for: items[itemIndex])
+            let measuredLines = Paginator.measureLines(for: attributed, width: Double(textWidth))
+            if measuredLines.count > debugLineCount {
+                debugLineCount = measuredLines.count
+                debugTextWidth = textWidth
+            }
+
+            for (lineIndex, line) in measuredLines.enumerated() {
+                let lineY = (contentFrame(for: itemIndex)?.minY ?? 0) + CGFloat(line.minY)
+                let linePage = scrollState.pageContaining(y: Double(lineY) + 0.5)
+                maxLineY = max(maxLineY, lineY)
+                maxLinePage = max(maxLinePage, linePage)
+                guard linePage > scrollState.currentPage else { continue }
+                guard let location = characterLocation(
+                    forLineIndex: lineIndex,
+                    attributedText: attributed,
+                    width: textWidth
+                ) else { continue }
+                let wordRange = NSRange(location: location, length: 1)
+                maxWordPage = max(maxWordPage, linePage)
+                maxWordY = max(maxWordY, lineY)
+                debugPlaybackPagingStatus = "selected item \(itemIndex) loc \(location) linePage \(linePage)"
+                speechCoordinator.debugSetPlaybackHighlight(PlaybackTextHighlight(
+                    itemIndex: itemIndex,
+                    sentenceRange: wordRange,
+                    wordRange: wordRange
+                ))
+                return
+            }
+        }
+        debugPlaybackPagingStatus = "no next-page word pages \(scrollState.totalPages) max \(maxWordPage) y \(Int(maxWordY)) lineMax \(maxLinePage) ly \(Int(maxLineY)) lines \(debugLineCount) w \(Int(debugTextWidth))"
+    }
+
+    private func characterLocation(
+        forLineIndex targetLineIndex: Int,
+        attributedText: NSAttributedString,
+        width: CGFloat
+    ) -> Int? {
+        guard attributedText.length > 0 else { return nil }
+        let measuredLines = Paginator.measureLines(for: attributedText, width: Double(width))
+        guard measuredLines.count > 1 else { return nil }
+        let progress = Double(targetLineIndex) / Double(max(1, measuredLines.count - 1))
+        return min(
+            attributedText.length - 1,
+            max(0, Int((progress * Double(attributedText.length - 1)).rounded(.down)))
+        )
+    }
+    #endif
 
     private func startingSentenceIndex(
         itemIndex: Int,

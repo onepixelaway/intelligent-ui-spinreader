@@ -24,6 +24,7 @@ struct ScrollTextView: View {
     @State var analysisTask: Task<Void, Never>?
     @State private var showReaderSettings: Bool = false
     @State private var showHighlightsList: Bool = false
+    @State var debugPlaybackPagingStatus: String = "idle"
     @State var activeFootnote: String? = nil
     @State var isLoadingNextChapter: Bool = false
     @State var selectedHighlightColor: HighlightColorChoice = .yellow
@@ -329,6 +330,7 @@ struct ScrollTextView: View {
                 },
                 isPlaybackSpeaking: speechCoordinator.isSpeaking,
                 isPlaybackPaused: speechCoordinator.isPaused,
+                isPlaybackPreparing: speechCoordinator.isPreparingPlayback,
                 onPlaybackToggle: {
                     let viewport = CGRect(
                         x: 0,
@@ -447,6 +449,44 @@ struct ScrollTextView: View {
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
+
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("-SpinPlaybackPagingUITest") {
+                VStack(spacing: 10) {
+                    Text("PlaybackPage \(scrollState.currentPage)")
+                        .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(Color.black.opacity(0.75))
+                        .clipShape(Capsule())
+                        .accessibilityIdentifier("playback-page-label")
+
+                    Text(debugPlaybackPagingStatus)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.black.opacity(0.75))
+                        .clipShape(Capsule())
+                        .accessibilityIdentifier("playback-debug-status")
+
+                    Button("Simulate Next Page Word") {
+                        debugSimulatePlaybackWordOnNextPage()
+                    }
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(Color.white)
+                    .clipShape(Capsule())
+                    .accessibilityIdentifier("simulate-next-page-word-button")
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .padding(.top, 64)
+                .allowsHitTesting(true)
+            }
+            #endif
         }
         .background(Color.black)
         .portraitOnly()
@@ -475,7 +515,7 @@ struct ScrollTextView: View {
         .sheet(isPresented: Binding(
             get: { speechCoordinator.kokoroPreparation.isPresenting },
             set: { newValue in
-                if !newValue {
+                if !newValue && speechCoordinator.kokoroPreparation != .idle {
                     speechCoordinator.cancelKokoroPreparation()
                 }
             }
@@ -485,10 +525,16 @@ struct ScrollTextView: View {
                 .presentationDetents([.medium])
         }
         .onChange(of: speechCoordinator.highlight) { _, highlight in
-            guard let highlight else { return }
+            guard let highlight else {
+                debugPlaybackPagingStatus = "no-highlight"
+                return
+            }
             let viewportWidth = CGFloat(lastPaginationViewportWidth)
             let paginationViewportHeight = CGFloat(lastPaginationViewportHeight)
-            guard viewportWidth > 0, paginationViewportHeight > 0 else { return }
+            guard viewportWidth > 0, paginationViewportHeight > 0 else {
+                debugPlaybackPagingStatus = "bad-viewport \(Int(viewportWidth))x\(Int(paginationViewportHeight))"
+                return
+            }
             let pageStartY = -CGFloat(scrollState.offset)
             let layoutViewport = CGRect(
                 x: 0,
@@ -496,21 +542,30 @@ struct ScrollTextView: View {
                 width: viewportWidth,
                 height: paginationViewportHeight
             )
-            guard let rect = playbackHighlightContentRect(highlight, viewport: layoutViewport) else { return }
-            // Off-screen detection mirrors the manual highlight cycle: when the rect
-            // extends past the visible page's bottom, advance to the page that contains
-            // it. The visible page can be shorter than the pagination viewport (orphan/
-            // widow rules push the break up), so the comparison must use visible height.
-            let visibleHeight = CGFloat(scrollState.visiblePageHeight(for: Double(paginationViewportHeight)))
-            let visibleBottomY = pageStartY + visibleHeight
-            let epsilon: CGFloat = 0.5
-            guard rect.maxY > visibleBottomY - epsilon else { return }
-            let targetPage = scrollState.pageContaining(y: Double(rect.minY))
-            // TTS reads forward only — never let an early-sentence rect drag the page back.
-            guard targetPage > scrollState.currentPage else { return }
+            if let targetPage = playbackHighlightTargetPage(highlight, viewport: layoutViewport) {
+                withAnimation(pageAnimation) {
+                    scrollState.goToPage(targetPage)
+                }
+                debugPlaybackPagingStatus = "go \(targetPage) by offset now \(scrollState.currentPage)"
+                return
+            }
+            guard let rect = playbackHighlightContentRect(highlight, viewport: layoutViewport) else {
+                debugPlaybackPagingStatus = "no-rect item \(highlight.itemIndex)"
+                return
+            }
+            guard let targetPage = scrollState.forwardPlaybackTargetPage(
+                for: rect,
+                viewportHeight: Double(paginationViewportHeight),
+                isWordHighlight: highlight.wordRange != nil
+            ) else {
+                debugPlaybackPagingStatus = "no-target y \(Int(rect.minY)) p \(scrollState.pageContaining(y: Double(rect.minY) + 0.5))"
+                return
+            }
+            debugPlaybackPagingStatus = "go \(targetPage) y \(Int(rect.minY))"
             withAnimation(pageAnimation) {
                 scrollState.goToPage(targetPage)
             }
+            debugPlaybackPagingStatus = "go \(targetPage) y \(Int(rect.minY)) now \(scrollState.currentPage)"
         }
         .onDisappear {
             speechCoordinator.stop()

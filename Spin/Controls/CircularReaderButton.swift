@@ -3,24 +3,35 @@ import SwiftUI
 struct CircularReaderButton: View {
     let systemImage: String
     let accessibilityLabel: String
+    var isLoading: Bool = false
+    var isDisabled: Bool = false
     let action: () -> Void
 
     private let borderColor = Color.white.opacity(0.08)
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 20))
-                .foregroundColor(Color(white: 0.83))
-                .frame(width: 56, height: 56)
-                .liquidGlass(in: Circle(), tint: Color.black.opacity(0.6))
-                .overlay(
-                    Circle()
-                        .stroke(borderColor, lineWidth: 1)
-                )
-                .contentShape(Circle())
+            ZStack {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+                        .tint(Color(white: 0.83))
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 20))
+                        .foregroundColor(Color(white: 0.83))
+                }
+            }
+            .frame(width: 56, height: 56)
+            .liquidGlass(in: Circle(), tint: Color.black.opacity(0.6))
+            .overlay(
+                Circle()
+                    .stroke(borderColor, lineWidth: 1)
+            )
+            .contentShape(Circle())
         }
         .buttonStyle(CircularReaderButtonStyle())
+        .disabled(isDisabled || isLoading)
         .accessibilityLabel(accessibilityLabel)
     }
 }

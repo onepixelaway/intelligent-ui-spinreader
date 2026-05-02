@@ -12,6 +12,7 @@ struct ControlPanel: View {
     let onTrackpadPageDown: () -> Void
     let isPlaybackSpeaking: Bool
     let isPlaybackPaused: Bool
+    let isPlaybackPreparing: Bool
     let onPlaybackToggle: () -> Void
     let tags: [String]
     let onLearnMoreTap: () -> Void
@@ -143,11 +144,19 @@ struct ControlPanel: View {
 
             CircularReaderButton(
                 systemImage: isPlaybackSpeaking ? "pause.fill" : "play.fill",
-                accessibilityLabel: isPlaybackSpeaking ? "Pause reading" : (isPlaybackPaused ? "Resume reading" : "Play reading"),
+                accessibilityLabel: playbackAccessibilityLabel,
+                isLoading: isPlaybackPreparing,
                 action: onPlaybackToggle
             )
         }
         .padding(.horizontal, 24)
+    }
+
+    private var playbackAccessibilityLabel: String {
+        if isPlaybackPreparing { return "Preparing reading" }
+        if isPlaybackSpeaking { return "Pause reading" }
+        if isPlaybackPaused { return "Resume reading" }
+        return "Play reading"
     }
 
     // Fixed row height keeps the panel's total height constant even when `tags` is empty.

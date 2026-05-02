@@ -76,6 +76,38 @@ final class ScrollState: ObservableObject {
         return min(best, pageStarts.count - 1)
     }
 
+    func forwardPlaybackTargetPage(
+        for rect: CGRect,
+        viewportHeight: Double,
+        isWordHighlight: Bool
+    ) -> Int? {
+        guard totalPages > 1 else { return nil }
+
+        if isWordHighlight {
+            let spokenWordPage = pageContaining(y: Double(rect.minY) + 0.5)
+            if spokenWordPage > currentPage {
+                return spokenWordPage
+            }
+        }
+
+        guard viewportHeight > 0 else { return nil }
+
+        let pageStartY = effectiveStartY
+        let visibleBottomY = pageStartY + visiblePageHeight(for: viewportHeight)
+        let epsilon = 0.5
+        guard Double(rect.maxY) > visibleBottomY - epsilon else { return nil }
+
+        let firstOffscreenY = max(Double(rect.minY), visibleBottomY + epsilon)
+        let candidatePage = pageContaining(y: firstOffscreenY)
+        if candidatePage > currentPage {
+            return candidatePage
+        }
+
+        let nextPage = currentPage + 1
+        guard nextPage < totalPages else { return nil }
+        return nextPage
+    }
+
     func goToNextPage() {
         guard currentPage < totalPages - 1 else { return }
         transientOffset = nil

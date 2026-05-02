@@ -82,6 +82,15 @@ final class KokoroModelManager: NSObject, ObservableObject {
         state = .idle
     }
 
+    func deleteDownloadedModel() throws {
+        cancel()
+        KokoroPaths.purgeLegacyModelFiles()
+        if FileManager.default.fileExists(atPath: KokoroPaths.modelURL.path) {
+            try FileManager.default.removeItem(at: KokoroPaths.modelURL)
+        }
+        state = .idle
+    }
+
     func download() async throws -> URL {
         // Drop any model file from earlier builds (e.g. .pth) before deciding readiness.
         KokoroPaths.purgeLegacyModelFiles()
