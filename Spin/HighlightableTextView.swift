@@ -85,6 +85,7 @@ struct HighlightableTextView: UIViewRepresentable {
     let onHighlightCreated: (String, Int, Int) -> Void
     let onHighlightRemoved: (UUID) -> Void
     let onPlaybackWordTapped: (Int) -> Void
+    let onEmptyTap: () -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -133,6 +134,7 @@ struct HighlightableTextView: UIViewRepresentable {
         c.onHighlightCreated = onHighlightCreated
         c.onHighlightRemoved = onHighlightRemoved
         c.onPlaybackWordTapped = onPlaybackWordTapped
+        c.onEmptyTap = onEmptyTap
         if c.isDragging { return }
         c.refreshDisplayText(in: tv)
     }
@@ -157,6 +159,7 @@ struct HighlightableTextView: UIViewRepresentable {
         var onHighlightCreated: ((String, Int, Int) -> Void)?
         var onHighlightRemoved: ((UUID) -> Void)?
         var onPlaybackWordTapped: ((Int) -> Void)?
+        var onEmptyTap: () -> Void = {}
         var isDragging = false
         private var dragStart: Int?
         private let cursorView = UIView()
@@ -389,6 +392,8 @@ struct HighlightableTextView: UIViewRepresentable {
                 onHighlightRemoved?(h.id)
                 return
             }
+
+            onEmptyTap()
         }
 
         private func wordRange(containingOrAdjacentTo index: Int) -> NSRange? {

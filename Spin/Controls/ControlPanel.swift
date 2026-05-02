@@ -67,6 +67,11 @@ struct ControlPanel: View {
         .padding(.top, isExpandedMode ? highlightModeTopPadding : normalTopPadding)
         .padding(.bottom, 28)
         .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(Color.white.opacity(0.001))
+                .onTapGesture {}
+        )
         .liquidGlass(in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .scaleEffect(isExpandedMode ? 1.0 : scaleWhenNormal)
         .offset(y: isExpandedMode ? offsetWhenHighlight : offsetWhenNormal)

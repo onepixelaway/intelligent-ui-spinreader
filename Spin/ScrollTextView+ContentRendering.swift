@@ -111,6 +111,7 @@ extension ScrollTextView {
         let onRemoved: (UUID) -> Void = { id in
             highlightStore.remove(id: id)
         }
+        let onSettingsEmptyTap: () -> Void = { toggleSettingsMode() }
         Group {
             if pendingHighlight != nil {
                 TimelineView(.animation) { timeline in
@@ -130,7 +131,8 @@ extension ScrollTextView {
                             startPlayback(
                                 at: PlaybackTextLocation(itemIndex: itemIndex, offset: offset)
                             )
-                        }
+                        },
+                        onEmptyTap: onSettingsEmptyTap
                     )
                 }
             } else {
@@ -150,7 +152,8 @@ extension ScrollTextView {
                         startPlayback(
                             at: PlaybackTextLocation(itemIndex: itemIndex, offset: offset)
                         )
-                    }
+                    },
+                    onEmptyTap: onSettingsEmptyTap
                 )
             }
         }

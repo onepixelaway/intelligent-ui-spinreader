@@ -13,11 +13,13 @@ struct ScrollTextView: View {
     @StateObject var scrollState = ScrollState()
     @StateObject var readerSettings = ReaderSettings()
     @StateObject var speechCoordinator = ReaderSpeechCoordinator()
-    @State private var showTopBar: Bool = true
+    @State var isSettingsMode: Bool = false
     @State var visibleParagraphs: [Int] = []
     @State var spinCount: Int = 0
     @State var lastAnalyzedText: String = ""
+    @State var lastTaggedText: String = ""
     @State var tags: [String] = []
+    @State var chapterTags: [String] = []
     @State var currentQuestion: String = ""
     @State var isLoadingQuestion: Bool = false
     @State private var explainerURL: IdentifiableURL?
@@ -86,9 +88,6 @@ struct ScrollTextView: View {
     // Editorial whitespace between the status bar/safe area and the first line of body text.
     private let editorialTopPadding: CGFloat = 6
     private let viewportTopOffset: CGFloat = 15
-    // Height of the top-bar black band when the nav buttons are showing. Covers status bar and
-    // the 44pt button row, preventing text from ghosting under the buttons.
-    private let topBarBandHeight: CGFloat = 50
     // Gap between the text viewport's bottom and the top of the control panel so no text sits
     // behind the liquid-glass material.
     private let viewportToPanelGap: CGFloat = 8
@@ -156,6 +155,12 @@ struct ScrollTextView: View {
                 : visiblePageHeight
             let viewportWidth = geometry.size.width
 
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    toggleSettingsMode()
+                }
+
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     ForEach(Array(items.enumerated()), id: \.offset) { index, item in
@@ -177,11 +182,17 @@ struct ScrollTextView: View {
                 )
                 .offset(y: scrollState.offset)
             }
+            .contentShape(Rectangle())
             .coordinateSpace(name: "scroll")
             .frame(width: viewportWidth, height: visiblePageHeight, alignment: .top)
             .clipped()
             .position(x: viewportWidth / 2, y: viewportTop + visiblePageHeight / 2)
+            .opacity(isSettingsMode ? 0.42 : 1)
             .scrollDisabled(true)
+            .onTapGesture {
+                toggleSettingsMode()
+            }
+            .animation(.easeInOut(duration: 0.2), value: isSettingsMode)
             .onPreferenceChange(ParagraphPositionKey.self) { positions in
                 let contentPositions = contentFrames(from: positions)
                 updateVisibleParagraphs(
@@ -249,13 +260,6 @@ struct ScrollTextView: View {
                     viewportWidth: Double(viewportWidth)
                 )
             }
-            .onChange(of: showTopBar) { _, _ in
-                recomputePageStartsWithCurrentFrames(
-                    viewportHeight: Double(viewportHeight),
-                    viewportWidth: Double(viewportWidth)
-                )
-            }
-
             let pageBoundaryMaskOverlap: CGFloat = 6
             let hiddenPageTop = max(0, visiblePageHeight - pageBoundaryMaskOverlap)
             let hiddenPageHeight = max(0, viewportHeight - hiddenPageTop)
@@ -302,7 +306,7 @@ struct ScrollTextView: View {
                         )
                         return
                     }
-                    hideTopBarIfNeeded()
+                    hideSettingsModeIfNeeded()
                     withAnimation(pageAnimation) {
                         scrollState.goToPreviousPage()
                     }
@@ -317,7 +321,7 @@ struct ScrollTextView: View {
                         )
                         return
                     }
-                    hideTopBarIfNeeded()
+                    hideSettingsModeIfNeeded()
                     if scrollState.isAtBottom {
                         advanceToNextChapter()
                         return
@@ -402,6 +406,18 @@ struct ScrollTextView: View {
                 }
             }
 
+            if showsBackButton {
+                settingsModeNavigationRow
+                    .padding(.horizontal, 34)
+                    .padding(.bottom, max(activePanelHeight, frozenPanelHeight) + panelBottomInset + 18)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .opacity(isSettingsMode ? 1 : 0)
+                    .scaleEffect(isSettingsMode ? 1 : 0.96)
+                    .allowsHitTesting(isSettingsMode)
+                    .animation(.spring(response: 0.24, dampingFraction: 0.9), value: isSettingsMode)
+                    .zIndex(4)
+            }
+
             if showPlaybackSpeedOverlay {
                 Color.black.opacity(0.35)
                     .ignoresSafeArea()
@@ -423,65 +439,6 @@ struct ScrollTextView: View {
                 .padding(.bottom, 18)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
                 .zIndex(10)
-            }
-
-            if showsBackButton {
-                Group {
-                    Color.black
-                        .frame(height: topBarBandHeight)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                        .ignoresSafeArea(edges: .top)
-                        .allowsHitTesting(false)
-
-                    Button {
-                        dismiss()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.55))
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .position(x: 30, y: 24)
-
-                    Button {
-                        showHighlightsList = true
-                    } label: {
-                        Image(systemName: "highlighter")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.55))
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .position(x: geometry.size.width - 74, y: 24)
-
-                    Button {
-                        showReaderSettings = true
-                    } label: {
-                        Image(systemName: "textformat.size")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundColor(.white.opacity(0.55))
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .position(x: geometry.size.width - 30, y: 24)
-                }
-                .opacity(showTopBar ? 1 : 0)
-                .allowsHitTesting(showTopBar)
-                .animation(.easeInOut(duration: 0.2), value: showTopBar)
-
-                if !showTopBar {
-                    Color.clear
-                        .frame(maxWidth: .infinity)
-                        .frame(height: geometry.size.height * 0.15)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                showTopBar = true
-                            }
-                        }
-                        .position(x: geometry.size.width / 2, y: geometry.size.height * 0.075)
-                }
             }
 
             if readerSettings.dimLevel > 0 {
@@ -531,7 +488,7 @@ struct ScrollTextView: View {
         }
         .background(Color.black)
         .portraitOnly()
-        .statusBar(hidden: !showTopBar)
+        .statusBar(hidden: true)
         .gesture(
             DragGesture(minimumDistance: 20, coordinateSpace: .global)
                 .onEnded { value in
@@ -611,6 +568,9 @@ struct ScrollTextView: View {
         .onDisappear {
             speechCoordinator.stop()
         }
+        .onAppear {
+            seedChapterTags()
+        }
         .overlay(alignment: .bottom) {
             if let footnote = activeFootnote {
                 FootnoteOverlay(text: footnote) {
@@ -628,10 +588,43 @@ struct ScrollTextView: View {
         explainerURL = IdentifiableURL(url: url)
     }
 
-    private func hideTopBarIfNeeded() {
-        guard showTopBar else { return }
+    private var settingsModeNavigationRow: some View {
+        HStack(spacing: 12) {
+            FloatingSettingsButton(
+                systemImage: "house.fill",
+                accessibilityLabel: "Home"
+            ) {
+                dismiss()
+            }
+
+            Spacer(minLength: 0)
+
+            FloatingSettingsButton(
+                systemImage: "highlighter",
+                accessibilityLabel: "Highlights"
+            ) {
+                showHighlightsList = true
+            }
+
+            FloatingSettingsButton(
+                systemImage: "textformat.size",
+                accessibilityLabel: "Text settings"
+            ) {
+                showReaderSettings = true
+            }
+        }
+    }
+
+    func toggleSettingsMode() {
         withAnimation(.easeInOut(duration: 0.2)) {
-            showTopBar = false
+            isSettingsMode.toggle()
+        }
+    }
+
+    private func hideSettingsModeIfNeeded() {
+        guard isSettingsMode else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isSettingsMode = false
         }
     }
 
@@ -712,6 +705,7 @@ struct ScrollTextView: View {
             .sorted()
         if newVisible != visibleParagraphs {
             visibleParagraphs = newVisible
+            updateTagsForVisibleParagraphs(newVisible)
         }
     }
 
@@ -721,7 +715,7 @@ struct ScrollTextView: View {
             return
         }
 
-        hideTopBarIfNeeded()
+        hideSettingsModeIfNeeded()
         withAnimation(pageAnimation) {
             scrollState.goToContentOffset(offset)
         }
@@ -729,6 +723,29 @@ struct ScrollTextView: View {
 
     func startPlayback(at location: PlaybackTextLocation) {
         speechCoordinator.start(segments: playbackSegments(startingAt: location))
+    }
+}
+
+private struct FloatingSettingsButton: View {
+    let systemImage: String
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundColor(.white.opacity(0.7))
+                .frame(width: 46, height: 46)
+                .liquidGlass(in: Circle(), tint: Color.black.opacity(0.58))
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                )
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
     }
 }
 

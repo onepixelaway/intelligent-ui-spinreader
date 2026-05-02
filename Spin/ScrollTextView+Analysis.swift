@@ -9,11 +9,7 @@ extension ScrollTextView {
     }
 
     func visibleTextOnScreen() -> String {
-        visibleParagraphs
-            .compactMap { items.indices.contains($0) ? textForAnalysis(items[$0]) : nil }
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .joined(separator: " ")
+        textForAnalysis(indices: visibleParagraphs)
     }
 
     func openPerplexity(for action: PerplexityAction) {
@@ -53,18 +49,26 @@ extension ScrollTextView {
     }
 
     func analyzeVisibleText(_ text: String) async {
-        let extracted = extractEntities(from: text)
+        let extracted = extractTagCandidates(from: text)
         guard !Task.isCancelled else { return }
 
         await MainActor.run {
-            var merged = tags
-            for entity in extracted where !merged.contains(entity) {
-                if merged.count < maxTags {
-                    merged.append(entity)
-                }
-            }
-            tags = Array(merged.prefix(maxTags))
+            tags = mergedTags(primary: extracted, fallback: chapterTags, limit: maxTags)
         }
+    }
+
+    func seedChapterTags() {
+        let candidates = extractTagCandidates(from: currentChapterTextForAnalysis(), limit: maxTags * 3)
+        chapterTags = candidates
+        tags = mergedTags(primary: tags, fallback: candidates, limit: maxTags)
+    }
+
+    func updateTagsForVisibleParagraphs(_ indices: [Int]) {
+        let visibleText = textForAnalysis(indices: indices)
+        guard !visibleText.isEmpty, visibleText != lastTaggedText else { return }
+        lastTaggedText = visibleText
+        let visibleTags = extractTagCandidates(from: visibleText, limit: maxTags)
+        tags = mergedTags(primary: visibleTags, fallback: chapterTags, limit: maxTags)
     }
 
     func extractEntities(from text: String) -> [String] {
@@ -93,6 +97,107 @@ extension ScrollTextView {
         return entities
     }
 
+    func extractTagCandidates(from text: String, limit: Int? = nil) -> [String] {
+        let limit = limit ?? maxTags
+        let entities = extractEntities(from: text)
+        let entityTags = mergedTags(primary: entities, fallback: [], limit: limit)
+        guard entityTags.count < limit else { return entityTags }
+
+        let keywords = extractKeywords(from: text)
+        return mergedTags(primary: entities, fallback: keywords, limit: limit)
+    }
+
+    func extractKeywords(from text: String) -> [String] {
+        let tagger = NLTagger(tagSchemes: [.lexicalClass])
+        tagger.string = text
+
+        var counts: [String: Int] = [:]
+        var displayText: [String: String] = [:]
+        let options: NLTagger.Options = [.omitPunctuation, .omitWhitespace]
+
+        tagger.enumerateTags(
+            in: text.startIndex..<text.endIndex,
+            unit: .word,
+            scheme: .lexicalClass,
+            options: options
+        ) { tag, tokenRange in
+            guard tag == .noun else { return true }
+            let token = String(text[tokenRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalized = normalizedTag(token)
+            guard isUsefulKeyword(normalized) else { return true }
+
+            counts[normalized, default: 0] += 1
+            displayText[normalized] = displayText[normalized] ?? displayTag(for: token)
+            return true
+        }
+
+        return counts
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key < rhs.key
+            }
+            .compactMap { displayText[$0.key] }
+    }
+
+    func mergedTags(primary: [String], fallback: [String], limit: Int) -> [String] {
+        var seen = Set<String>()
+        var merged: [String] = []
+        for tag in primary + fallback {
+            let display = displayTag(for: tag)
+            let normalized = normalizedTag(display)
+            guard isUsefulKeyword(normalized), seen.insert(normalized).inserted else { continue }
+            merged.append(display)
+            if merged.count == limit { break }
+        }
+        return merged
+    }
+
+    func displayTag(for tag: String) -> String {
+        let trimmed = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+        if trimmed.contains(where: { $0.isUppercase }) { return trimmed }
+        return trimmed.prefix(1).uppercased() + String(trimmed.dropFirst())
+    }
+
+    func normalizedTag(_ tag: String) -> String {
+        tag
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    func isUsefulKeyword(_ normalized: String) -> Bool {
+        guard normalized.count >= 4 else { return false }
+        return !Self.tagStopwords.contains(normalized)
+    }
+
+    func currentChapterTextForAnalysis() -> String {
+        guard chapters.indices.contains(chapterIndex) else {
+            return items.map(textForAnalysis).joined(separator: " ")
+        }
+        let chapter = chapters[chapterIndex]
+        return ([chapter.title] + chapter.items.map(textForAnalysis))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    func textForAnalysis(indices: [Int]) -> String {
+        indices
+            .compactMap { items.indices.contains($0) ? textForAnalysis(items[$0]) : nil }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    private static let tagStopwords: Set<String> = [
+        "about", "above", "after", "again", "against", "also", "another", "because", "before",
+        "being", "between", "chapter", "could", "every", "from", "have", "into", "itself",
+        "more", "most", "other", "over", "page", "pages", "part", "same", "some", "such",
+        "than", "that", "their", "them", "then", "there", "these", "they", "this", "those",
+        "through", "under", "very", "were", "what", "when", "where", "which", "while",
+        "with", "would", "your"
+    ]
+
     func performOpenAIQuery(for text: String) async {
         let key = Config.openAIKey
         guard !key.isEmpty else {
@@ -110,9 +215,7 @@ extension ScrollTextView {
             if let message = ChatQuery.ChatCompletionMessageParam(role: .user, content: prompt) {
                 let query = ChatQuery(messages: [message], model: .gpt3_5Turbo)
                 let result = try await openAI.chats(query: query)
-                if let s = result.choices.first?.message.content {
-                    questionText = s
-                }
+                questionText = result.choices.first?.message.content?.string
             }
         } catch is CancellationError {
         } catch {

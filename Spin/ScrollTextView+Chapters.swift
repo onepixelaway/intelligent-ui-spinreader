@@ -45,8 +45,11 @@ extension ScrollTextView {
         itemContentIDs.append(contentsOf: Self.itemContentIDs(for: newItems, chapterContentID: newContentID))
 
         tags = []
+        chapterTags = []
         currentQuestion = ""
         lastAnalyzedText = ""
+        lastTaggedText = ""
         spinCount = 0
+        seedChapterTags()
     }
 }

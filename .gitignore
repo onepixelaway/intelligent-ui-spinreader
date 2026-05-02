@@ -26,3 +26,6 @@ Secrets.xcconfig
 Secrets.plist
 .env
 Sources/Info.plist
+
+# Claude / local tooling
+.claude/
