@@ -88,4 +88,23 @@ struct SpinTests {
         #expect(target == 1)
     }
 
+    @MainActor
+    @Test func highlightPageChangeWaitsUntilHighlightStartsOnNextPage() {
+        let state = ScrollState()
+        state.setPageStarts([0, 96, 220])
+
+        #expect(state.pageChangeForContentStart(at: 80, movingForward: true) == nil)
+        #expect(state.pageChangeForContentStart(at: 96, movingForward: true) == 1)
+    }
+
+    @MainActor
+    @Test func highlightPageChangeDoesNotUseTransientOffsets() {
+        let state = ScrollState()
+        state.setPageStarts([0, 96, 220])
+        state.goToPage(1)
+
+        #expect(state.pageChangeForContentStart(at: 140, movingForward: false) == nil)
+        #expect(state.pageChangeForContentStart(at: 80, movingForward: false) == 0)
+    }
+
 }

@@ -76,6 +76,21 @@ final class ScrollState: ObservableObject {
         return min(best, pageStarts.count - 1)
     }
 
+    // Returns the page that content-space y belongs to, but only if it differs from
+    // currentPage in the requested direction. Returns nil when no page change is needed.
+    //
+    // Callers should supply a y value produced by paginationAlignedLineMinY (which uses
+    // Paginator.measureLines with the same inputs as recomputePageStarts). Using y values
+    // from any other layout measurement risks sub-point drift that causes this to return nil
+    // for content right at a page boundary.
+    func pageChangeForContentStart(at y: Double, movingForward: Bool) -> Int? {
+        let targetPage = pageContaining(y: y)
+        if movingForward {
+            return targetPage > currentPage ? targetPage : nil
+        }
+        return targetPage < currentPage ? targetPage : nil
+    }
+
     func forwardPlaybackTargetPage(
         for rect: CGRect,
         viewportHeight: Double,

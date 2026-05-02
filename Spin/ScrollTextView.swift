@@ -710,14 +710,14 @@ struct ScrollTextView: View {
     }
 
     private func handleAutoHighlightUpdate(_ update: AutoHighlightUpdate) {
-        guard case .changed(let targetOffset) = update,
-              let offset = targetOffset else {
+        guard case .changed(let targetPage) = update,
+              let page = targetPage else {
             return
         }
 
         hideSettingsModeIfNeeded()
         withAnimation(pageAnimation) {
-            scrollState.goToContentOffset(offset)
+            scrollState.goToPage(page)
         }
     }
 

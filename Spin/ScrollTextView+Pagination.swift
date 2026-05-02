@@ -51,7 +51,11 @@ extension ScrollTextView {
         scrollState.setPageStarts(starts)
     }
 
-    private func paginationTextWidth(for item: ReadableItem, viewportWidth: Double) -> Double {
+    // SHARED WITH HIGHLIGHT NAVIGATION: paginationAlignedLineMinY in ScrollTextView+Highlights
+    // calls this to produce line y-offsets that match pageStarts exactly. If you change the
+    // width calculation here, the same change must hold for the highlight paging path too,
+    // otherwise sentences at a page boundary will fail to trigger a page flip.
+    func paginationTextWidth(for item: ReadableItem, viewportWidth: Double) -> Double {
         let itemWidth = viewportWidth - 2 * Double(horizontalPadding(for: item))
         switch item {
         case .blockquote:

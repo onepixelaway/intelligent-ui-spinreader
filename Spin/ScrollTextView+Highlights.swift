@@ -12,7 +12,7 @@ extension ScrollTextView {
 
     enum AutoHighlightUpdate {
         case none
-        case changed(targetOffset: Double?)
+        case changed(targetPage: Int?)
     }
 
     private struct HighlightContext {
@@ -25,7 +25,7 @@ extension ScrollTextView {
 
     private struct HighlightTarget {
         let selection: AutoHighlightSelection
-        let targetOffset: Double?
+        let targetPage: Int?
     }
 
     private enum HighlightNavigationDirection {
@@ -74,7 +74,7 @@ extension ScrollTextView {
 
         guard let target else { return .none }
         autoHighlightSelection = target.selection
-        return .changed(targetOffset: target.targetOffset)
+        return .changed(targetPage: target.targetPage)
     }
 
     func previousHighlightForTopVisibleParagraph(
@@ -93,7 +93,7 @@ extension ScrollTextView {
 
         guard let target = previousAutoHighlightTarget(viewport: viewport) else { return .none }
         autoHighlightSelection = target.selection
-        return .changed(targetOffset: target.targetOffset)
+        return .changed(targetPage: target.targetPage)
     }
 
     func updatePendingHighlightColor(_ color: HighlightColorChoice) {
@@ -357,10 +357,15 @@ extension ScrollTextView {
             color: currentHighlightColorRaw,
             emoji: currentHighlightEmojiRaw
         )
-        let rectForPaging = highlightRect(for: sentenceRange, in: ctx) ?? contentFrame(for: ctx.index)
-        let targetOffset = targetOffsetForOffscreenHighlight(
-            for: rectForPaging,
-            viewport: viewport,
+        // Use the paginator-aligned y first. The fallbacks keep older whole-item behavior working,
+        // but they are not precise enough to decide split-paragraph page flips.
+        let startYForPaging = pagingStartYForHighlight(
+            for: combinedRange,
+            itemIndex: ctx.index,
+            text: nsText
+        ) ?? highlightRect(for: sentenceRange, in: ctx)?.minY ?? contentFrame(for: ctx.index)?.minY
+        let targetPage = targetPageForHighlightStart(
+            at: startYForPaging,
             direction: direction
         )
         return HighlightTarget(
@@ -369,7 +374,7 @@ extension ScrollTextView {
                 sentenceRange: sentenceRange,
                 highlight: highlight
             ),
-            targetOffset: targetOffset
+            targetPage: targetPage
         )
     }
 
@@ -388,56 +393,82 @@ extension ScrollTextView {
             color: currentHighlightColorRaw,
             emoji: currentHighlightEmojiRaw
         )
-        let targetOffset = targetOffsetForOffscreenHighlight(
-            for: contentFrame(for: ctx.index),
-            viewport: viewport,
-            direction: direction
-        )
+        let targetPage = targetPageForHighlightStart(at: contentFrame(for: ctx.index)?.minY, direction: direction)
         return HighlightTarget(
             selection: AutoHighlightSelection(itemIndex: ctx.index, sentenceRange: nil, highlight: highlight),
-            targetOffset: targetOffset
+            targetPage: targetPage
         )
     }
 
-    // Highlight paging is intentionally based on the selected highlight's content-space rect,
-    // not on transient view frames. If cycling lands on a highlight that is not fully visible,
-    // move to the page that can show it.
-    private func targetOffsetForOffscreenHighlight(
-        for rect: CGRect?,
-        viewport: CGRect,
+    // Highlight cycling flips pages only when the selected highlight starts on another
+    // page, never just because it is below the smaller highlight-mode panel viewport.
+    // For sentence highlights, `startY` must come from paginationAlignedLineMinY so it
+    // uses the same line measurements as pageStarts; fresh layout measurements can drift
+    // by a fraction of a point and miss split-paragraph page boundaries.
+    private func targetPageForHighlightStart(
+        at startY: CGFloat?,
         direction: HighlightNavigationDirection
-    ) -> Double? {
-        guard let rect else { return nil }
-        let epsilon: CGFloat = 0.5
+    ) -> Int? {
+        guard let startY else { return nil }
 
         switch direction {
         case .none:
             return nil
         case .previous:
-            guard rect.maxY <= viewport.minY + epsilon else { return nil }
-            return contentOffsetShowing(rect, moving: .previous, viewportHeight: viewport.height)
+            return scrollState.pageChangeForContentStart(at: Double(startY), movingForward: false)
         case .next:
-            guard rect.maxY > viewport.maxY - epsilon else { return nil }
-            return contentOffsetShowing(rect, moving: .next, viewportHeight: viewport.height)
+            return scrollState.pageChangeForContentStart(at: Double(startY), movingForward: true)
         }
     }
 
-    private func contentOffsetShowing(
-        _ rect: CGRect,
-        moving direction: HighlightNavigationDirection,
-        viewportHeight: CGFloat
-    ) -> Double? {
-        guard viewportHeight > 0 else { return nil }
-        let idealY: CGFloat
-        switch direction {
-        case .none:
-            return nil
-        case .next:
-            idealY = rect.minY
-        case .previous:
-            idealY = rect.height <= viewportHeight ? rect.minY : rect.maxY - viewportHeight
-        }
-        return Double(max(0, idealY))
+    // Content-space y for the first non-whitespace character, aligned with pageStarts.
+    private func pagingStartYForHighlight(
+        for range: NSRange,
+        itemIndex: Int,
+        text: NSString
+    ) -> CGFloat? {
+        guard range.location >= 0,
+              range.length > 0,
+              NSMaxRange(range) <= text.length else { return nil }
+
+        let firstText = text.rangeOfCharacter(
+            from: CharacterSet.whitespacesAndNewlines.inverted,
+            options: [],
+            range: range
+        )
+        let start = firstText.location == NSNotFound ? range.location : firstText.location
+        guard start < NSMaxRange(range) else { return nil }
+
+        return paginationAlignedLineMinY(containingCharacterAt: start, itemIndex: itemIndex)
+    }
+
+    // MUST use paginationAttributedText + paginationTextWidth + Paginator.measureLines —
+    // the same pipeline used by recomputePageStarts(). Do not replace this with
+    // textLayoutContext or render-time widths; tiny y drift breaks mid-paragraph page flips.
+    private func paginationAlignedLineMinY(containingCharacterAt characterIndex: Int, itemIndex: Int) -> CGFloat? {
+        guard items.indices.contains(itemIndex),
+              let frame = contentFrame(for: itemIndex),
+              frame.height > 0,
+              lastPaginationViewportWidth > 0 else { return nil }
+        let item = items[itemIndex]
+        guard let attributed = paginationAttributedText(for: item) else { return nil }
+        guard characterIndex >= 0, characterIndex < attributed.length else { return nil }
+
+        let width = paginationTextWidth(for: item, viewportWidth: lastPaginationViewportWidth)
+        let lines = Paginator.measureLines(for: attributed, width: width)
+        guard !lines.isEmpty else { return nil }
+
+        // Measure how many lines the prefix [0..<characterIndex+1] produces;
+        // the last line of that prefix is the line containing the character.
+        let prefixLength = min(characterIndex + 1, attributed.length)
+        let prefixLines = Paginator.measureLines(
+            for: attributed.attributedSubstring(from: NSRange(location: 0, length: prefixLength)),
+            width: width
+        )
+        let lineIndex = max(0, min(prefixLines.count - 1, lines.count - 1))
+        let line = lines[lineIndex]
+
+        return frame.minY + CGFloat(line.minY)
     }
 
     private func textLayoutContext(for itemIndex: Int, viewport: CGRect) -> TextLayoutContext? {
