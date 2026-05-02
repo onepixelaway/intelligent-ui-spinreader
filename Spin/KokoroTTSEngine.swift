@@ -103,14 +103,17 @@ final class KokoroTTSEngine: ObservableObject {
     private var session: KokoroSession?
     private let audioEngine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
+    private let timePitch = AVAudioUnitTimePitch()
     private var didConnectPlayer = false
     // True when the user has paused playback. While paused, scheduleBuffer must not
     // trigger an implicit play() — otherwise queueing a pre-generated next-sentence
     // buffer would silently un-pause the player.
     private var playerIsPaused = false
+    private var playbackSpeed: Float = 1.0
 
     private init() {
         audioEngine.attach(playerNode)
+        audioEngine.attach(timePitch)
     }
 
     var isReady: Bool { isLoaded && session != nil }
@@ -196,7 +199,10 @@ final class KokoroTTSEngine: ObservableObject {
         }
 
         if !didConnectPlayer {
-            audioEngine.connect(playerNode, to: audioEngine.mainMixerNode, format: format)
+            timePitch.rate = playbackSpeed
+            timePitch.pitch = 0
+            audioEngine.connect(playerNode, to: timePitch, format: format)
+            audioEngine.connect(timePitch, to: audioEngine.mainMixerNode, format: format)
             didConnectPlayer = true
         }
         if !audioEngine.isRunning {
@@ -228,6 +234,11 @@ final class KokoroTTSEngine: ObservableObject {
         if audioEngine.isRunning && !playerNode.isPlaying {
             playerNode.play()
         }
+    }
+
+    func setPlaybackSpeed(_ speed: Double) {
+        playbackSpeed = Float(PlaybackSpeedPreference.clamped(speed))
+        timePitch.rate = playbackSpeed
     }
 
     func stop() {

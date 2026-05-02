@@ -5,6 +5,8 @@ struct CircularReaderButton: View {
     let accessibilityLabel: String
     var isLoading: Bool = false
     var isDisabled: Bool = false
+    var showsAudioActivity: Bool = false
+    var audioActivityLevel: Double = 0
     let action: () -> Void
 
     private let borderColor = Color.white.opacity(0.08)
@@ -12,6 +14,10 @@ struct CircularReaderButton: View {
     var body: some View {
         Button(action: action) {
             ZStack {
+                if showsAudioActivity {
+                    AudioActivityBars(level: audioActivityLevel)
+                }
+
                 if isLoading {
                     ProgressView()
                         .progressViewStyle(.circular)
@@ -33,6 +39,27 @@ struct CircularReaderButton: View {
         .buttonStyle(CircularReaderButtonStyle())
         .disabled(isDisabled || isLoading)
         .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct AudioActivityBars: View {
+    let level: Double
+    private let multipliers: [Double] = [0.28, 0.55, 0.95, 0.7, 1.0, 0.62, 0.32]
+
+    var body: some View {
+        let normalized = min(max(level, 0), 1)
+        HStack(alignment: .bottom, spacing: 3) {
+            ForEach(Array(multipliers.enumerated()), id: \.offset) { _, multiplier in
+                let height = 5 + normalized * multiplier * 31
+                Capsule()
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 3, height: height)
+            }
+        }
+        .frame(width: 48, height: 42, alignment: .bottom)
+        .offset(y: 7)
+        .allowsHitTesting(false)
+        .animation(.linear(duration: 0.055), value: level)
     }
 }
 

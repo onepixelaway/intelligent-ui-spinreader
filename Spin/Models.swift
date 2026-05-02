@@ -96,16 +96,34 @@ enum KokoroPreparationState: Equatable {
     var isPresenting: Bool { self != .idle }
 }
 
+enum PlaybackSpeedPreference {
+    static let key = "playback.speed"
+    static let defaultValue = 1.0
+    static let presets: [Double] = [0.5, 0.75, 1.0, 1.5, 2.0]
+
+    static func clamped(_ value: Double) -> Double {
+        min(max(value, 0.5), 4.0)
+    }
+
+    static func label(for value: Double) -> String {
+        String(format: "%.1fx", value)
+    }
+}
+
 @MainActor
 final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency AVSpeechSynthesizerDelegate {
     @Published private(set) var isSpeaking = false
     @Published private(set) var isPaused = false
     @Published private(set) var isPreparingPlayback = false
     @Published private(set) var highlight: PlaybackTextHighlight?
+    @Published private(set) var playbackSpeed: Double
+    @Published private(set) var playbackLevel: Double = 0
     @Published var kokoroPreparation: KokoroPreparationState = .idle
 
     private let synthesizer = AVSpeechSynthesizer()
     private var pendingSegments: [PlaybackTextSegment] = []
+    private var playbackSegmentsSnapshot: [PlaybackTextSegment] = []
+    private var activeSegmentIndex: Int?
     private var activeSegment: PlaybackTextSegment?
     private var downloadProgressObserver: AnyCancellable?
 
@@ -114,14 +132,17 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
     // as they're ready, so playback is seamless and the engine never goes idle.
     private static let kokoroLookahead = 2
     private struct KokoroQueuedItem {
+        let index: Int
         let segment: PlaybackTextSegment
         let timings: [KokoroTokenTiming]
+        let audioLevels: [Float]
     }
     private var kokoroPipelineTask: Task<Void, Never>?
     private var kokoroScheduled: [KokoroQueuedItem] = []
     // Word-level highlight scheduling for Kokoro. KokoroSwift returns per-token
     // start/end timestamps; we sleep relative to segment start to fire each one.
     private var kokoroWordHighlightTask: Task<Void, Never>?
+    private var kokoroAudioLevelTask: Task<Void, Never>?
     private var kokoroSegmentStartedAt: Date?
     private var kokoroPausedElapsed: TimeInterval?
 
@@ -142,9 +163,12 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
     }
 
     override init() {
+        let savedSpeed = UserDefaults.standard.object(forKey: PlaybackSpeedPreference.key) as? Double
+        self.playbackSpeed = PlaybackSpeedPreference.clamped(savedSpeed ?? PlaybackSpeedPreference.defaultValue)
         super.init()
         synthesizer.delegate = self
         configureAudioSession()
+        KokoroTTSEngine.shared.setPlaybackSpeed(playbackSpeed)
     }
 
     private func configureAudioSession() {
@@ -156,9 +180,12 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
     func start(segments: [PlaybackTextSegment]) {
         stop(clearHighlight: true)
         guard !segments.isEmpty else { return }
+        playbackSegmentsSnapshot = segments
+        activeSegmentIndex = nil
         pendingSegments = segments
         switch currentProvider {
         case .apple:
+            playbackLevel = 0.45
             speakNextAppleSegment()
         case .kokoro:
             startKokoroFlow()
@@ -179,6 +206,21 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         start(segments: segments)
     }
 
+    func setPlaybackSpeed(_ speed: Double) {
+        let clamped = PlaybackSpeedPreference.clamped(speed)
+        playbackSpeed = clamped
+        UserDefaults.standard.set(clamped, forKey: PlaybackSpeedPreference.key)
+        KokoroTTSEngine.shared.setPlaybackSpeed(clamped)
+    }
+
+    func skipBackward15Seconds() {
+        skipPlayback(seconds: -15)
+    }
+
+    func skipForward15Seconds() {
+        skipPlayback(seconds: 15)
+    }
+
     func pause() {
         guard isSpeaking else { return }
         switch currentProvider {
@@ -186,15 +228,18 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             if synthesizer.pauseSpeaking(at: .word) {
                 isSpeaking = false
                 isPaused = true
+                playbackLevel = 0
             }
         case .kokoro:
             if let started = kokoroSegmentStartedAt {
                 kokoroPausedElapsed = Date().timeIntervalSince(started)
             }
             cancelKokoroWordHighlightTask()
+            cancelKokoroAudioLevelTask()
             KokoroTTSEngine.shared.pause()
             isSpeaking = false
             isPaused = true
+            playbackLevel = 0
         }
     }
 
@@ -205,6 +250,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             if synthesizer.continueSpeaking() {
                 isSpeaking = true
                 isPaused = false
+                playbackLevel = 0.45
             }
         case .kokoro:
             KokoroTTSEngine.shared.resume()
@@ -220,6 +266,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
                     segment: active.segment,
                     fromOffset: pausedElapsed
                 )
+                scheduleKokoroAudioLevels(active.audioLevels, fromOffset: pausedElapsed)
             }
             kokoroPausedElapsed = nil
         }
@@ -230,6 +277,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         synthesizer.stopSpeaking(at: .immediate)
         KokoroTTSEngine.shared.stop()
         isPreparingPlayback = false
+        playbackLevel = 0
         isSpeaking = false
         isPaused = false
         if clearHighlight {
@@ -237,15 +285,82 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         }
     }
 
+    private func skipPlayback(seconds: TimeInterval) {
+        guard !playbackSegmentsSnapshot.isEmpty,
+              let activeSegmentIndex else { return }
+        let targetIndex = indexForSkipping(
+            from: activeSegmentIndex,
+            seconds: seconds,
+            segments: playbackSegmentsSnapshot
+        )
+        restartPlayback(at: targetIndex)
+    }
+
+    private func restartPlayback(at index: Int) {
+        let segments = playbackSegmentsSnapshot
+        guard segments.indices.contains(index) else { return }
+
+        stop(clearHighlight: true)
+        playbackSegmentsSnapshot = segments
+        activeSegmentIndex = nil
+        pendingSegments = Array(segments[index...])
+
+        switch currentProvider {
+        case .apple:
+            speakNextAppleSegment()
+        case .kokoro:
+            startKokoroFlow()
+        }
+    }
+
+    private func indexForSkipping(
+        from index: Int,
+        seconds: TimeInterval,
+        segments: [PlaybackTextSegment]
+    ) -> Int {
+        guard seconds != 0, segments.indices.contains(index) else { return index }
+        let targetDuration = abs(seconds)
+
+        if seconds > 0 {
+            var accumulated: TimeInterval = 0
+            var candidate = index
+            while candidate < segments.count - 1, accumulated < targetDuration {
+                accumulated += estimatedDuration(for: segments[candidate])
+                candidate += 1
+            }
+            return candidate
+        }
+
+        var accumulated: TimeInterval = 0
+        var candidate = index
+        while candidate > 0, accumulated < targetDuration {
+            candidate -= 1
+            accumulated += estimatedDuration(for: segments[candidate])
+        }
+        return candidate
+    }
+
+    private func estimatedDuration(for segment: PlaybackTextSegment) -> TimeInterval {
+        let words = segment.utteranceText
+            .split { $0.isWhitespace || $0.isNewline }
+            .count
+        let wordsPerSecond = 2.55 * max(0.5, playbackSpeed)
+        return max(1.0, Double(max(words, 1)) / wordsPerSecond)
+    }
+
     private func resetKokoroPlaybackState() {
         kokoroPipelineTask?.cancel()
         kokoroPipelineTask = nil
         cancelKokoroWordHighlightTask()
+        cancelKokoroAudioLevelTask()
         kokoroSegmentStartedAt = nil
         kokoroPausedElapsed = nil
         kokoroScheduled.removeAll()
         pendingSegments.removeAll()
+        playbackSegmentsSnapshot.removeAll()
+        activeSegmentIndex = nil
         activeSegment = nil
+        playbackLevel = 0
     }
 
     // MARK: - Apple path
@@ -255,11 +370,14 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             activeSegment = nil
             isSpeaking = false
             isPaused = false
+            playbackLevel = 0
             highlight = nil
             return
         }
 
+        let nextIndex = playbackSegmentsSnapshot.count - pendingSegments.count
         let segment = pendingSegments.removeFirst()
+        activeSegmentIndex = nextIndex
         activeSegment = segment
         isSpeaking = true
         isPaused = false
@@ -271,7 +389,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
 
         let utterance = AVSpeechUtterance(string: segment.utteranceText)
         utterance.voice = preferredVoice ?? AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode())
-        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * 0.95
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(0.95 * playbackSpeed)
         utterance.pitchMultiplier = 1.0
         utterance.volume = 1.0
         synthesizer.speak(utterance)
@@ -403,6 +521,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
                 if Task.isCancelled { return }
                 guard !self.pendingSegments.isEmpty else { return }
 
+                let segmentIndex = self.playbackSegmentsSnapshot.count - self.pendingSegments.count
                 let segment = self.pendingSegments.removeFirst()
                 let preview = String(segment.utteranceText.prefix(40))
                 print("[Coordinator] kokoro pre-generating: \"\(preview)…\" (queued=\(self.kokoroScheduled.count))")
@@ -415,7 +534,12 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
                     try Task.checkCancellation()
                     guard self.isSpeaking || self.isPaused else { return }
 
-                    let queued = KokoroQueuedItem(segment: segment, timings: timings)
+                    let queued = KokoroQueuedItem(
+                        index: segmentIndex,
+                        segment: segment,
+                        timings: timings,
+                        audioLevels: Self.audioLevels(for: samples)
+                    )
                     let isFirstQueued = self.kokoroScheduled.isEmpty
                     self.kokoroScheduled.append(queued)
                     if isFirstQueued {
@@ -451,11 +575,13 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             // No buffers playing and nothing left to generate — pipeline drained.
             print("[Coordinator] kokoro pipeline drained")
             cancelKokoroWordHighlightTask()
+            cancelKokoroAudioLevelTask()
             kokoroSegmentStartedAt = nil
             kokoroPausedElapsed = nil
             activeSegment = nil
             isSpeaking = false
             isPaused = false
+            playbackLevel = 0
             highlight = nil
         }
         // Otherwise: producer is still working on the next buffer (rare underrun).
@@ -463,6 +589,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
     }
 
     private func applyKokoroHighlight(for queued: KokoroQueuedItem) {
+        activeSegmentIndex = queued.index
         activeSegment = queued.segment
         highlight = PlaybackTextHighlight(
             itemIndex: queued.segment.itemIndex,
@@ -470,9 +597,11 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             wordRange: nil
         )
         cancelKokoroWordHighlightTask()
+        cancelKokoroAudioLevelTask()
         kokoroSegmentStartedAt = Date()
         kokoroPausedElapsed = nil
         scheduleKokoroWordHighlights(timings: queued.timings, segment: queued.segment, fromOffset: 0)
+        scheduleKokoroAudioLevels(queued.audioLevels, fromOffset: 0)
     }
 
     private func scheduleKokoroWordHighlights(
@@ -486,10 +615,11 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         let utteranceStartOffset = segment.utteranceStartOffset
         let sentenceRange = segment.sentenceRange
         let itemIndex = segment.itemIndex
+        let speed = max(0.5, playbackSpeed)
 
         kokoroWordHighlightTask = Task { @MainActor [weak self] in
             for timing in upcoming {
-                let target = segmentStart.addingTimeInterval(timing.startTime)
+                let target = segmentStart.addingTimeInterval(timing.startTime / speed)
                 let waitSeconds = target.timeIntervalSince(Date())
                 if waitSeconds > 0 {
                     try? await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
@@ -516,6 +646,60 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
     private func cancelKokoroWordHighlightTask() {
         kokoroWordHighlightTask?.cancel()
         kokoroWordHighlightTask = nil
+    }
+
+    private func scheduleKokoroAudioLevels(_ levels: [Float], fromOffset offset: TimeInterval) {
+        guard !levels.isEmpty,
+              let segmentStart = kokoroSegmentStartedAt else {
+            playbackLevel = 0
+            return
+        }
+
+        let speed = max(0.5, playbackSpeed)
+        let sampleInterval: TimeInterval = 0.05
+        let startIndex = min(levels.count - 1, max(0, Int((offset / sampleInterval).rounded(.down))))
+
+        kokoroAudioLevelTask = Task { @MainActor [weak self] in
+            for index in startIndex..<levels.count {
+                let target = segmentStart.addingTimeInterval((Double(index) * sampleInterval) / speed)
+                let waitSeconds = target.timeIntervalSince(Date())
+                if waitSeconds > 0 {
+                    try? await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
+                }
+                if Task.isCancelled { return }
+                let next = Double(levels[index])
+                if self?.playbackLevel != next {
+                    self?.playbackLevel = next
+                }
+            }
+        }
+    }
+
+    private func cancelKokoroAudioLevelTask() {
+        kokoroAudioLevelTask?.cancel()
+        kokoroAudioLevelTask = nil
+    }
+
+    private static func audioLevels(for samples: [Float]) -> [Float] {
+        guard !samples.isEmpty else { return [] }
+        let sampleRate = 24_000
+        let windowSize = max(1, sampleRate / 20)
+        var levels: [Float] = []
+        levels.reserveCapacity((samples.count / windowSize) + 1)
+
+        var index = 0
+        while index < samples.count {
+            let end = min(samples.count, index + windowSize)
+            var sum: Float = 0
+            for sample in samples[index..<end] {
+                sum += sample * sample
+            }
+            let rms = sqrt(sum / Float(max(1, end - index)))
+            levels.append(min(1, rms * 8))
+            index = end
+        }
+
+        return levels
     }
 
     // MARK: - AVSpeechSynthesizerDelegate

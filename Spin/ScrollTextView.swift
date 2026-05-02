@@ -24,6 +24,7 @@ struct ScrollTextView: View {
     @State var analysisTask: Task<Void, Never>?
     @State private var showReaderSettings: Bool = false
     @State private var showHighlightsList: Bool = false
+    @State private var showPlaybackSpeedOverlay: Bool = false
     @State var debugPlaybackPagingStatus: String = "idle"
     @State var activeFootnote: String? = nil
     @State var isLoadingNextChapter: Bool = false
@@ -136,6 +137,7 @@ struct ScrollTextView: View {
             let viewportHeight = max(0, geometry.size.height - topInset - reservedBottomSpace - bottomLineGuard)
             let visiblePageHeight = CGFloat(scrollState.visiblePageHeight(for: Double(viewportHeight)))
             let isHighlightMode = autoHighlightSelection != nil
+            let isPlaybackMode = speechCoordinator.isPlaybackActive || speechCoordinator.isPreparingPlayback
             let activePanelHeight = measuredPanelHeight > 0 ? measuredPanelHeight : frozenPanelHeight
             let highlightSelectionViewportHeight = isHighlightMode
                 ? min(
@@ -269,6 +271,7 @@ struct ScrollTextView: View {
 
             ControlPanel(
                 isHighlightMode: isHighlightMode,
+                isPlaybackMode: isPlaybackMode,
                 selectedHighlightColor: selectedHighlightColor,
                 selectedHighlightEmoji: selectedHighlightEmoji,
                 onHighlight: {
@@ -331,6 +334,8 @@ struct ScrollTextView: View {
                 isPlaybackSpeaking: speechCoordinator.isSpeaking,
                 isPlaybackPaused: speechCoordinator.isPaused,
                 isPlaybackPreparing: speechCoordinator.isPreparingPlayback,
+                playbackSpeed: speechCoordinator.playbackSpeed,
+                playbackLevel: speechCoordinator.playbackLevel,
                 onPlaybackToggle: {
                     let viewport = CGRect(
                         x: 0,
@@ -343,6 +348,19 @@ struct ScrollTextView: View {
                             startingAt: firstVisiblePlaybackLocation(viewport: viewport)
                         )
                     )
+                },
+                onPlaybackSpeedTap: {
+                    showPlaybackSpeedOverlay = true
+                },
+                onPlaybackSkipBackward: {
+                    speechCoordinator.skipBackward15Seconds()
+                },
+                onPlaybackSkipForward: {
+                    speechCoordinator.skipForward15Seconds()
+                },
+                onPlaybackStop: {
+                    speechCoordinator.stop(clearHighlight: true)
+                    showPlaybackSpeedOverlay = false
                 },
                 tags: readerSettings.showAIQuestions ? Array(tags.prefix(maxTags)) : [],
                 onLearnMoreTap: {
@@ -382,6 +400,29 @@ struct ScrollTextView: View {
                 if autoHighlightSelection == nil && abs(value - frozenPanelHeight) > 0.5 {
                     frozenPanelHeight = value
                 }
+            }
+
+            if showPlaybackSpeedOverlay {
+                Color.black.opacity(0.35)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        showPlaybackSpeedOverlay = false
+                    }
+
+                PlaybackSpeedOverlay(
+                    speed: speechCoordinator.playbackSpeed,
+                    onSpeedChanged: { speed in
+                        speechCoordinator.setPlaybackSpeed(speed)
+                    },
+                    onSave: {
+                        showPlaybackSpeedOverlay = false
+                    }
+                )
+                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 18)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .zIndex(10)
             }
 
             if showsBackButton {
@@ -579,6 +620,7 @@ struct ScrollTextView: View {
             }
         }
         .animation(.easeInOut(duration: 0.2), value: activeFootnote)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: showPlaybackSpeedOverlay)
     }
 
     func presentExplainer(for query: String) {
@@ -687,5 +729,121 @@ struct ScrollTextView: View {
 
     func startPlayback(at location: PlaybackTextLocation) {
         speechCoordinator.start(segments: playbackSegments(startingAt: location))
+    }
+}
+
+private struct PlaybackSpeedOverlay: View {
+    let speed: Double
+    let onSpeedChanged: (Double) -> Void
+    let onSave: () -> Void
+    @State private var dragOffset: CGFloat = 0
+
+    private let presetSpeeds = PlaybackSpeedPreference.presets
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Capsule()
+                .fill(Color.white.opacity(0.24))
+                .frame(width: 42, height: 5)
+                .padding(.top, 10)
+
+            VStack(spacing: 6) {
+                Text("Audio Narration")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.45))
+                    .textCase(.uppercase)
+                    .tracking(0.8)
+
+                Text("Reading Speed")
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundColor(.white.opacity(0.95))
+
+                Text(PlaybackSpeedPreference.label(for: speed))
+                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .foregroundColor(.white.opacity(0.62))
+            }
+            .frame(maxWidth: .infinity)
+
+            VStack(spacing: 12) {
+                Slider(
+                    value: Binding(
+                        get: { speed },
+                        set: { onSpeedChanged(PlaybackSpeedPreference.clamped($0)) }
+                    ),
+                    in: 0.5...4.0,
+                    step: 0.05
+                )
+                .tint(.white)
+
+                HStack {
+                    ForEach([0.5, 1.0, 2.0, 3.0, 4.0], id: \.self) { tick in
+                        Text(PlaybackSpeedPreference.label(for: tick))
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white.opacity(0.38))
+                        if tick != 4.0 {
+                            Spacer()
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 2)
+
+            HStack(spacing: 8) {
+                ForEach(presetSpeeds, id: \.self) { preset in
+                    let isSelected = abs(speed - preset) < 0.025
+                    Button {
+                        onSpeedChanged(preset)
+                    } label: {
+                        Text(PlaybackSpeedPreference.label(for: preset))
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(isSelected ? .black : .white.opacity(0.82))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                            .background(isSelected ? Color.white : Color.white.opacity(0.08))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Set speed to \(PlaybackSpeedPreference.label(for: preset))")
+                }
+            }
+
+            Button(action: onSave) {
+                Text("Done")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.black)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 16)
+                    .background(Color.white)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 22)
+        .padding(.bottom, 24)
+        .frame(maxWidth: .infinity)
+        .background(Color(white: 0.11))
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.35), radius: 24, x: 0, y: 12)
+        .offset(y: max(0, dragOffset))
+        .gesture(
+            DragGesture(minimumDistance: 8)
+                .onChanged { value in
+                    dragOffset = max(0, value.translation.height)
+                }
+                .onEnded { value in
+                    let shouldDismiss = value.translation.height > 80 || value.predictedEndTranslation.height > 160
+                    if shouldDismiss {
+                        onSave()
+                    } else {
+                        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                            dragOffset = 0
+                        }
+                    }
+                }
+        )
     }
 }

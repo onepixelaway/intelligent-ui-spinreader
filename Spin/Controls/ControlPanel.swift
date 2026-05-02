@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ControlPanel: View {
     let isHighlightMode: Bool
+    let isPlaybackMode: Bool
     let selectedHighlightColor: HighlightColorChoice
     let selectedHighlightEmoji: HighlightEmojiChoice?
     let onHighlight: () -> Void
@@ -13,7 +14,13 @@ struct ControlPanel: View {
     let isPlaybackSpeaking: Bool
     let isPlaybackPaused: Bool
     let isPlaybackPreparing: Bool
+    let playbackSpeed: Double
+    let playbackLevel: Double
     let onPlaybackToggle: () -> Void
+    let onPlaybackSpeedTap: () -> Void
+    let onPlaybackSkipBackward: () -> Void
+    let onPlaybackSkipForward: () -> Void
+    let onPlaybackStop: () -> Void
     let tags: [String]
     let onLearnMoreTap: () -> Void
     let onFactCheckTap: () -> Void
@@ -30,10 +37,16 @@ struct ControlPanel: View {
     private let offsetWhenHighlight: CGFloat = 14
     private let offsetWhenNormal: CGFloat = -4
 
+    private var isExpandedMode: Bool {
+        isHighlightMode || isPlaybackMode
+    }
+
     var body: some View {
         VStack(spacing: 16) {
             if isHighlightMode {
                 highlightModeOptionsRow
+            } else if isPlaybackMode {
+                playbackModeOptionsRow
             }
 
             readerControlsRow
@@ -51,13 +64,13 @@ struct ControlPanel: View {
                 .padding(.horizontal, 24)
             }
         }
-        .padding(.top, isHighlightMode ? highlightModeTopPadding : normalTopPadding)
+        .padding(.top, isExpandedMode ? highlightModeTopPadding : normalTopPadding)
         .padding(.bottom, 28)
         .frame(maxWidth: .infinity)
         .liquidGlass(in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .scaleEffect(isHighlightMode ? 1.0 : scaleWhenNormal)
-        .offset(y: isHighlightMode ? offsetWhenHighlight : offsetWhenNormal)
-        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: isHighlightMode)
+        .scaleEffect(isExpandedMode ? 1.0 : scaleWhenNormal)
+        .offset(y: isExpandedMode ? offsetWhenHighlight : offsetWhenNormal)
+        .animation(.spring(response: 0.26, dampingFraction: 0.9), value: isExpandedMode)
     }
 
     private var highlightModeOptionsRow: some View {
@@ -126,6 +139,68 @@ struct ControlPanel: View {
         .padding(.horizontal, 28)
     }
 
+    private var playbackModeOptionsRow: some View {
+        HStack(alignment: .center) {
+            Button(action: onPlaybackSpeedTap) {
+                HStack(spacing: 6) {
+                    Image(systemName: "speedometer")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(PlaybackSpeedPreference.label(for: playbackSpeed))
+                        .font(.system(size: 14, weight: .semibold))
+                }
+                .foregroundColor(Color(white: 0.88))
+                .padding(.horizontal, 13)
+                .padding(.vertical, 8)
+                .background(Color.white.opacity(0.10))
+                .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Playback speed \(PlaybackSpeedPreference.label(for: playbackSpeed))")
+
+            playbackUtilityButton(
+                systemImage: "gobackward.15",
+                accessibilityLabel: "Rewind 15 seconds",
+                action: onPlaybackSkipBackward
+            )
+
+            playbackUtilityButton(
+                systemImage: "goforward.15",
+                accessibilityLabel: "Forward 15 seconds",
+                action: onPlaybackSkipForward
+            )
+
+            Spacer()
+
+            Button(action: onPlaybackStop) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(Color(white: 0.83))
+                    .frame(width: 32, height: 32)
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Stop playback")
+        }
+        .padding(.horizontal, 28)
+    }
+
+    private func playbackUtilityButton(
+        systemImage: String,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundColor(Color(white: 0.88))
+                .frame(width: 34, height: 34)
+                .background(Color.white.opacity(0.10))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
     private var readerControlsRow: some View {
         HStack(spacing: 24) {
             CircularReaderButton(
@@ -146,6 +221,8 @@ struct ControlPanel: View {
                 systemImage: isPlaybackSpeaking ? "pause.fill" : "play.fill",
                 accessibilityLabel: playbackAccessibilityLabel,
                 isLoading: isPlaybackPreparing,
+                showsAudioActivity: isPlaybackSpeaking,
+                audioActivityLevel: playbackLevel,
                 action: onPlaybackToggle
             )
         }
