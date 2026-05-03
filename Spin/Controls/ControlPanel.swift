@@ -3,14 +3,16 @@ import SwiftUI
 struct ControlPanel: View {
     let isHighlightMode: Bool
     let isPlaybackMode: Bool
+    let availableHighlightColors: [HighlightColorChoice]
+    let availableHighlightEmojis: [HighlightEmojiChoice]
     let selectedHighlightColor: HighlightColorChoice
     let selectedHighlightEmoji: HighlightEmojiChoice?
     let onHighlight: () -> Void
     let onHighlightColorSelected: (HighlightColorChoice) -> Void
     let onHighlightEmojiSelected: (HighlightEmojiChoice) -> Void
     let onCancelHighlight: () -> Void
-    let onTrackpadPageUp: () -> Void
-    let onTrackpadPageDown: () -> Void
+    let onTrackpadSwipeDown: () -> Void
+    let onTrackpadSwipeUp: () -> Void
     let isPlaybackSpeaking: Bool
     let isPlaybackPaused: Bool
     let isPlaybackPreparing: Bool
@@ -81,7 +83,7 @@ struct ControlPanel: View {
     private var highlightModeOptionsRow: some View {
         HStack(alignment: .center) {
             HStack(spacing: 10) {
-                ForEach(HighlightColorChoice.allCases) { color in
+                ForEach(availableHighlightColors) { color in
                     let isSelected = selectedHighlightEmoji == nil && selectedHighlightColor == color
                     Button {
                         onHighlightColorSelected(color)
@@ -102,7 +104,7 @@ struct ControlPanel: View {
                     .accessibilityLabel("\(color.rawValue.capitalized) highlight")
                 }
 
-                ForEach(HighlightEmojiChoice.allCases) { choice in
+                ForEach(availableHighlightEmojis) { choice in
                     let isSelected = selectedHighlightEmoji == choice
                     let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
                     Button {
@@ -217,8 +219,8 @@ struct ControlPanel: View {
             .animation(.easeInOut(duration: 0.15), value: isHighlightMode)
 
             TrackpadScrollView(
-                onPageUp: onTrackpadPageUp,
-                onPageDown: onTrackpadPageDown
+                onSwipeDown: onTrackpadSwipeDown,
+                onSwipeUp: onTrackpadSwipeUp
             )
             .frame(width: 140, height: 110)
 
@@ -258,16 +260,27 @@ struct ControlPanel: View {
         .frame(height: 32)
     }
 
+    @ViewBuilder
     private var actionPillsRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(actions) { action in
-                    ActionPill(title: action.name) {
-                        onActionTap(action)
-                    }
+        if actions.count <= 2 {
+            actionPillsHStack
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                actionPillsHStack
+                    .padding(.horizontal, 24)
+            }
+        }
+    }
+
+    private var actionPillsHStack: some View {
+        HStack(spacing: 8) {
+            ForEach(actions) { action in
+                ActionPill(title: action.name) {
+                    onActionTap(action)
                 }
             }
-            .padding(.horizontal, 24)
         }
     }
 }

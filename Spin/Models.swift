@@ -7,11 +7,16 @@ import Combine
 @preconcurrency import MediaPlayer
 
 enum HighlightColorChoice: String, CaseIterable, Identifiable {
-    case green
     case yellow
+    case green
     case blue
+    case pink
+    case orange
+    case purple
 
     var id: String { rawValue }
+
+    var label: String { rawValue.capitalized }
 
     var fillColor: Color {
         switch self {
@@ -21,6 +26,12 @@ enum HighlightColorChoice: String, CaseIterable, Identifiable {
             return Color(red: 1.0, green: 0.86, blue: 0.25)
         case .blue:
             return Color(red: 0.34, green: 0.67, blue: 1.0)
+        case .pink:
+            return Color(red: 1.0, green: 0.55, blue: 0.78)
+        case .orange:
+            return Color(red: 1.0, green: 0.62, blue: 0.32)
+        case .purple:
+            return Color(red: 0.72, green: 0.55, blue: 1.0)
         }
     }
 
@@ -33,9 +44,27 @@ enum HighlightEmojiChoice: String, CaseIterable, Identifiable {
     case heart = "❤️"
     case thinking = "🤔"
     case exclamation = "❗"
+    case star = "⭐"
+    case fire = "🔥"
+    case lightbulb = "💡"
+    case pin = "📌"
+    case check = "✅"
 
     var id: String { rawValue }
     var emoji: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .heart: return "Heart"
+        case .thinking: return "Thinking"
+        case .exclamation: return "Important"
+        case .star: return "Star"
+        case .fire: return "Fire"
+        case .lightbulb: return "Idea"
+        case .pin: return "Pin"
+        case .check: return "Check"
+        }
+    }
 }
 
 struct Highlight: Identifiable, Codable {

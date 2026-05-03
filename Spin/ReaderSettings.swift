@@ -164,6 +164,12 @@ enum ReaderMargins: String, CaseIterable, Identifiable {
 
 @MainActor
 final class ReaderSettings: ObservableObject {
+    static let maxHighlightColors = 4
+    static let maxHighlightEmojis = 4
+
+    static let defaultHighlightColors: [HighlightColorChoice] = [.yellow, .green, .blue]
+    static let defaultHighlightEmojis: [HighlightEmojiChoice] = [.heart, .thinking, .exclamation]
+
     private enum Keys {
         static let fontSize = "reader.fontSize"
         static let lineSpacing = "reader.lineSpacing"
@@ -172,6 +178,10 @@ final class ReaderSettings: ObservableObject {
         static let dimLevel = "reader.dimLevel"
         static let showAIQuestions = "reader.showAIQuestions"
         static let panelActions = "reader.panelActions"
+        static let highlightColors = "reader.highlightColors"
+        static let highlightEmojis = "reader.highlightEmojis"
+        static let invertTrackpadSwipe = "reader.invertTrackpadSwipe"
+        static let invertHighlightSwipe = "reader.invertHighlightSwipe"
     }
 
     @Published var fontSize: Double {
@@ -218,6 +228,30 @@ final class ReaderSettings: ObservableObject {
             }
         }
     }
+    @Published var highlightColors: [HighlightColorChoice] {
+        didSet {
+            guard highlightColors != oldValue else { return }
+            UserDefaults.standard.set(highlightColors.map(\.rawValue), forKey: Keys.highlightColors)
+        }
+    }
+    @Published var highlightEmojis: [HighlightEmojiChoice] {
+        didSet {
+            guard highlightEmojis != oldValue else { return }
+            UserDefaults.standard.set(highlightEmojis.map(\.rawValue), forKey: Keys.highlightEmojis)
+        }
+    }
+    @Published var invertTrackpadSwipe: Bool {
+        didSet {
+            guard invertTrackpadSwipe != oldValue else { return }
+            UserDefaults.standard.set(invertTrackpadSwipe, forKey: Keys.invertTrackpadSwipe)
+        }
+    }
+    @Published var invertHighlightSwipe: Bool {
+        didSet {
+            guard invertHighlightSwipe != oldValue else { return }
+            UserDefaults.standard.set(invertHighlightSwipe, forKey: Keys.invertHighlightSwipe)
+        }
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -235,6 +269,19 @@ final class ReaderSettings: ObservableObject {
         } else {
             self.panelActions = PanelAction.defaults
         }
+        if let raws = defaults.array(forKey: Keys.highlightColors) as? [String] {
+            let parsed = raws.compactMap(HighlightColorChoice.init(rawValue:))
+            self.highlightColors = parsed.isEmpty ? Self.defaultHighlightColors : parsed
+        } else {
+            self.highlightColors = Self.defaultHighlightColors
+        }
+        if let raws = defaults.array(forKey: Keys.highlightEmojis) as? [String] {
+            self.highlightEmojis = raws.compactMap(HighlightEmojiChoice.init(rawValue:))
+        } else {
+            self.highlightEmojis = Self.defaultHighlightEmojis
+        }
+        self.invertTrackpadSwipe = defaults.bool(forKey: Keys.invertTrackpadSwipe)
+        self.invertHighlightSwipe = defaults.bool(forKey: Keys.invertHighlightSwipe)
     }
 
     var titleSize: CGFloat { CGFloat(fontSize) + 9 }

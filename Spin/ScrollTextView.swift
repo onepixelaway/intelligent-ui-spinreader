@@ -265,6 +265,16 @@ struct ScrollTextView: View {
                     viewportWidth: Double(viewportWidth)
                 )
             }
+            .onChange(of: readerSettings.highlightColors) { _, newValue in
+                if !newValue.contains(selectedHighlightColor) {
+                    selectedHighlightColor = newValue.first ?? .yellow
+                }
+            }
+            .onChange(of: readerSettings.highlightEmojis) { _, newValue in
+                if let active = selectedHighlightEmoji, !newValue.contains(active) {
+                    selectedHighlightEmoji = nil
+                }
+            }
             // The text viewport is locked to the normal panel height so entering highlight mode
             // never shifts the page. Only normal-mode panel measurement can change pagination.
             .onChange(of: frozenPanelHeight) { _, _ in
@@ -289,6 +299,8 @@ struct ScrollTextView: View {
             ControlPanel(
                 isHighlightMode: isHighlightMode,
                 isPlaybackMode: isPlaybackMode,
+                availableHighlightColors: readerSettings.highlightColors,
+                availableHighlightEmojis: readerSettings.highlightEmojis,
                 selectedHighlightColor: selectedHighlightColor,
                 selectedHighlightEmoji: selectedHighlightEmoji,
                 onHighlight: {
@@ -309,44 +321,21 @@ struct ScrollTextView: View {
                 onCancelHighlight: {
                     cancelPendingHighlight()
                 },
-                onTrackpadPageUp: {
-                    if isHighlightMode {
-                        // In highlight mode the trackpad acts like direct selection movement:
-                        // swiping down advances the highlight down the page, which feels natural.
-                        selectNextHighlight(
-                            viewportWidth: geometry.size.width,
-                            viewportHeight: highlightSelectionViewportHeight
-                        )
-                        return
-                    }
-                    hideSettingsModeIfNeeded()
-                    withAnimation(pageAnimation) {
-                        scrollState.goToPreviousPage()
-                    }
+                onTrackpadSwipeDown: {
+                    handleTrackpadSwipe(
+                        isSwipeUp: false,
+                        viewportWidth: geometry.size.width,
+                        viewportHeight: highlightSelectionViewportHeight,
+                        isHighlightMode: isHighlightMode
+                    )
                 },
-                onTrackpadPageDown: {
-                    if isHighlightMode {
-                        // In highlight mode the trackpad acts like direct selection movement:
-                        // swiping up moves the highlight back up the page, which feels natural.
-                        selectPreviousHighlight(
-                            viewportWidth: geometry.size.width,
-                            viewportHeight: highlightSelectionViewportHeight
-                        )
-                        return
-                    }
-                    hideSettingsModeIfNeeded()
-                    if scrollState.isAtBottom {
-                        advanceToNextChapter()
-                        return
-                    }
-                    withAnimation(pageAnimation) {
-                        scrollState.goToNextPage()
-                    }
-                    spinCount += 1
-                    if spinCount >= 2 {
-                        spinCount = 0
-                        handleAnalysisRequest()
-                    }
+                onTrackpadSwipeUp: {
+                    handleTrackpadSwipe(
+                        isSwipeUp: true,
+                        viewportWidth: geometry.size.width,
+                        viewportHeight: highlightSelectionViewportHeight,
+                        isHighlightMode: isHighlightMode
+                    )
                 },
                 isPlaybackSpeaking: speechCoordinator.isSpeaking,
                 isPlaybackPaused: speechCoordinator.isPaused,
@@ -640,6 +629,52 @@ struct ScrollTextView: View {
         guard isSettingsMode else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             isSettingsMode = false
+        }
+    }
+
+    private func handleTrackpadSwipe(
+        isSwipeUp: Bool,
+        viewportWidth: CGFloat,
+        viewportHeight: CGFloat,
+        isHighlightMode: Bool
+    ) {
+        if isHighlightMode {
+            let extendDown = isSwipeUp == readerSettings.invertHighlightSwipe
+            if extendDown {
+                selectNextHighlight(viewportWidth: viewportWidth, viewportHeight: viewportHeight)
+            } else {
+                selectPreviousHighlight(viewportWidth: viewportWidth, viewportHeight: viewportHeight)
+            }
+            return
+        }
+        let goNext = isSwipeUp != readerSettings.invertTrackpadSwipe
+        if goNext {
+            goToNextPageWithFeedback()
+        } else {
+            goToPreviousPageWithFeedback()
+        }
+    }
+
+    func goToPreviousPageWithFeedback() {
+        hideSettingsModeIfNeeded()
+        withAnimation(pageAnimation) {
+            scrollState.goToPreviousPage()
+        }
+    }
+
+    func goToNextPageWithFeedback() {
+        hideSettingsModeIfNeeded()
+        if scrollState.isAtBottom {
+            advanceToNextChapter()
+            return
+        }
+        withAnimation(pageAnimation) {
+            scrollState.goToNextPage()
+        }
+        spinCount += 1
+        if spinCount >= 2 {
+            spinCount = 0
+            handleAnalysisRequest()
         }
     }
 

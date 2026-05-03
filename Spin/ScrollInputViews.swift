@@ -2,8 +2,8 @@ import SwiftUI
 import QuartzCore
 
 struct TrackpadScrollView: View {
-    let onPageUp: () -> Void
-    let onPageDown: () -> Void
+    let onSwipeDown: () -> Void
+    let onSwipeUp: () -> Void
 
     @State private var haptics = HapticFeedback()
     @State private var gestureConsumed = false
@@ -32,9 +32,9 @@ struct TrackpadScrollView: View {
                             lastPageTurnTime = now
                             scheduleGestureReset()
                             if dy < 0 {
-                                onPageDown()
+                                onSwipeUp()
                             } else {
-                                onPageUp()
+                                onSwipeDown()
                             }
                             haptics.perform(speed: 3.0, minInterval: 0)
                         }

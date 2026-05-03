@@ -21,6 +21,7 @@
 		3975A2A7995E82A12596BD46 /* KokoroTTSEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE14765183FA3E297A1DC153 /* KokoroTTSEngine.swift */; };
 		3D3B61240264B1470699CFA0 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 824245CC5F13EACD7CFCB8F8 /* SettingsView.swift */; };
 		4164ABF4568234949AD132AF /* Config.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16C5E5F3D7E21E592A851242 /* Config.swift */; };
+		41C307A167A2BEF43A46EFD1 /* HighlightingSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFFF9203AC6F89A7C9DE32BB /* HighlightingSettingsView.swift */; };
 		47C31C21F7BEEAEE65C959D7 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B8C2821EE55C5AD6773ED71C /* Assets.xcassets */; };
 		4879BDFAEEF07E58309061D2 /* ReaderContentViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0EBA3FBBD27DED12803F8085 /* ReaderContentViews.swift */; };
 		63D6FC710829F1F899DDF039 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55BEE1BE155E70B87D6E48C /* Models.swift */; };
@@ -50,6 +51,7 @@
 		E9A40FF5626A9FB4BC13F6A9 /* TrackpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = A87BCCC8BD100C4230F823EF /* TrackpadSurface.swift */; };
 		F214942FD7EDC02E62BA74ED /* voices.npz in Resources */ = {isa = PBXBuildFile; fileRef = 79C757C174C85CC26D561DFD /* voices.npz */; };
 		F2B26A4D534154D490750E03 /* ScrollState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E8B463DE1593C722957A035 /* ScrollState.swift */; };
+		F62F73300990A3E10BB7ECB7 /* GesturesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EE546C017635A71B6AF744 /* GesturesSettingsView.swift */; };
 		F83589C8749C2020027AD0DD /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 60954BBD2DD7CE2BAE639828 /* Preview Assets.xcassets */; };
 		F8FFCCED2F28AA90380CBF58 /* ControlPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DF9AEE3F3F5F968AF732828 /* ControlPanel.swift */; };
 		FD03F009BD7431F4512AE639 /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 95ABC8680AE69D850F94AD23 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
@@ -101,6 +103,7 @@
 		26EF7A685AF5D8A97408288B /* KokoroDownloadSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroDownloadSheet.swift; sourceTree = "<group>"; };
 		280B8B3DC648705C646B316F /* SpinUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpinUITestsLaunchTests.swift; sourceTree = "<group>"; };
 		31D63BC5A3B0EBAD515446C8 /* ScrollTextView+Analysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Analysis.swift"; sourceTree = "<group>"; };
+		38EE546C017635A71B6AF744 /* GesturesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GesturesSettingsView.swift; sourceTree = "<group>"; };
 		40C85DCFECDF1DB621AD739E /* ScrollTextView+Pagination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Pagination.swift"; sourceTree = "<group>"; };
 		4E8B463DE1593C722957A035 /* ScrollState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollState.swift; sourceTree = "<group>"; };
 		5379D0CFF1B4BE3E9175B6D1 /* Spin.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Spin.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -132,6 +135,7 @@
 		D0E864B792179C0ECDC3B94E /* LiquidGlass.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlass.swift; sourceTree = "<group>"; };
 		D4640923A2F464C7435628CE /* EmojiColorExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmojiColorExtractor.swift; sourceTree = "<group>"; };
 		DD95C47247F9A942E420D6A3 /* ScrollTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollTextView.swift; sourceTree = "<group>"; };
+		DFFF9203AC6F89A7C9DE32BB /* HighlightingSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HighlightingSettingsView.swift; sourceTree = "<group>"; };
 		E4698ECE0A5FF93A040B5291 /* SpinTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SpinTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E55BEE1BE155E70B87D6E48C /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		E700A7CF2FF7006E8FE18AFE /* ScrollTextView+Highlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Highlights.swift"; sourceTree = "<group>"; };
@@ -200,7 +204,9 @@
 				D4640923A2F464C7435628CE /* EmojiColorExtractor.swift */,
 				A9F9EDFD087441380ACB497E /* EpubLibraryView.swift */,
 				9EC98AFB877549811CD73826 /* EpubParser.swift */,
+				38EE546C017635A71B6AF744 /* GesturesSettingsView.swift */,
 				5BEBA0672B53D6527FC022DD /* HighlightableTextView.swift */,
+				DFFF9203AC6F89A7C9DE32BB /* HighlightingSettingsView.swift */,
 				70562CEDAC69322951D76474 /* HighlightsListView.swift */,
 				26EF7A685AF5D8A97408288B /* KokoroDownloadSheet.swift */,
 				CC0A85E80C5FB8D44CF46D49 /* KokoroModelManager.swift */,
@@ -407,7 +413,9 @@
 				9328AD8C44CD20B3B5BD76F2 /* EmojiColorExtractor.swift in Sources */,
 				2C20F943CCC15B45AB2480E6 /* EpubLibraryView.swift in Sources */,
 				6AD150376974E0D2CCF4F7C9 /* EpubParser.swift in Sources */,
+				F62F73300990A3E10BB7ECB7 /* GesturesSettingsView.swift in Sources */,
 				8C3163B03E9A367FB557DA44 /* HighlightableTextView.swift in Sources */,
+				41C307A167A2BEF43A46EFD1 /* HighlightingSettingsView.swift in Sources */,
 				A9A0B113B6D7361D2ED26F42 /* HighlightsListView.swift in Sources */,
 				7468F1A1ACE3C9FD55230FF9 /* KokoroDownloadSheet.swift in Sources */,
 				D1DE22B93465E527BF6E269E /* KokoroModelManager.swift in Sources */,

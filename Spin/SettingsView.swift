@@ -29,6 +29,31 @@ enum TTSPreferenceKeys {
     static let voiceLanguage = "en-US"
 }
 
+// MARK: - Shared Row
+
+@MainActor @ViewBuilder
+func settingsSelectableRow<Content: View>(
+    isSelected: Bool,
+    action: @escaping () -> Void,
+    isDisabled: Bool = false,
+    @ViewBuilder content: () -> Content
+) -> some View {
+    Button(action: action) {
+        HStack {
+            content()
+            Spacer()
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.tint)
+            }
+        }
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .disabled(isDisabled)
+}
+
 // MARK: - Settings Hub
 
 struct SettingsView: View {
@@ -46,6 +71,18 @@ struct SettingsView: View {
                     iconColor: .blue,
                     title: "Audio Narration",
                     destination: AudioNarrationSettingsView()
+                )
+                settingsCategory(
+                    icon: "highlighter",
+                    iconColor: .yellow,
+                    title: "Highlighting",
+                    destination: HighlightingSettingsView()
+                )
+                settingsCategory(
+                    icon: "hand.draw",
+                    iconColor: .teal,
+                    title: "Gestures",
+                    destination: GesturesSettingsView()
                 )
                 settingsCategory(
                     icon: "sparkles",
