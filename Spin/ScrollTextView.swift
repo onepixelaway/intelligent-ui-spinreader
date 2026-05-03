@@ -401,8 +401,8 @@ struct ScrollTextView: View {
             )
             .background(
                 GeometryReader { geo in
-                    // Normal-mode panel height drives pagination. Highlight-mode panel growth
-                    // intentionally overlays the page without changing the text viewport.
+                    // Normal-mode panel height drives pagination. Highlight- and playback-mode
+                    // panel growth intentionally overlays the page without changing the text viewport.
                     Color.clear.preference(key: ControlPanelHeightKey.self, value: geo.size.height)
                 }
             )
@@ -413,7 +413,10 @@ struct ScrollTextView: View {
                 if abs(value - measuredPanelHeight) > 0.5 {
                     measuredPanelHeight = value
                 }
-                if autoHighlightSelection == nil && abs(value - frozenPanelHeight) > 0.5 {
+                let isExpandedMode = autoHighlightSelection != nil
+                    || speechCoordinator.isPlaybackActive
+                    || speechCoordinator.isPreparingPlayback
+                if !isExpandedMode && abs(value - frozenPanelHeight) > 0.5 {
                     frozenPanelHeight = value
                 }
             }
