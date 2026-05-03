@@ -3,36 +3,31 @@ import NaturalLanguage
 @preconcurrency import OpenAI
 
 extension ScrollTextView {
-    enum PerplexityAction {
-        case learnMore
-        case factCheck
-    }
-
     func visibleTextOnScreen() -> String {
         textForAnalysis(indices: visibleParagraphs)
     }
 
-    func openPerplexity(for action: PerplexityAction) {
+    func openPerplexity(for action: PanelAction) {
         let visibleText = visibleTextOnScreen()
         guard !visibleText.isEmpty else { return }
 
-        let query: String
-        switch action {
-        case .learnMore:
-            query = """
-            Help me learn more about this passage and explain any important context:
+        var parts: [String] = [action.prompt, "", visibleText]
 
-            \(visibleText)
-            """
-        case .factCheck:
-            query = """
-            Is this true or not? Fact-check this passage and explain why:
-
-            \(visibleText)
-            """
+        let bookContext = buildBookContext()
+        if !bookContext.isEmpty {
+            parts.append("")
+            parts.append(bookContext)
         }
 
-        presentExplainer(for: query)
+        presentExplainer(for: parts.joined(separator: "\n"))
+    }
+
+    private func buildBookContext() -> String {
+        guard !bookTitle.isEmpty else { return "" }
+        var lines: [String] = ["Book: \"\(bookTitle)\""]
+        if !bookAuthor.isEmpty { lines.append("Author: \(bookAuthor)") }
+        if !bookDescription.isEmpty { lines.append("About: \(bookDescription)") }
+        return lines.joined(separator: "\n")
     }
 
     func handleAnalysisRequest() {

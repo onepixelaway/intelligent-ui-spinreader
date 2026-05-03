@@ -3,6 +3,36 @@ import UIKit
 import CoreHaptics
 import QuartzCore
 
+// MARK: - Panel Actions
+
+struct PanelAction: Identifiable, Codable, Equatable {
+    let id: UUID
+    let name: String
+    let prompt: String
+
+    init(id: UUID = UUID(), name: String, prompt: String) {
+        self.id = id
+        self.name = name
+        self.prompt = prompt
+    }
+
+    static let maxNameLength = 20
+    static let maxCount = 4
+
+    static let defaults: [PanelAction] = [
+        PanelAction(
+            id: UUID(uuidString: "00000000-0000-0000-0001-000000000001")!,
+            name: "Learn more",
+            prompt: "Help me learn more about this passage and explain any important context:"
+        ),
+        PanelAction(
+            id: UUID(uuidString: "00000000-0000-0000-0001-000000000002")!,
+            name: "Is this true?",
+            prompt: "Is this true or not? Fact-check this passage and explain why:"
+        )
+    ]
+}
+
 struct PortraitOnlyModifier: ViewModifier {
     func body(content: Content) -> some View {
         content
@@ -134,6 +164,7 @@ final class ReaderSettings: ObservableObject {
         static let margins = "reader.margins"
         static let dimLevel = "reader.dimLevel"
         static let showAIQuestions = "reader.showAIQuestions"
+        static let panelActions = "reader.panelActions"
     }
 
     @Published var fontSize: Double {
@@ -172,6 +203,14 @@ final class ReaderSettings: ObservableObject {
             UserDefaults.standard.set(showAIQuestions, forKey: Keys.showAIQuestions)
         }
     }
+    @Published var panelActions: [PanelAction] {
+        didSet {
+            guard panelActions != oldValue else { return }
+            if let data = try? JSONEncoder().encode(panelActions) {
+                UserDefaults.standard.set(data, forKey: Keys.panelActions)
+            }
+        }
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -182,6 +221,13 @@ final class ReaderSettings: ObservableObject {
         self.margins = defaults.string(forKey: Keys.margins).flatMap(ReaderMargins.init(rawValue:)) ?? .normal
         self.dimLevel = min(max(defaults.double(forKey: Keys.dimLevel), 0), 0.7)
         self.showAIQuestions = defaults.object(forKey: Keys.showAIQuestions) as? Bool ?? true
+        if let data = defaults.data(forKey: Keys.panelActions),
+           let saved = try? JSONDecoder().decode([PanelAction].self, from: data),
+           !saved.isEmpty {
+            self.panelActions = saved
+        } else {
+            self.panelActions = PanelAction.defaults
+        }
     }
 
     var titleSize: CGFloat { CGFloat(fontSize) + 9 }

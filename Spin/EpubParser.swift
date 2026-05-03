@@ -6,6 +6,7 @@ struct EpubBook: Identifiable, Hashable, Sendable {
     let id: String
     let title: String
     let author: String
+    let description: String
     let chapters: [EpubChapter]
     let fileURL: URL
     let coverImageData: Data?
@@ -164,6 +165,7 @@ enum EpubParser {
             id: fileURL.lastPathComponent,
             title: title,
             author: opf.author,
+            description: opf.description,
             chapters: chapters,
             fileURL: fileURL,
             coverImageData: coverData
@@ -231,6 +233,7 @@ enum EpubParser {
         return OPFContents(
             title: delegate.title,
             author: delegate.author,
+            description: delegate.bookDescription,
             manifestById: delegate.manifestById,
             manifestMediaTypes: delegate.manifestMediaTypes,
             manifestProperties: delegate.manifestProperties,
@@ -299,6 +302,7 @@ enum EpubParser {
 private struct OPFContents {
     let title: String
     let author: String
+    let description: String
     let manifestById: [String: String]
     let manifestMediaTypes: [String: String]
     let manifestProperties: [String: String]
@@ -327,6 +331,7 @@ private final class ContainerXMLParserDelegate: NSObject, XMLParserDelegate {
 private final class OPFParserDelegate: NSObject, XMLParserDelegate {
     var title: String = ""
     var author: String = ""
+    var bookDescription: String = ""
     var manifestById: [String: String] = [:]
     var manifestMediaTypes: [String: String] = [:]
     var manifestProperties: [String: String] = [:]
@@ -391,6 +396,9 @@ private final class OPFParserDelegate: NSObject, XMLParserDelegate {
         }
         if elementName == "creator", author.isEmpty, !trimmed.isEmpty {
             author = trimmed
+        }
+        if elementName == "description", bookDescription.isEmpty, !trimmed.isEmpty {
+            bookDescription = trimmed
         }
         buffer = ""
     }

@@ -11,7 +11,7 @@ struct ScrollTextView: View {
     @Environment(HighlightStore.self) var highlightStore
 
     @StateObject var scrollState = ScrollState()
-    @StateObject var readerSettings = ReaderSettings()
+    @EnvironmentObject var readerSettings: ReaderSettings
     @StateObject var speechCoordinator = ReaderSpeechCoordinator()
     @State var isSettingsMode: Bool = false
     @State var visibleParagraphs: [Int] = []
@@ -83,6 +83,9 @@ struct ScrollTextView: View {
     private let showsBackButton: Bool
     let contentID: String
     let bookID: String?
+    let bookTitle: String
+    let bookAuthor: String
+    let bookDescription: String
     // Must stay same length/order as `items`. Each entry scopes persisted highlights to one rendered item.
     @State var itemContentIDs: [String] = []
     // Editorial whitespace between the status bar/safe area and the first line of body text.
@@ -96,7 +99,14 @@ struct ScrollTextView: View {
     let maxTags = 5
     private let pageAnimation: Animation = .spring(response: 0.3, dampingFraction: 0.88)
 
-    init(chapters: [EpubChapter], startingIndex: Int, bookID: String = "") {
+    init(
+        chapters: [EpubChapter],
+        startingIndex: Int,
+        bookID: String = "",
+        bookTitle: String = "",
+        bookAuthor: String = "",
+        bookDescription: String = ""
+    ) {
         let chapter = chapters[startingIndex]
         var built = chapter.items
         let hasLeadingTitle: Bool = {
@@ -114,6 +124,9 @@ struct ScrollTextView: View {
         self.showsBackButton = true
         self.contentID = cid
         self.bookID = bookID
+        self.bookTitle = bookTitle
+        self.bookAuthor = bookAuthor
+        self.bookDescription = bookDescription
         _itemContentIDs = State(initialValue: Self.itemContentIDs(for: built, chapterContentID: cid))
     }
 
@@ -350,7 +363,8 @@ struct ScrollTextView: View {
                     speechCoordinator.togglePlayback(
                         startingWith: playbackSegments(
                             startingAt: firstVisiblePlaybackLocation(viewport: viewport)
-                        )
+                        ),
+                        title: chapters[chapterIndex].title
                     )
                 },
                 onPlaybackSpeedTap: {
@@ -367,11 +381,9 @@ struct ScrollTextView: View {
                     showPlaybackSpeedOverlay = false
                 },
                 tags: readerSettings.showAIQuestions ? Array(tags.prefix(maxTags)) : [],
-                onLearnMoreTap: {
-                    openPerplexity(for: .learnMore)
-                },
-                onFactCheckTap: {
-                    openPerplexity(for: .factCheck)
+                actions: readerSettings.showAIQuestions ? readerSettings.panelActions : [],
+                onActionTap: { action in
+                    openPerplexity(for: action)
                 },
                 showQuestion: showQuestion && readerSettings.showAIQuestions,
                 currentQuestion: currentQuestion,
@@ -722,7 +734,10 @@ struct ScrollTextView: View {
     }
 
     func startPlayback(at location: PlaybackTextLocation) {
-        speechCoordinator.start(segments: playbackSegments(startingAt: location))
+        speechCoordinator.start(
+            segments: playbackSegments(startingAt: location),
+            title: chapters[chapterIndex].title
+        )
     }
 }
 
@@ -766,10 +781,8 @@ private struct PlaybackSpeedOverlay: View {
 
             VStack(spacing: 6) {
                 Text("Audio Narration")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.subheadline.weight(.semibold))
                     .foregroundColor(.white.opacity(0.45))
-                    .textCase(.uppercase)
-                    .tracking(0.8)
 
                 Text("Reading Speed")
                     .font(.system(size: 24, weight: .bold))

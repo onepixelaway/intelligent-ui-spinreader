@@ -4,6 +4,7 @@ import UIKit
 import Observation
 import AVFoundation
 import Combine
+@preconcurrency import MediaPlayer
 
 enum HighlightColorChoice: String, CaseIterable, Identifiable {
     case green
@@ -121,10 +122,18 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
     @Published var kokoroPreparation: KokoroPreparationState = .idle
 
     private let synthesizer = AVSpeechSynthesizer()
+    private let nowPlayingCenter = MPNowPlayingInfoCenter.default()
+    private let remoteCommandCenter = MPRemoteCommandCenter.shared()
+    private var notificationObservers: [NSObjectProtocol] = []
+    private var remoteCommandRegistrations: [(command: MPRemoteCommand, target: Any)] = []
     private var pendingSegments: [PlaybackTextSegment] = []
     private var playbackSegmentsSnapshot: [PlaybackTextSegment] = []
     private var activeSegmentIndex: Int?
     private var activeSegment: PlaybackTextSegment?
+    private var activeSegmentStartedAt: Date?
+    private var activeSegmentPausedElapsed: TimeInterval?
+    private var playbackTitle = "Audio Narration"
+    private var shouldResumeAfterInterruption = false
     private var downloadProgressObserver: AnyCancellable?
 
     // Kokoro pipeline: a single producer task pre-generates the next 1-2 sentences
@@ -168,21 +177,47 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         super.init()
         synthesizer.delegate = self
         configureAudioSession()
+        registerAudioSessionNotifications()
+        configureRemoteCommands()
+        updateRemoteCommandState()
         KokoroTTSEngine.shared.setPlaybackSpeed(playbackSpeed)
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            for observer in notificationObservers {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            for registration in remoteCommandRegistrations {
+                registration.command.removeTarget(registration.target)
+            }
+        }
     }
 
     private func configureAudioSession() {
         let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playback, mode: .spokenAudio, options: [.duckOthers])
-        try? session.setActive(true, options: [])
+        do {
+            try session.setCategory(.playback, mode: .spokenAudio, options: [])
+        } catch {
+            print("[AudioSession] failed to configure playback category: \(error)")
+        }
     }
 
-    func start(segments: [PlaybackTextSegment]) {
-        stop(clearHighlight: true)
-        guard !segments.isEmpty else { return }
+    func start(segments: [PlaybackTextSegment], title: String = "Audio Narration") {
+        stop(clearHighlight: true, deactivateSession: false)
+        guard !segments.isEmpty else {
+            deactivateAudioSession()
+            return
+        }
+        let trimmedTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        playbackTitle = trimmedTitle.isEmpty
+            ? "Audio Narration"
+            : trimmedTitle
         playbackSegmentsSnapshot = segments
         activeSegmentIndex = nil
         pendingSegments = segments
+        updateNowPlayingInfo()
+        updateRemoteCommandState()
         switch currentProvider {
         case .apple:
             playbackLevel = 0.45
@@ -192,7 +227,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         }
     }
 
-    func togglePlayback(startingWith segments: [PlaybackTextSegment]) {
+    func togglePlayback(startingWith segments: [PlaybackTextSegment], title: String = "Audio Narration") {
         if isSpeaking {
             pause()
             return
@@ -203,7 +238,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             return
         }
 
-        start(segments: segments)
+        start(segments: segments, title: title)
     }
 
     func setPlaybackSpeed(_ speed: Double) {
@@ -211,6 +246,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         playbackSpeed = clamped
         UserDefaults.standard.set(clamped, forKey: PlaybackSpeedPreference.key)
         KokoroTTSEngine.shared.setPlaybackSpeed(clamped)
+        updateNowPlayingInfo()
     }
 
     func skipBackward15Seconds() {
@@ -223,6 +259,9 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
 
     func pause() {
         guard isSpeaking else { return }
+        if let started = activeSegmentStartedAt {
+            activeSegmentPausedElapsed = Date().timeIntervalSince(started)
+        }
         switch currentProvider {
         case .apple:
             if synthesizer.pauseSpeaking(at: .word) {
@@ -241,21 +280,26 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             isPaused = true
             playbackLevel = 0
         }
+        updateNowPlayingInfo()
+        updateRemoteCommandState()
     }
 
     func resume() {
         guard isPaused else { return }
+        guard activateAudioSession() else { return }
         switch currentProvider {
         case .apple:
             if synthesizer.continueSpeaking() {
                 isSpeaking = true
                 isPaused = false
                 playbackLevel = 0.45
+                resumePlaybackTimeline()
             }
         case .kokoro:
             KokoroTTSEngine.shared.resume()
             isSpeaking = true
             isPaused = false
+            resumePlaybackTimeline()
             if let pausedElapsed = kokoroPausedElapsed,
                let active = kokoroScheduled.first {
                 // Shift the virtual segment-start backwards so remaining tokens
@@ -270,9 +314,11 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             }
             kokoroPausedElapsed = nil
         }
+        updateNowPlayingInfo()
+        updateRemoteCommandState()
     }
 
-    func stop(clearHighlight: Bool = true) {
+    func stop(clearHighlight: Bool = true, deactivateSession: Bool = true) {
         resetKokoroPlaybackState()
         synthesizer.stopSpeaking(at: .immediate)
         KokoroTTSEngine.shared.stop()
@@ -282,6 +328,11 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         isPaused = false
         if clearHighlight {
             highlight = nil
+        }
+        clearNowPlayingInfo()
+        updateRemoteCommandState()
+        if deactivateSession {
+            deactivateAudioSession()
         }
     }
 
@@ -300,7 +351,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         let segments = playbackSegmentsSnapshot
         guard segments.indices.contains(index) else { return }
 
-        stop(clearHighlight: true)
+        stop(clearHighlight: true, deactivateSession: false)
         playbackSegmentsSnapshot = segments
         activeSegmentIndex = nil
         pendingSegments = Array(segments[index...])
@@ -360,18 +411,304 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         playbackSegmentsSnapshot.removeAll()
         activeSegmentIndex = nil
         activeSegment = nil
+        activeSegmentStartedAt = nil
+        activeSegmentPausedElapsed = nil
         playbackLevel = 0
+    }
+
+    private func finishPlayback(clearHighlight: Bool = true) {
+        resetKokoroPlaybackState()
+        KokoroTTSEngine.shared.stop()
+        isPreparingPlayback = false
+        isSpeaking = false
+        isPaused = false
+        if clearHighlight {
+            highlight = nil
+        }
+        clearNowPlayingInfo()
+        updateRemoteCommandState()
+        deactivateAudioSession()
+    }
+
+    // MARK: - System audio integration
+
+    private func activateAudioSession() -> Bool {
+        configureAudioSession()
+        do {
+            try AVAudioSession.sharedInstance().setActive(true, options: [])
+            return true
+        } catch {
+            print("[AudioSession] failed to activate playback session: \(error)")
+            return false
+        }
+    }
+
+    private func deactivateAudioSession() {
+        do {
+            try AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
+        } catch {
+            print("[AudioSession] failed to deactivate playback session: \(error)")
+        }
+    }
+
+    private func registerAudioSessionNotifications() {
+        let center = NotificationCenter.default
+        let session = AVAudioSession.sharedInstance()
+
+        notificationObservers.append(
+            center.addObserver(
+                forName: AVAudioSession.interruptionNotification,
+                object: session,
+                queue: .main
+            ) { [weak self] notification in
+                guard let self else { return }
+                let typeValue = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
+                let optionValue = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
+                MainActor.assumeIsolated {
+                    self.handleAudioSessionInterruption(typeValue: typeValue, optionValue: optionValue)
+                }
+            }
+        )
+
+        notificationObservers.append(
+            center.addObserver(
+                forName: AVAudioSession.routeChangeNotification,
+                object: session,
+                queue: .main
+            ) { [weak self] notification in
+                guard let self else { return }
+                let reasonValue = notification.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
+                MainActor.assumeIsolated {
+                    self.handleAudioSessionRouteChange(reasonValue: reasonValue)
+                }
+            }
+        )
+    }
+
+    private func configureRemoteCommands() {
+        remoteCommandCenter.skipForwardCommand.preferredIntervals = [NSNumber(value: 15)]
+        remoteCommandCenter.skipBackwardCommand.preferredIntervals = [NSNumber(value: 15)]
+
+        let playTarget = remoteCommandCenter.playCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.resume()
+            }
+            return .success
+        }
+        remoteCommandRegistrations.append((remoteCommandCenter.playCommand, playTarget))
+
+        let pauseTarget = remoteCommandCenter.pauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.pause()
+            }
+            return .success
+        }
+        remoteCommandRegistrations.append((remoteCommandCenter.pauseCommand, pauseTarget))
+
+        let toggleTarget = remoteCommandCenter.togglePlayPauseCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if self.isSpeaking {
+                    self.pause()
+                } else if self.isPaused {
+                    self.resume()
+                }
+            }
+            return .success
+        }
+        remoteCommandRegistrations.append((remoteCommandCenter.togglePlayPauseCommand, toggleTarget))
+
+        let stopTarget = remoteCommandCenter.stopCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.stop(clearHighlight: true)
+            }
+            return .success
+        }
+        remoteCommandRegistrations.append((remoteCommandCenter.stopCommand, stopTarget))
+
+        let skipForwardTarget = remoteCommandCenter.skipForwardCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.skipForward15Seconds()
+            }
+            return .success
+        }
+        remoteCommandRegistrations.append((remoteCommandCenter.skipForwardCommand, skipForwardTarget))
+
+        let skipBackwardTarget = remoteCommandCenter.skipBackwardCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.skipBackward15Seconds()
+            }
+            return .success
+        }
+        remoteCommandRegistrations.append((remoteCommandCenter.skipBackwardCommand, skipBackwardTarget))
+
+        let nextTarget = remoteCommandCenter.nextTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.skipForward15Seconds()
+            }
+            return .success
+        }
+        remoteCommandRegistrations.append((remoteCommandCenter.nextTrackCommand, nextTarget))
+
+        let previousTarget = remoteCommandCenter.previousTrackCommand.addTarget { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.skipBackward15Seconds()
+            }
+            return .success
+        }
+        remoteCommandRegistrations.append((remoteCommandCenter.previousTrackCommand, previousTarget))
+
+        remoteCommandCenter.changePlaybackPositionCommand.isEnabled = false
+    }
+
+    private func updateRemoteCommandState() {
+        let hasPlayback = isPlaybackActive || isPreparingPlayback
+        remoteCommandCenter.playCommand.isEnabled = isPaused
+        remoteCommandCenter.pauseCommand.isEnabled = isSpeaking
+        remoteCommandCenter.togglePlayPauseCommand.isEnabled = hasPlayback
+        remoteCommandCenter.stopCommand.isEnabled = hasPlayback
+        remoteCommandCenter.skipForwardCommand.isEnabled = hasPlayback
+        remoteCommandCenter.skipBackwardCommand.isEnabled = hasPlayback
+        remoteCommandCenter.nextTrackCommand.isEnabled = hasPlayback
+        remoteCommandCenter.previousTrackCommand.isEnabled = hasPlayback
+    }
+
+    private func updateNowPlayingInfo() {
+        guard !playbackSegmentsSnapshot.isEmpty else {
+            clearNowPlayingInfo()
+            return
+        }
+
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: playbackTitle,
+            MPMediaItemPropertyArtist: "Spin Reader",
+            MPMediaItemPropertyAlbumTitle: "Audio Narration",
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: estimatedElapsedPlaybackTime(),
+            MPNowPlayingInfoPropertyPlaybackRate: isSpeaking ? playbackSpeed : 0,
+            MPNowPlayingInfoPropertyDefaultPlaybackRate: playbackSpeed
+        ]
+
+        let duration = estimatedTotalPlaybackDuration()
+        if duration > 0 {
+            info[MPMediaItemPropertyPlaybackDuration] = duration
+        }
+
+        if let currentText = activeSegment?.utteranceText.trimmingCharacters(in: .whitespacesAndNewlines),
+           !currentText.isEmpty {
+            info[MPMediaItemPropertyComments] = currentText
+        }
+
+        nowPlayingCenter.nowPlayingInfo = info
+    }
+
+    private func clearNowPlayingInfo() {
+        nowPlayingCenter.nowPlayingInfo = nil
+    }
+
+    private func estimatedTotalPlaybackDuration() -> TimeInterval {
+        playbackSegmentsSnapshot.reduce(0) { $0 + estimatedDuration(for: $1) }
+    }
+
+    private func estimatedElapsedPlaybackTime() -> TimeInterval {
+        guard let activeSegmentIndex,
+              playbackSegmentsSnapshot.indices.contains(activeSegmentIndex) else {
+            return 0
+        }
+
+        let completedDuration = playbackSegmentsSnapshot
+            .prefix(activeSegmentIndex)
+            .reduce(0) { $0 + estimatedDuration(for: $1) }
+        let segmentElapsed: TimeInterval
+        if isPaused {
+            segmentElapsed = activeSegmentPausedElapsed ?? 0
+        } else if let activeSegmentStartedAt {
+            segmentElapsed = Date().timeIntervalSince(activeSegmentStartedAt)
+        } else {
+            segmentElapsed = 0
+        }
+
+        let totalDuration = estimatedTotalPlaybackDuration()
+        return min(totalDuration, completedDuration + max(0, segmentElapsed))
+    }
+
+    private func resumePlaybackTimeline() {
+        if let activeSegmentPausedElapsed {
+            activeSegmentStartedAt = Date().addingTimeInterval(-activeSegmentPausedElapsed)
+        }
+        activeSegmentPausedElapsed = nil
+    }
+
+    private func pauseForAudioSessionInterruption() {
+        guard isSpeaking else { return }
+        if let started = activeSegmentStartedAt {
+            activeSegmentPausedElapsed = Date().timeIntervalSince(started)
+        }
+
+        switch currentProvider {
+        case .apple:
+            _ = synthesizer.pauseSpeaking(at: .word)
+        case .kokoro:
+            if let started = kokoroSegmentStartedAt {
+                kokoroPausedElapsed = Date().timeIntervalSince(started)
+            }
+            cancelKokoroWordHighlightTask()
+            cancelKokoroAudioLevelTask()
+            KokoroTTSEngine.shared.pause()
+        }
+
+        isSpeaking = false
+        isPaused = true
+        playbackLevel = 0
+        updateNowPlayingInfo()
+        updateRemoteCommandState()
+    }
+
+    private func handleAudioSessionInterruption(typeValue: UInt?, optionValue: UInt?) {
+        guard let typeValue,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else {
+            return
+        }
+
+        switch type {
+        case .began:
+            shouldResumeAfterInterruption = isSpeaking
+            pauseForAudioSessionInterruption()
+        case .ended:
+            let rawOptions = optionValue ?? 0
+            let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
+            let shouldResume = shouldResumeAfterInterruption && options.contains(.shouldResume)
+            shouldResumeAfterInterruption = false
+            if shouldResume {
+                resume()
+            } else {
+                updateNowPlayingInfo()
+                updateRemoteCommandState()
+            }
+        @unknown default:
+            break
+        }
+    }
+
+    private func handleAudioSessionRouteChange(reasonValue: UInt?) {
+        guard let reasonValue,
+              let reason = AVAudioSession.RouteChangeReason(rawValue: reasonValue) else {
+            return
+        }
+
+        if reason == .oldDeviceUnavailable {
+            pause()
+        }
     }
 
     // MARK: - Apple path
 
     private func speakNextAppleSegment() {
         guard !pendingSegments.isEmpty else {
-            activeSegment = nil
-            isSpeaking = false
-            isPaused = false
-            playbackLevel = 0
-            highlight = nil
+            finishPlayback(clearHighlight: true)
+            return
+        }
+        guard activateAudioSession() else {
+            stop(clearHighlight: true)
             return
         }
 
@@ -379,6 +716,8 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         let segment = pendingSegments.removeFirst()
         activeSegmentIndex = nextIndex
         activeSegment = segment
+        activeSegmentStartedAt = Date()
+        activeSegmentPausedElapsed = nil
         isSpeaking = true
         isPaused = false
         highlight = PlaybackTextHighlight(
@@ -392,6 +731,8 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         utterance.rate = AVSpeechUtteranceDefaultSpeechRate * Float(0.95 * playbackSpeed)
         utterance.pitchMultiplier = 1.0
         utterance.volume = 1.0
+        updateNowPlayingInfo()
+        updateRemoteCommandState()
         synthesizer.speak(utterance)
     }
 
@@ -399,6 +740,8 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
 
     private func startKokoroFlow() {
         if !KokoroPaths.isModelReady {
+            clearNowPlayingInfo()
+            updateRemoteCommandState()
             // Clean up any partial/corrupt file before prompting for re-download.
             if FileManager.default.fileExists(atPath: KokoroPaths.modelURL.path) {
                 try? FileManager.default.removeItem(at: KokoroPaths.modelURL)
@@ -478,6 +821,9 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         isSpeaking = false
         isPaused = false
         highlight = nil
+        clearNowPlayingInfo()
+        updateRemoteCommandState()
+        deactivateAudioSession()
     }
 
     func dismissKokoroError() {
@@ -494,10 +840,11 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
 
     private func startKokoroPipeline() {
         guard !pendingSegments.isEmpty else {
-            activeSegment = nil
-            isSpeaking = false
-            isPaused = false
-            highlight = nil
+            finishPlayback(clearHighlight: true)
+            return
+        }
+        guard activateAudioSession() else {
+            stop(clearHighlight: true)
             return
         }
 
@@ -505,6 +852,8 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         kokoroScheduled.removeAll()
         isSpeaking = true
         isPaused = false
+        updateNowPlayingInfo()
+        updateRemoteCommandState()
 
         let voiceName = kokoroVoiceName
         print("[Coordinator] kokoro pipeline starting (\(pendingSegments.count) segments, lookahead=\(Self.kokoroLookahead))")
@@ -583,6 +932,7 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             isPaused = false
             playbackLevel = 0
             highlight = nil
+            finishPlayback(clearHighlight: true)
         }
         // Otherwise: producer is still working on the next buffer (rare underrun).
         // Highlight will be applied when that buffer is scheduled.
@@ -599,9 +949,13 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
         cancelKokoroWordHighlightTask()
         cancelKokoroAudioLevelTask()
         kokoroSegmentStartedAt = Date()
+        activeSegmentStartedAt = kokoroSegmentStartedAt
+        activeSegmentPausedElapsed = nil
         kokoroPausedElapsed = nil
         scheduleKokoroWordHighlights(timings: queued.timings, segment: queued.segment, fromOffset: 0)
         scheduleKokoroAudioLevels(queued.audioLevels, fromOffset: 0)
+        updateNowPlayingInfo()
+        updateRemoteCommandState()
     }
 
     private func scheduleKokoroWordHighlights(

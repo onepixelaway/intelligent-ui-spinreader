@@ -274,7 +274,14 @@ private struct ChapterListView: View {
 
                 ForEach(Array(book.chapters.enumerated()), id: \.element.id) { index, chapter in
                     NavigationLink {
-                        ScrollTextView(chapters: book.chapters, startingIndex: index, bookID: book.id)
+                        ScrollTextView(
+                            chapters: book.chapters,
+                            startingIndex: index,
+                            bookID: book.id,
+                            bookTitle: book.title,
+                            bookAuthor: book.author,
+                            bookDescription: book.description
+                        )
                             .toolbar(.hidden, for: .navigationBar)
                             .navigationBarBackButtonHidden(true)
                     } label: {

@@ -29,7 +29,62 @@ enum TTSPreferenceKeys {
     static let voiceLanguage = "en-US"
 }
 
+// MARK: - Settings Hub
+
 struct SettingsView: View {
+    var body: some View {
+        List {
+            Section {
+                settingsCategory(
+                    icon: "waveform",
+                    iconColor: .blue,
+                    title: "Audio Narration",
+                    destination: AudioNarrationSettingsView()
+                )
+                settingsCategory(
+                    icon: "sparkles",
+                    iconColor: .purple,
+                    title: "AI Actions",
+                    destination: PanelActionsSettingsView()
+                )
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.automatic)
+        .navigationTitle("Settings")
+        .navigationBarTitleDisplayMode(.automatic)
+    }
+
+    @ViewBuilder
+    private func settingsCategory<Destination: View>(
+        icon: String,
+        iconColor: Color,
+        title: String,
+        destination: Destination
+    ) -> some View {
+        NavigationLink(destination: destination) {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(iconColor)
+                        .frame(width: 29, height: 29)
+                    Image(systemName: icon)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                }
+                Text(title)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                Spacer()
+            }
+            .contentShape(Rectangle())
+        }
+    }
+}
+
+// MARK: - Audio Narration Settings
+
+struct AudioNarrationSettingsView: View {
     @AppStorage(TTSPreferenceKeys.provider) private var providerRaw: String = TTSProvider.apple.rawValue
     @AppStorage(TTSPreferenceKeys.voiceIdentifier) private var voiceIdentifier: String = ""
     @AppStorage(TTSPreferenceKeys.kokoroVoice) private var kokoroVoice: String = KokoroVoiceCatalog.defaultVoice
@@ -37,58 +92,49 @@ struct SettingsView: View {
     @State private var showDeleteModelConfirmation = false
     @State private var modelDeleteError: String?
 
-    private let voices: [AVSpeechSynthesisVoice] = SettingsView.loadEnglishVoices()
+    private let voices: [AVSpeechSynthesisVoice] = AudioNarrationSettingsView.loadEnglishVoices()
 
     private var selectedProvider: TTSProvider {
         TTSProvider(rawValue: providerRaw) ?? .apple
     }
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-
-            List {
-                providerSection
-                if selectedProvider == .apple {
-                    voiceSection
-                } else {
-                    kokoroVoiceSection
-                    kokoroModelSection
-                }
+        List {
+            providerSection
+            if selectedProvider == .apple {
+                voiceSection
+            } else {
+                kokoroVoiceSection
+                kokoroModelSection
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .background(Color.black)
         }
-        .navigationTitle("Settings")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Color.black, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
-        .preferredColorScheme(.dark)
-            .onAppear {
-                refreshKokoroModelState()
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.automatic)
+        .navigationTitle("Audio Narration")
+        .navigationBarTitleDisplayMode(.automatic)
+        .onAppear {
+            refreshKokoroModelState()
+        }
+        .confirmationDialog(
+            "Delete Kokoro model?",
+            isPresented: $showDeleteModelConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete Model", role: .destructive) {
+                deleteKokoroModel()
             }
-            .confirmationDialog(
-                "Delete Kokoro model?",
-                isPresented: $showDeleteModelConfirmation,
-                titleVisibility: .visible
-            ) {
-                Button("Delete Model", role: .destructive) {
-                    deleteKokoroModel()
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("The neural model will be removed from this device. Kokoro will ask to download it again the next time you play narration.")
-            }
-            .alert("Couldn’t Delete Model", isPresented: Binding(
-                get: { modelDeleteError != nil },
-                set: { if !$0 { modelDeleteError = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(modelDeleteError ?? "")
-            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("The neural model will be removed from this device. Kokoro will ask to download it again the next time you play narration.")
+        }
+        .alert("Couldn't Delete Model", isPresented: Binding(
+            get: { modelDeleteError != nil },
+            set: { if !$0 { modelDeleteError = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(modelDeleteError ?? "")
+        }
     }
 
     private var providerSection: some View {
@@ -100,29 +146,27 @@ struct SettingsView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(provider.displayName)
-                                .font(.system(size: 15))
-                                .foregroundColor(.white)
+                                .font(.body)
+                                .foregroundStyle(.primary)
                             Text(provider.subtitle)
-                                .font(.system(size: 11))
-                                .foregroundColor(.gray.opacity(0.6))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
                         }
                         Spacer()
                         if providerRaw == provider.rawValue {
                             Image(systemName: "checkmark")
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.white.opacity(0.85))
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(.tint)
                         }
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .listRowBackground(Color.black)
-                .listRowSeparatorTint(.white.opacity(0.06))
             }
         } header: {
-            sectionHeader("Audio Narration")
+            Text("Engine")
         } footer: {
-            sectionFooter("Choose the engine used by the Play button in the reader.")
+            Text("Choose the engine used by the Play button in the reader.")
         }
     }
 
@@ -136,30 +180,28 @@ struct SettingsView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(voice.name)
-                                    .font(.system(size: 15))
-                                    .foregroundColor(.white)
+                                    .font(.body)
+                                    .foregroundStyle(.primary)
                                 Text(qualityLabel(for: voice.quality))
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.gray.opacity(0.6))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
                             }
                             Spacer()
                             if isSelected(voice) {
                                 Image(systemName: "checkmark")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.85))
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.tint)
                             }
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .listRowBackground(Color.black)
-                    .listRowSeparatorTint(.white.opacity(0.06))
                 }
             }
         } header: {
-            sectionHeader("Apple Voice")
+            Text("Apple Voice")
         } footer: {
-            sectionFooter("Showing English voices available on this device.")
+            Text("Showing English voices available on this device.")
         }
     }
 
@@ -173,28 +215,26 @@ struct SettingsView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(voice.displayName)
-                                    .font(.system(size: 15))
-                                    .foregroundColor(.white)
+                                    .font(.body)
+                                    .foregroundStyle(.primary)
                                 Text("\(group.0) · \(voice.name)")
-                                    .font(.system(size: 11))
-                                    .foregroundColor(.gray.opacity(0.6))
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
                             }
                             Spacer()
                             if voice.name == kokoroVoice {
                                 Image(systemName: "checkmark")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundColor(.white.opacity(0.85))
+                                    .font(.body.weight(.semibold))
+                                    .foregroundStyle(.tint)
                             }
                         }
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .listRowBackground(Color.black)
-                    .listRowSeparatorTint(.white.opacity(0.06))
                 }
             }
         } header: {
-            sectionHeader("Kokoro Voice")
+            Text("Kokoro Voice")
         }
     }
 
@@ -203,23 +243,20 @@ struct SettingsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Neural Model")
-                        .font(.system(size: 15))
-                        .foregroundColor(.white)
+                        .font(.body)
+                        .foregroundStyle(.primary)
                     Text(isKokoroModelDownloaded
                          ? "Downloaded · ~312 MB"
                          : "Not downloaded · downloads on first Play")
-                        .font(.system(size: 11))
-                        .foregroundColor(.gray.opacity(0.6))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 if isKokoroModelDownloaded {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 16))
-                        .foregroundColor(.green.opacity(0.8))
+                        .foregroundStyle(.green)
                 }
             }
-            .listRowBackground(Color.black)
-            .listRowSeparatorTint(.white.opacity(0.06))
 
             if isKokoroModelDownloaded {
                 Button(role: .destructive) {
@@ -230,39 +267,15 @@ struct SettingsView: View {
                         Text("Delete Downloaded Model")
                         Spacer()
                     }
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.red.opacity(0.9))
+                    .font(.body)
                     .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .listRowBackground(Color.black)
-                .listRowSeparatorTint(.white.opacity(0.06))
             }
         } header: {
-            sectionHeader("Kokoro Model")
+            Text("Kokoro Model")
         } footer: {
-            sectionFooter("Deleting the model frees local storage. Your selected Kokoro voice is kept.")
+            Text("Deleting the model frees local storage. Your selected Kokoro voice is kept.")
         }
-    }
-
-    private func sectionHeader(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.white.opacity(0.45))
-            .textCase(.uppercase)
-            .tracking(0.5)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-    }
-
-    private func sectionFooter(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 12))
-            .foregroundColor(.white.opacity(0.35))
-            .textCase(nil)
-            .padding(.top, 4)
-            .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
     }
 
     private var voiceQualityGroups: [(title: String, voices: [AVSpeechSynthesisVoice])] {

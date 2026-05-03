@@ -72,10 +72,8 @@ struct ReaderSettingsSheet: View {
     private var aiQuestionsToggle: some View {
         HStack {
             Text("AI Questions")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white.opacity(0.45))
-                .textCase(.uppercase)
-                .tracking(0.5)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.white.opacity(0.55))
             Spacer()
             Toggle("", isOn: $settings.showAIQuestions)
                 .labelsHidden()
@@ -103,10 +101,8 @@ struct ReaderSettingsSheet: View {
     private func sectionHeader(_ title: String, trailing: String? = nil) -> some View {
         HStack {
             Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundColor(.white.opacity(0.45))
-                .textCase(.uppercase)
-                .tracking(0.5)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.white.opacity(0.55))
             Spacer()
             if let trailing {
                 Text(trailing)

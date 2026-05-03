@@ -22,8 +22,8 @@ struct ControlPanel: View {
     let onPlaybackSkipForward: () -> Void
     let onPlaybackStop: () -> Void
     let tags: [String]
-    let onLearnMoreTap: () -> Void
-    let onFactCheckTap: () -> Void
+    let actions: [PanelAction]
+    let onActionTap: (PanelAction) -> Void
     let showQuestion: Bool
     let currentQuestion: String
     let isLoadingQuestion: Bool
@@ -259,15 +259,16 @@ struct ControlPanel: View {
     }
 
     private var actionPillsRow: some View {
-        HStack(spacing: 8) {
-            ActionPill(title: "Learn more") {
-                onLearnMoreTap()
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(actions) { action in
+                    ActionPill(title: action.name) {
+                        onActionTap(action)
+                    }
+                }
             }
-            ActionPill(title: "Is this true?") {
-                onFactCheckTap()
-            }
+            .padding(.horizontal, 24)
         }
-        .padding(.horizontal, 24)
     }
 }
 

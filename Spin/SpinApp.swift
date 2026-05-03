@@ -4,15 +4,17 @@ import SwiftUI
 struct SpinApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var highlightStore = HighlightStore()
+    @StateObject private var readerSettings = ReaderSettings()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             rootView
-            .environment(highlightStore)
-            .task {
-                EmojiColorExtractor.shared.preloadDefaults()
-            }
+                .environment(highlightStore)
+                .environmentObject(readerSettings)
+                .task {
+                    EmojiColorExtractor.shared.preloadDefaults()
+                }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
@@ -66,6 +68,7 @@ private struct PlaybackPagingUITestRoot: View {
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationBarBackButtonHidden(true)
         }
+        .environmentObject(ReaderSettings())
     }
 }
 #endif
