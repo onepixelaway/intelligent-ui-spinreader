@@ -54,6 +54,13 @@ extension View {
     func portraitOnly() -> some View {
         self.modifier(PortraitOnlyModifier())
     }
+
+    func darkNavigationBar() -> some View {
+        self
+            .toolbarBackground(Color.black, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+    }
 }
 
 func perplexityURL(for query: String) -> URL? {

@@ -61,9 +61,7 @@ struct EpubLibraryView: View {
                     }
                 }
             }
-            .toolbarBackground(Color.black, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbarColorScheme(.dark, for: .navigationBar)
+            .darkNavigationBar()
             .fileImporter(
                 isPresented: $showImporter,
                 allowedContentTypes: [.epub],
@@ -297,9 +295,7 @@ private struct ChapterListView: View {
         }
         .navigationTitle(book.title)
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(Color.black, for: .navigationBar)
-        .toolbarBackground(.visible, for: .navigationBar)
-        .toolbarColorScheme(.dark, for: .navigationBar)
+        .darkNavigationBar()
     }
 }
 

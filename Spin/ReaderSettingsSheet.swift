@@ -5,20 +5,48 @@ struct ReaderSettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
+        ReaderAppearanceSettingsContent(
+            settings: settings,
+            dismissAction: { dismiss() }
+        )
+        .presentationDetents([.height(640)])
+        .presentationBackground(Color.black)
+        .presentationDragIndicator(.visible)
+        .preferredColorScheme(.dark)
+    }
+}
+
+struct ReaderAppearanceSettingsView: View {
+    @EnvironmentObject private var settings: ReaderSettings
+
+    var body: some View {
+        ReaderAppearanceSettingsContent(settings: settings)
+            .navigationTitle("Appearance")
+            .navigationBarTitleDisplayMode(.inline)
+            .darkNavigationBar()
+            .preferredColorScheme(.dark)
+    }
+}
+
+private struct ReaderAppearanceSettingsContent: View {
+    @ObservedObject var settings: ReaderSettings
+    var dismissAction: (() -> Void)?
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            HStack {
-                Text("Reader")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.white)
-                Spacer()
-                Button {
-                    dismiss()
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 22))
-                        .foregroundColor(.white.opacity(0.35))
+            if let dismissAction {
+                HStack {
+                    Text("Reader")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Button(action: dismissAction) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.white.opacity(0.35))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
 
             sizeSection
@@ -35,10 +63,6 @@ struct ReaderSettingsSheet: View {
         .padding(.bottom, 28)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Color.black.ignoresSafeArea())
-        .presentationDetents([.height(640)])
-        .presentationBackground(Color.black)
-        .presentationDragIndicator(.visible)
-        .preferredColorScheme(.dark)
     }
 
     private var sizeSection: some View {

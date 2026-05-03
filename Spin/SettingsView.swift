@@ -36,6 +36,12 @@ struct SettingsView: View {
         List {
             Section {
                 settingsCategory(
+                    icon: "textformat.size",
+                    iconColor: .indigo,
+                    title: "Appearance",
+                    destination: ReaderAppearanceSettingsView()
+                )
+                settingsCategory(
                     icon: "waveform",
                     iconColor: .blue,
                     title: "Audio Narration",

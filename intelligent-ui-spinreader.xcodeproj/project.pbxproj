@@ -52,6 +52,7 @@
 		F2B26A4D534154D490750E03 /* ScrollState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E8B463DE1593C722957A035 /* ScrollState.swift */; };
 		F83589C8749C2020027AD0DD /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 60954BBD2DD7CE2BAE639828 /* Preview Assets.xcassets */; };
 		F8FFCCED2F28AA90380CBF58 /* ControlPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DF9AEE3F3F5F968AF732828 /* ControlPanel.swift */; };
+		FD03F009BD7431F4512AE639 /* KokoroSwift in Embed Frameworks */ = {isa = PBXBuildFile; productRef = 95ABC8680AE69D850F94AD23 /* KokoroSwift */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		FF5496F6CDEB3D5355CFDA96 /* ActionPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0FC182CA01D2208DFECBAB5C /* ActionPill.swift */; };
 		FF9E2AF9A9D807F32EB3CACA /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = 81A96CC0E6E31CFC947832EE /* MLX */; };
 /* End PBXBuildFile section */
@@ -72,6 +73,20 @@
 			remoteInfo = Spin;
 		};
 /* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		9C9A397C9FB015A8D5BB4CB1 /* Embed Frameworks */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 10;
+			files = (
+				FD03F009BD7431F4512AE639 /* KokoroSwift in Embed Frameworks */,
+			);
+			name = "Embed Frameworks";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		010694351C3B0BE06E7217E8 /* CurrentQuestionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentQuestionView.swift; sourceTree = "<group>"; };
@@ -271,6 +286,7 @@
 				6574B46424269A10B9964311 /* Sources */,
 				9D52833E515154AAA542B929 /* Resources */,
 				192829E854EC275AC67D4FB0 /* Frameworks */,
+				9C9A397C9FB015A8D5BB4CB1 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
