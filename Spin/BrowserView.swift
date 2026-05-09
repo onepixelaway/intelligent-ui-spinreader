@@ -262,23 +262,23 @@ private struct WebContainer: UIViewRepresentable {
         }
 
         func attach(to webView: WKWebView) {
-            observations.append(observe(webView, \.canGoBack)  { m, v in if m.canGoBack != v    { m.canGoBack = v } })
-            observations.append(observe(webView, \.canGoForward) { m, v in if m.canGoForward != v { m.canGoForward = v } })
-            observations.append(observe(webView, \.isLoading)  { m, v in if m.isLoading != v    { m.isLoading = v } })
-            observations.append(observe(webView, \.url)        { m, v in if m.currentURL != v   { m.currentURL = v } })
+            observations = [
+                bind(webView, \.canGoBack)    { m, v in if m.canGoBack    != v { m.canGoBack    = v } },
+                bind(webView, \.canGoForward) { m, v in if m.canGoForward != v { m.canGoForward = v } },
+                bind(webView, \.isLoading)    { m, v in if m.isLoading    != v { m.isLoading    = v } },
+                bind(webView, \.url)          { m, v in if m.currentURL   != v { m.currentURL   = v } },
+            ]
         }
 
-        private func observe<V: Equatable & Sendable>(
+        private func bind<V: Sendable>(
             _ webView: WKWebView,
             _ source: KeyPath<WKWebView, V>,
-            _ update: @escaping @MainActor (BrowserModel, V) -> Void
+            apply: @escaping @MainActor (BrowserModel, V) -> Void
         ) -> NSKeyValueObservation {
-            webView.observe(source, options: [.new, .initial]) { [weak self] wv, _ in
-                let value = wv[keyPath: source]
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    update(self.model, value)
-                }
+            let model = self.model
+            return webView.observe(source, options: [.new, .initial]) { _, change in
+                guard let value = change.newValue else { return }
+                MainActor.assumeIsolated { apply(model, value) }
             }
         }
 

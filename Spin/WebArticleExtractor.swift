@@ -24,6 +24,8 @@ private let readabilityScript: String? = {
     return try? String(contentsOf: scriptURL, encoding: .utf8)
 }()
 
+private let jsResultDecoder = JSONDecoder()
+
 @MainActor
 func extractArticle(from webView: WKWebView, sourceURL: URL) async throws -> WebArticle {
     guard let script = readabilityScript else {
@@ -146,7 +148,7 @@ private func evaluateJSON<T: JSEvalEnvelope>(_ js: String, on webView: WKWebView
     }
     let parsed: T
     do {
-        parsed = try JSONDecoder().decode(T.self, from: data)
+        parsed = try jsResultDecoder.decode(T.self, from: data)
     } catch {
         throw WebArticleError.decodingFailed
     }

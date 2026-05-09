@@ -42,22 +42,32 @@ final class WebArticleStore: ObservableObject {
             guard let urls = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else {
                 return []
             }
-            let decoder = Self.makeDecoder()
-            var result: [WebArticle] = []
-            for url in urls where url.pathExtension.lowercased() == "json" {
-                guard let data = try? Data(contentsOf: url),
-                      let article = try? decoder.decode(WebArticle.self, from: data) else { continue }
-                result.append(article)
+            let jsonURLs = urls.filter { $0.pathExtension.lowercased() == "json" }
+            return await withTaskGroup(of: WebArticle?.self) { group in
+                for url in jsonURLs {
+                    group.addTask {
+                        guard let data = try? Data(contentsOf: url),
+                              let article = try? makeArticleDecoder().decode(WebArticle.self, from: data) else {
+                            return nil
+                        }
+                        return article
+                    }
+                }
+                var result: [WebArticle] = []
+                result.reserveCapacity(jsonURLs.count)
+                for await article in group {
+                    if let article { result.append(article) }
+                }
+                return result
             }
-            return result
         }.value
-        articles = loaded.sorted(by: Self.sortedByRecency)
+        articles = loaded.sorted(by: byRecency)
     }
 
     func save(_ article: WebArticle) async throws {
         let dir = directory
         try await Task.detached {
-            let encoder = Self.makeEncoder()
+            let encoder = makeArticleEncoder()
             let data = try encoder.encode(article)
             let url = dir.appendingPathComponent("\(article.id.uuidString).json")
             try data.write(to: url, options: .atomic)
@@ -67,7 +77,7 @@ final class WebArticleStore: ObservableObject {
         } else {
             articles.append(article)
         }
-        articles.sort(by: Self.sortedByRecency)
+        articles.sort(by: byRecency)
     }
 
     func delete(_ article: WebArticle) {
@@ -75,22 +85,20 @@ final class WebArticleStore: ObservableObject {
         try? FileManager.default.removeItem(at: url)
         articles.removeAll { $0.id == article.id }
     }
+}
 
-    private static func sortedByRecency(_ a: WebArticle, _ b: WebArticle) -> Bool {
-        a.savedAt > b.savedAt
-    }
+private func byRecency(_ a: WebArticle, _ b: WebArticle) -> Bool { a.savedAt > b.savedAt }
 
-    nonisolated private static func makeDecoder() -> JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
-    }
+private func makeArticleDecoder() -> JSONDecoder {
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601
+    return decoder
+}
 
-    nonisolated private static func makeEncoder() -> JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }
+private func makeArticleEncoder() -> JSONEncoder {
+    let encoder = JSONEncoder()
+    encoder.dateEncodingStrategy = .iso8601
+    return encoder
 }
 
 extension ScrollTextView.FootnoteRef: Codable {
