@@ -178,6 +178,7 @@
 				1E5CAA4D526A26418C07CB5A /* UXTeamofOne.epub */,
 				79C757C174C85CC26D561DFD /* voices.npz */,
 				BB00000000000000BB000007 /* ReadabilitySanitized.js */,
+			);
 			path = Resources;
 			sourceTree = "<group>";
 		};
@@ -389,6 +390,7 @@
 				818CD9EC5CEBD5C322C7C561 /* UXTeamofOne.epub in Resources */,
 				F214942FD7EDC02E62BA74ED /* voices.npz in Resources */,
 				BB00000000000000BB000008 /* ReadabilitySanitized.js in Resources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */

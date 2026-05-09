@@ -80,13 +80,13 @@ final class WebArticleStore: ObservableObject {
         a.savedAt > b.savedAt
     }
 
-    private static func makeDecoder() -> JSONDecoder {
+    nonisolated private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
     }
 
-    private static func makeEncoder() -> JSONEncoder {
+    nonisolated private static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return encoder

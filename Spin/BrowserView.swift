@@ -262,22 +262,22 @@ private struct WebContainer: UIViewRepresentable {
         }
 
         func attach(to webView: WKWebView) {
-            observations.append(observe(webView, \.canGoBack, \.canGoBack))
-            observations.append(observe(webView, \.canGoForward, \.canGoForward))
-            observations.append(observe(webView, \.isLoading, \.isLoading))
-            observations.append(observe(webView, \.url, \.currentURL))
+            observations.append(observe(webView, \.canGoBack)  { m, v in if m.canGoBack != v    { m.canGoBack = v } })
+            observations.append(observe(webView, \.canGoForward) { m, v in if m.canGoForward != v { m.canGoForward = v } })
+            observations.append(observe(webView, \.isLoading)  { m, v in if m.isLoading != v    { m.isLoading = v } })
+            observations.append(observe(webView, \.url)        { m, v in if m.currentURL != v   { m.currentURL = v } })
         }
 
-        private func observe<V: Equatable>(
+        private func observe<V: Equatable & Sendable>(
             _ webView: WKWebView,
             _ source: KeyPath<WKWebView, V>,
-            _ target: ReferenceWritableKeyPath<BrowserModel, V>
+            _ update: @escaping @MainActor (BrowserModel, V) -> Void
         ) -> NSKeyValueObservation {
             webView.observe(source, options: [.new, .initial]) { [weak self] wv, _ in
                 let value = wv[keyPath: source]
-                Task { @MainActor in
-                    guard let self, self.model[keyPath: target] != value else { return }
-                    self.model[keyPath: target] = value
+                DispatchQueue.main.async { [weak self] in
+                    guard let self else { return }
+                    update(self.model, value)
                 }
             }
         }
