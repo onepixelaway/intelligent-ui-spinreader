@@ -1,33 +1,64 @@
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
+import WebKit
 
 struct EpubLibraryView: View {
     @StateObject private var library = EpubLibrary()
+    @StateObject private var articleStore = WebArticleStore()
     @State private var showImporter = false
+    @State private var showBrowser = false
     @State private var errorMessage: String?
+    @State private var isImportingArticle = false
 
     private let columns = [
         GridItem(.flexible(), spacing: 20),
         GridItem(.flexible(), spacing: 20)
     ]
 
+    private enum LibraryItem: Identifiable, Hashable {
+        case book(EpubBook)
+        case article(WebArticle)
+
+        var id: String {
+            switch self {
+            case .book(let b): return "book:\(b.id)"
+            case .article(let a): return "article:\(a.id.uuidString)"
+            }
+        }
+
+        var sortKey: String {
+            switch self {
+            case .book(let b): return b.title.lowercased()
+            case .article(let a): return a.title.lowercased()
+            }
+        }
+    }
+
+    private static func articleBookID(_ article: WebArticle) -> String {
+        "article:\(article.id.uuidString)"
+    }
+
+    private var libraryItems: [LibraryItem] {
+        let books = library.books.map(LibraryItem.book)
+        let articles = articleStore.articles.map(LibraryItem.article)
+        return (books + articles).sorted { $0.sortKey < $1.sortKey }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                if library.isLoading && library.books.isEmpty {
+                if library.isLoading && libraryItems.isEmpty {
                     ProgressView()
                         .tint(.white.opacity(0.6))
-                } else if library.books.isEmpty {
+                } else if libraryItems.isEmpty {
                     emptyState
                 } else {
                     bookGrid
                         .overlay(alignment: .bottomTrailing) {
-                            Button {
-                                showImporter = true
-                            } label: {
+                            addMenu {
                                 Image(systemName: "plus")
                                     .font(.system(size: 24, weight: .semibold))
                                     .foregroundColor(.black)
@@ -53,9 +84,7 @@ struct EpubLibraryView: View {
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showImporter = true
-                    } label: {
+                    addMenu {
                         Image(systemName: "plus")
                             .foregroundColor(.white.opacity(0.7))
                     }
@@ -68,6 +97,32 @@ struct EpubLibraryView: View {
                 allowsMultipleSelection: true
             ) { result in
                 Task { await handleImport(result: result) }
+            }
+            .sheet(isPresented: $showBrowser) {
+                BrowserView(initialURL: nil) { webView, url in
+                    showBrowser = false
+                    Task { await handleArticleImport(webView: webView, url: url) }
+                }
+            }
+            .overlay {
+                if isImportingArticle {
+                    ZStack {
+                        Color.black.opacity(0.55).ignoresSafeArea()
+                        VStack(spacing: 12) {
+                            ProgressView().tint(.white)
+                            Text("Saving article…")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+                        .padding(.horizontal, 28)
+                        .padding(.vertical, 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: 14)
+                                .fill(Color(white: 0.12))
+                        )
+                    }
+                    .transition(.opacity)
+                }
             }
             .alert(
                 "Couldn't import",
@@ -86,6 +141,27 @@ struct EpubLibraryView: View {
             if library.books.isEmpty {
                 await library.loadFromDisk()
             }
+            if articleStore.articles.isEmpty {
+                await articleStore.loadFromDisk()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func addMenu<TriggerLabel: View>(@ViewBuilder label: () -> TriggerLabel) -> some View {
+        Menu {
+            Button {
+                showBrowser = true
+            } label: {
+                Label("Save from the web", systemImage: "globe")
+            }
+            Button {
+                showImporter = true
+            } label: {
+                Label("Import ePub file", systemImage: "doc")
+            }
+        } label: {
+            label()
         }
     }
 
@@ -101,18 +177,16 @@ struct EpubLibraryView: View {
             Image(systemName: "books.vertical")
                 .font(.system(size: 48, weight: .light))
                 .foregroundColor(.gray.opacity(0.4))
-            Text("Add your first book")
+            Text("Build your library")
                 .font(.system(size: 18, weight: .medium))
                 .foregroundColor(.white.opacity(0.85))
-            Text("Import an .epub file to start reading.")
+            Text("Save articles from the web or import an .epub file to start reading.")
                 .font(.system(size: 14))
                 .foregroundColor(.gray.opacity(0.6))
                 .multilineTextAlignment(.center)
 
-            Button {
-                showImporter = true
-            } label: {
-                Text("Import ePub")
+            addMenu {
+                Text("Add a book")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundColor(.black)
                     .padding(.horizontal, 20)
@@ -128,13 +202,29 @@ struct EpubLibraryView: View {
     private var bookGrid: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 24) {
-                ForEach(library.books) { book in
-                    NavigationLink {
-                        ChapterListView(book: book)
-                    } label: {
-                        BookCard(book: book)
+                ForEach(libraryItems) { item in
+                    switch item {
+                    case .book(let book):
+                        NavigationLink {
+                            ChapterListView(book: book)
+                        } label: {
+                            BookCard(book: book)
+                        }
+                        .buttonStyle(.plain)
+                    case .article(let article):
+                        NavigationLink {
+                            ScrollTextView(
+                                chapters: [article.asChapter()],
+                                startingIndex: 0,
+                                bookID: Self.articleBookID(article)
+                            )
+                            .toolbar(.hidden, for: .navigationBar)
+                            .navigationBarBackButtonHidden(true)
+                        } label: {
+                            ArticleCard(article: article)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, 20)
@@ -154,6 +244,17 @@ struct EpubLibraryView: View {
                 }
             }
         case .failure(let error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func handleArticleImport(webView: WKWebView, url: URL) async {
+        isImportingArticle = true
+        defer { isImportingArticle = false }
+        do {
+            let article = try await extractArticle(from: webView, sourceURL: url)
+            try await articleStore.save(article)
+        } catch {
             errorMessage = error.localizedDescription
         }
     }
@@ -197,6 +298,62 @@ private struct BookCard: View {
     }
 }
 
+private struct ArticleCard: View {
+    let article: WebArticle
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            cover
+                .frame(maxWidth: .infinity)
+                .aspectRatio(2.0/3.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
+
+            Text(article.title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+
+            Text(article.author.isEmpty ? (article.sourceURL.host ?? "Article") : article.author)
+                .font(.system(size: 11))
+                .foregroundColor(.gray.opacity(0.6))
+                .lineLimit(1)
+        }
+    }
+
+    private var cover: some View {
+        GeometryReader { geo in
+            let colors = deterministicGradient(for: article.title + (article.sourceURL.host ?? ""))
+            ZStack {
+                LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+
+                VStack(spacing: 10) {
+                    Image(systemName: "globe")
+                        .font(.system(size: min(geo.size.width * 0.28, 48), weight: .light))
+                        .foregroundColor(.white.opacity(0.85))
+                    Text(article.title)
+                        .font(.system(size: min(geo.size.width * 0.09, 14), weight: .semibold))
+                        .foregroundColor(.white)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(3)
+                        .padding(.horizontal, 12)
+                }
+
+                Text("Article")
+                    .font(.system(size: 9, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundColor(.white.opacity(0.9))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(Color.white.opacity(0.18)))
+                    .padding(8)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            }
+        }
+    }
+}
+
 private struct PlaceholderCover: View {
     let title: String
     let author: String
@@ -212,7 +369,6 @@ private struct PlaceholderCover: View {
                 )
 
                 VStack(spacing: 8) {
-                    Spacer()
                     Text(title)
                         .font(.system(size: min(geo.size.width * 0.1, 15), weight: .semibold))
                         .foregroundColor(.white)
@@ -227,24 +383,23 @@ private struct PlaceholderCover: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 12)
                     }
-                    Spacer()
                 }
             }
         }
     }
+}
 
-    private func deterministicGradient(for seed: String) -> [Color] {
-        var hash: UInt64 = 5381
-        for byte in seed.utf8 {
-            hash = ((hash &<< 5) &+ hash) &+ UInt64(byte)
-        }
-        let hue1 = Double(hash % 360) / 360.0
-        let hue2 = Double((hash / 360) % 360) / 360.0
-        return [
-            Color(hue: hue1, saturation: 0.5, brightness: 0.35),
-            Color(hue: hue2, saturation: 0.6, brightness: 0.25)
-        ]
+private func deterministicGradient(for seed: String) -> [Color] {
+    var hash: UInt64 = 5381
+    for byte in seed.utf8 {
+        hash = ((hash &<< 5) &+ hash) &+ UInt64(byte)
     }
+    let hue1 = Double(hash % 360) / 360.0
+    let hue2 = Double((hash / 360) % 360) / 360.0
+    return [
+        Color(hue: hue1, saturation: 0.55, brightness: 0.38),
+        Color(hue: hue2, saturation: 0.62, brightness: 0.24)
+    ]
 }
 
 private struct ChapterListView: View {
