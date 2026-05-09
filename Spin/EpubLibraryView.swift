@@ -10,6 +10,8 @@ struct EpubLibraryView: View {
     @State private var showBrowser = false
     @State private var errorMessage: String?
     @State private var isImportingArticle = false
+    @State private var isJiggling = false
+    @State private var bookPendingDeletion: EpubBook?
 
     private let columns = [
         GridItem(.flexible(), spacing: 20),
@@ -58,17 +60,20 @@ struct EpubLibraryView: View {
                 } else {
                     bookGrid
                         .overlay(alignment: .bottomTrailing) {
-                            addMenu {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 24, weight: .semibold))
-                                    .foregroundColor(.black)
-                                    .frame(width: 56, height: 56)
-                                    .background(Color.white)
-                                    .clipShape(Circle())
-                                    .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
+                            if !isJiggling {
+                                addMenu {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 24, weight: .semibold))
+                                        .foregroundColor(.black)
+                                        .frame(width: 56, height: 56)
+                                        .background(Color.white)
+                                        .clipShape(Circle())
+                                        .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
+                                }
+                                .padding(.bottom, 32)
+                                .padding(.trailing, 24)
+                                .transition(.opacity)
                             }
-                            .padding(.bottom, 32)
-                            .padding(.trailing, 24)
                         }
                 }
             }
@@ -76,17 +81,29 @@ struct EpubLibraryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    NavigationLink {
-                        SettingsView()
-                    } label: {
-                        Image(systemName: "gearshape")
-                            .foregroundColor(.white.opacity(0.7))
+                    if !isJiggling {
+                        NavigationLink {
+                            SettingsView()
+                        } label: {
+                            Image(systemName: "gearshape")
+                                .foregroundColor(.white.opacity(0.7))
+                        }
                     }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    addMenu {
-                        Image(systemName: "plus")
-                            .foregroundColor(.white.opacity(0.7))
+                    if isJiggling {
+                        Button {
+                            withAnimation(.easeOut(duration: 0.2)) { isJiggling = false }
+                        } label: {
+                            Text("Done")
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundColor(.white)
+                        }
+                    } else {
+                        addMenu {
+                            Image(systemName: "plus")
+                                .foregroundColor(.white.opacity(0.7))
+                        }
                     }
                 }
             }
@@ -134,6 +151,21 @@ struct EpubLibraryView: View {
                     Text(errorMessage ?? "")
                 }
             )
+            .alert(
+                bookPendingDeletion.map { "Delete \"\($0.title)\"?" } ?? "Delete book?",
+                isPresented: deleteAlertBinding,
+                presenting: bookPendingDeletion
+            ) { book in
+                Button("Cancel", role: .cancel) {}
+                Button("Delete", role: .destructive) {
+                    library.delete(book)
+                    if libraryItems.isEmpty {
+                        withAnimation(.easeOut(duration: 0.2)) { isJiggling = false }
+                    }
+                }
+            } message: { _ in
+                Text("This cannot be undone.")
+            }
         }
         .preferredColorScheme(.dark)
         .task {
@@ -172,6 +204,13 @@ struct EpubLibraryView: View {
         )
     }
 
+    private var deleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { bookPendingDeletion != nil },
+            set: { if !$0 { bookPendingDeletion = nil } }
+        )
+    }
+
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "books.vertical")
@@ -202,35 +241,97 @@ struct EpubLibraryView: View {
     private var bookGrid: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 24) {
-                ForEach(libraryItems) { item in
-                    switch item {
-                    case .book(let book):
-                        NavigationLink {
-                            ChapterListView(book: book)
-                        } label: {
-                            BookCard(book: book)
-                        }
-                        .buttonStyle(.plain)
-                    case .article(let article):
-                        NavigationLink {
-                            ScrollTextView(
-                                chapters: [article.asChapter()],
-                                startingIndex: 0,
-                                bookID: Self.articleBookID(article)
-                            )
-                            .toolbar(.hidden, for: .navigationBar)
-                            .navigationBarBackButtonHidden(true)
-                        } label: {
-                            ArticleCard(article: article)
-                        }
-                        .buttonStyle(.plain)
-                    }
+                ForEach(Array(libraryItems.enumerated()), id: \.element.id) { index, item in
+                    gridCell(item: item, index: index)
                 }
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
             .padding(.bottom, 32)
         }
+        .background(
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if isJiggling {
+                        withAnimation(.easeOut(duration: 0.2)) { isJiggling = false }
+                    }
+                }
+        )
+    }
+
+    @ViewBuilder
+    private func gridCell(item: LibraryItem, index: Int) -> some View {
+        ZStack(alignment: .topLeading) {
+            cellContent(for: item)
+                .allowsHitTesting(!isJiggling)
+
+            if isJiggling {
+                deleteButton(for: item)
+                    .offset(x: -8, y: -8)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .modifier(JiggleModifier(isJiggling: isJiggling, index: index))
+        .onLongPressGesture(minimumDuration: 0.5) {
+            if !isJiggling {
+                let generator = UIImpactFeedbackGenerator(style: .medium)
+                generator.impactOccurred()
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                    isJiggling = true
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func cellContent(for item: LibraryItem) -> some View {
+        switch item {
+        case .book(let book):
+            NavigationLink {
+                ChapterListView(book: book)
+            } label: {
+                BookCard(book: book)
+            }
+            .buttonStyle(.plain)
+        case .article(let article):
+            NavigationLink {
+                ScrollTextView(
+                    chapters: [article.asChapter()],
+                    startingIndex: 0,
+                    bookID: Self.articleBookID(article)
+                )
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationBarBackButtonHidden(true)
+            } label: {
+                ArticleCard(article: article)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func deleteButton(for item: LibraryItem) -> some View {
+        Button {
+            switch item {
+            case .book(let book):
+                bookPendingDeletion = book
+            case .article(let article):
+                articleStore.delete(article)
+                if libraryItems.isEmpty {
+                    withAnimation(.easeOut(duration: 0.2)) { isJiggling = false }
+                }
+            }
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundColor(.white)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(Color.black))
+                .overlay(
+                    Circle().stroke(Color.white.opacity(0.4), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
     }
 
     private func handleImport(result: Result<[URL], Error>) async {
@@ -257,6 +358,35 @@ struct EpubLibraryView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+private struct JiggleModifier: ViewModifier {
+    let isJiggling: Bool
+    let index: Int
+    @State private var rotation: Double = 0
+
+    func body(content: Content) -> some View {
+        content
+            .rotationEffect(.degrees(rotation))
+            .onChange(of: isJiggling, initial: true) { _, newValue in
+                if newValue {
+                    var snap = Transaction()
+                    snap.disablesAnimations = true
+                    withTransaction(snap) { rotation = -2 }
+                    withAnimation(
+                        .easeInOut(duration: 0.13)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(index % 7) * 0.02)
+                    ) {
+                        rotation = 2
+                    }
+                } else {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        rotation = 0
+                    }
+                }
+            }
     }
 }
 
@@ -524,6 +654,11 @@ final class EpubLibrary: ObservableObject {
             return result
         }.value
         books = parsed.sorted(by: sortedByTitle)
+    }
+
+    func delete(_ book: EpubBook) {
+        try? FileManager.default.removeItem(at: book.fileURL)
+        books.removeAll { $0.id == book.id }
     }
 
     func importFile(at sourceURL: URL) async throws -> EpubBook {
