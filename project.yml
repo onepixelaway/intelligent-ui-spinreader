@@ -1,6 +1,6 @@
 name: intelligent-ui-spinreader
 options:
-  bundleIdPrefix: indivisible.spin
+  bundleIdPrefix: com.tareqismail
   deploymentTarget:
     iOS: 18.1.1
   xcodeVersion: "16.2"

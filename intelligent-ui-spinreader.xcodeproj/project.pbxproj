@@ -490,7 +490,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.Spin;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreader;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -510,7 +510,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.Spin;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreader;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -582,7 +582,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.SpinTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreaderTests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -599,7 +599,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.SpinUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreaderUITests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -616,7 +616,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.SpinTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreaderTests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -696,7 +696,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = indivisible.spin.SpinUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreaderUITests;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
