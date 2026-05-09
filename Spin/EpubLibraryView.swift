@@ -12,6 +12,7 @@ struct EpubLibraryView: View {
     @State private var isImportingArticle = false
     @State private var isJiggling = false
     @State private var bookPendingDeletion: EpubBook?
+    @State private var navigationPath = NavigationPath()
 
     private let columns = [
         GridItem(.flexible(), spacing: 20),
@@ -48,7 +49,7 @@ struct EpubLibraryView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $navigationPath) {
             ZStack {
                 Color.black.ignoresSafeArea()
 
@@ -106,6 +107,18 @@ struct EpubLibraryView: View {
                         }
                     }
                 }
+            }
+            .navigationDestination(for: EpubBook.self) { book in
+                ChapterListView(book: book)
+            }
+            .navigationDestination(for: WebArticle.self) { article in
+                ScrollTextView(
+                    chapters: [article.asChapter()],
+                    startingIndex: 0,
+                    bookID: Self.articleBookID(article)
+                )
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationBarBackButtonHidden(true)
             }
             .darkNavigationBar()
             .fileImporter(
@@ -264,7 +277,21 @@ struct EpubLibraryView: View {
     private func gridCell(item: LibraryItem, index: Int) -> some View {
         ZStack(alignment: .topLeading) {
             cellContent(for: item)
-                .allowsHitTesting(!isJiggling)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if !isJiggling {
+                        navigate(to: item)
+                    }
+                }
+                .onLongPressGesture(minimumDuration: 0.5) {
+                    if !isJiggling {
+                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                        generator.impactOccurred()
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+                            isJiggling = true
+                        }
+                    }
+                }
 
             if isJiggling {
                 deleteButton(for: item)
@@ -273,40 +300,24 @@ struct EpubLibraryView: View {
             }
         }
         .modifier(JiggleModifier(isJiggling: isJiggling, index: index))
-        .onLongPressGesture(minimumDuration: 0.5) {
-            if !isJiggling {
-                let generator = UIImpactFeedbackGenerator(style: .medium)
-                generator.impactOccurred()
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
-                    isJiggling = true
-                }
-            }
-        }
     }
 
     @ViewBuilder
     private func cellContent(for item: LibraryItem) -> some View {
         switch item {
         case .book(let book):
-            NavigationLink {
-                ChapterListView(book: book)
-            } label: {
-                BookCard(book: book)
-            }
-            .buttonStyle(.plain)
+            BookCard(book: book)
         case .article(let article):
-            NavigationLink {
-                ScrollTextView(
-                    chapters: [article.asChapter()],
-                    startingIndex: 0,
-                    bookID: Self.articleBookID(article)
-                )
-                .toolbar(.hidden, for: .navigationBar)
-                .navigationBarBackButtonHidden(true)
-            } label: {
-                ArticleCard(article: article)
-            }
-            .buttonStyle(.plain)
+            ArticleCard(article: article)
+        }
+    }
+
+    private func navigate(to item: LibraryItem) {
+        switch item {
+        case .book(let book):
+            navigationPath.append(book)
+        case .article(let article):
+            navigationPath.append(article)
         }
     }
 
