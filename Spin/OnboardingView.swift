@@ -15,13 +15,13 @@ struct OnboardingView: View {
                     SplashScreen(onContinue: { advance(to: .trackpad) })
                         .transition(screenTransition)
                 case .trackpad:
-                    TrackpadOnboardingScreen(onComplete: { advance(to: .highlight) })
-                        .transition(screenTransition)
-                case .highlight:
-                    HighlightOnboardingScreen(onComplete: { advance(to: .ai) })
+                    TrackpadOnboardingScreen(onComplete: { advance(to: .ai) })
                         .transition(screenTransition)
                 case .ai:
-                    AIOnboardingScreen(onComplete: finish)
+                    AIOnboardingScreen(onComplete: { advance(to: .highlight) })
+                        .transition(screenTransition)
+                case .highlight:
+                    HighlightOnboardingScreen(onComplete: finish)
                         .transition(screenTransition)
                 }
             }
@@ -52,8 +52,8 @@ struct OnboardingView: View {
 private enum OnboardingStep {
     case splash
     case trackpad
-    case highlight
     case ai
+    case highlight
 }
 
 // MARK: - Splash
@@ -265,28 +265,6 @@ private enum OnboardingSample {
     """
 }
 
-// Produces NSAttributedString that visually matches the real reader's paragraph
-// rendering (same color, font design, and paragraph line spacing).
-@MainActor
-private func readerSampleAttributedText(
-    _ text: String,
-    settings: ReaderSettings,
-    weight: UIFont.Weight = .regular
-) -> NSAttributedString {
-    let size = settings.paragraphSize
-    var font = UIFont.systemFont(ofSize: size, weight: weight)
-    if let descriptor = font.fontDescriptor.withDesign(settings.fontFamily.uiDesign) {
-        font = UIFont(descriptor: descriptor, size: size)
-    }
-    let para = NSMutableParagraphStyle()
-    para.lineSpacing = settings.lineSpacingPt(for: size)
-    return NSAttributedString(string: text, attributes: [
-        .font: font,
-        .foregroundColor: UIColor(white: 0.92, alpha: 1.0),
-        .paragraphStyle: para
-    ])
-}
-
 // MARK: - Onboarding panel helper
 //
 // Builds the real reader ControlPanel with neutral defaults so each tutorial
@@ -300,6 +278,7 @@ private struct OnboardingControlPanel: View {
     var onTrackpadSwipeDown: () -> Void = {}
     var onTrackpadSwipeUp: () -> Void = {}
     var onActionTap: (PanelAction) -> Void = { _ in }
+    var onHighlight: () -> Void = {}
 
     private var actions: [PanelAction] {
         let configured = readerSettings.panelActions
@@ -314,7 +293,7 @@ private struct OnboardingControlPanel: View {
             availableHighlightEmojis: readerSettings.highlightEmojis,
             selectedHighlightColor: readerSettings.highlightColors.first ?? .yellow,
             selectedHighlightEmoji: nil,
-            onHighlight: {},
+            onHighlight: onHighlight,
             onHighlightColorSelected: { _ in },
             onHighlightEmojiSelected: { _ in },
             onCancelHighlight: {},
@@ -436,36 +415,36 @@ private struct TrackpadOnboardingScreen: View {
     }
 }
 
-// MARK: - Screen 3: highlight
+// MARK: - Screen 4: highlight
 
 private struct HighlightOnboardingScreen: View {
     let onComplete: () -> Void
     @EnvironmentObject private var readerSettings: ReaderSettings
 
-    @State private var highlights: [Highlight] = []
     @State private var didFireComplete = false
-
-    private let sampleContentID = "onboarding.highlight"
 
     var body: some View {
         VStack(spacing: 0) {
             instructionHeader
 
-            sampleTextArea
+            sampleText
                 .padding(.top, 24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
-            OnboardingControlPanel(tags: onboardingSampleTags)
+            OnboardingControlPanel(
+                tags: onboardingSampleTags,
+                onHighlight: handlePencilTap
+            )
         }
     }
 
     private var instructionHeader: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Drag to highlight")
+            Text("Tap the pencil to highlight")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.white)
 
-            Text("Press and drag across any words to highlight a passage.")
+            Text("Use the pencil button on the left of the control pad to highlight what you're reading.")
                 .font(.system(size: 15, weight: .regular))
                 .foregroundColor(.white.opacity(0.6))
                 .fixedSize(horizontal: false, vertical: true)
@@ -475,62 +454,36 @@ private struct HighlightOnboardingScreen: View {
         .padding(.top, 40)
     }
 
-    private var sampleTextArea: some View {
-        ScrollView(showsIndicators: false) {
-            HighlightableTextView(
-                text: OnboardingSample.text,
-                attributedText: readerSampleAttributedText(OnboardingSample.text, settings: readerSettings),
-                itemIndex: 0,
-                highlights: highlights,
-                playbackHighlight: nil,
-                isPlaybackActive: false,
-                pendingHighlight: nil,
-                pendingOpacity: 0.25,
-                showsPendingCursor: false,
-                onHighlightCreated: handleHighlightCreated,
-                onHighlightRemoved: { id in
-                    highlights.removeAll { $0.id == id }
-                },
-                onPlaybackWordTapped: { _ in },
-                onEmptyTap: {}
-            )
+    private var sampleText: some View {
+        Text(OnboardingSample.text)
+            .font(.system(
+                size: readerSettings.paragraphSize,
+                weight: .regular,
+                design: readerSettings.fontFamily.design
+            ))
+            .foregroundColor(Color(white: 0.92))
+            .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, readerSettings.margins.horizontalPadding)
-        }
     }
 
-    private func handleHighlightCreated(text: String, start: Int, end: Int) {
-        let highlight = Highlight(
-            contentID: sampleContentID,
-            text: text,
-            startOffset: start,
-            endOffset: end,
-            color: HighlightColorChoice.yellow.rawValue
-        )
-        highlights.append(highlight)
-
+    private func handlePencilTap() {
         guard !didFireComplete else { return }
         didFireComplete = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             onComplete()
         }
     }
 }
 
-// MARK: - Screen 4: AI buttons
+// MARK: - Screen 3: AI buttons
 
 private struct AIOnboardingScreen: View {
     let onComplete: () -> Void
     @EnvironmentObject private var readerSettings: ReaderSettings
 
-    @State private var phase: AIPhase = .idle
-    @State private var tappedAction: PanelAction?
-
-    private enum AIPhase {
-        case idle
-        case thinking
-        case allSet
-    }
+    @State private var explainerURL: IdentifiableURL?
+    @State private var didFireComplete = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -538,19 +491,15 @@ private struct AIOnboardingScreen: View {
 
             sampleText
                 .padding(.top, 24)
-
-            Spacer(minLength: 12)
-
-            responseArea
-                .frame(minHeight: 60)
-                .padding(.horizontal, readerSettings.margins.horizontalPadding)
-                .padding(.bottom, 8)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
 
             OnboardingControlPanel(
                 tags: onboardingSampleTags,
                 onActionTap: { handleTap(action: $0) }
             )
-            .allowsHitTesting(phase == .idle)
+        }
+        .sheet(item: $explainerURL, onDismiss: advanceIfNeeded) { item in
+            SafariView(url: item.url)
         }
     }
 
@@ -583,50 +532,19 @@ private struct AIOnboardingScreen: View {
             .padding(.horizontal, readerSettings.margins.horizontalPadding)
     }
 
-    @ViewBuilder
-    private var responseArea: some View {
-        switch phase {
-        case .idle:
-            Color.clear
-        case .thinking:
-            HStack(spacing: 10) {
-                ProgressView()
-                    .tint(.white.opacity(0.55))
-                    .scaleEffect(0.85)
-                Text(thinkingText)
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundColor(.white.opacity(0.65))
-            }
-            .frame(maxWidth: .infinity, alignment: .center)
-            .transition(.opacity)
-        case .allSet:
-            Text("You're all set 🎉")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundColor(.white)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-        }
-    }
-
-    private var thinkingText: String {
-        if let name = tappedAction?.name {
-            return "Asking AI to \(name.lowercased())…"
-        }
-        return "Asking AI…"
-    }
-
     private func handleTap(action: PanelAction) {
-        guard phase == .idle else { return }
-        tappedAction = action
-        withAnimation(.easeInOut(duration: 0.3)) {
-            phase = .thinking
+        guard explainerURL == nil else { return }
+        let query = action.prompt + "\n\n" + OnboardingSample.text
+        guard let url = perplexityURL(for: query) else { return }
+        explainerURL = IdentifiableURL(url: url)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            advanceIfNeeded()
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
-            withAnimation(.easeInOut(duration: 0.45)) {
-                phase = .allSet
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-                onComplete()
-            }
-        }
+    }
+
+    private func advanceIfNeeded() {
+        guard !didFireComplete else { return }
+        didFireComplete = true
+        onComplete()
     }
 }
