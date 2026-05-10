@@ -5,6 +5,7 @@ struct SpinApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var highlightStore = HighlightStore()
     @StateObject private var readerSettings = ReaderSettings()
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -29,11 +30,20 @@ struct SpinApp: App {
         if ProcessInfo.processInfo.arguments.contains("-SpinPlaybackPagingUITest") {
             PlaybackPagingUITestRoot()
         } else {
-            EpubLibraryView()
+            gatedMainView
         }
         #else
-        EpubLibraryView()
+        gatedMainView
         #endif
+    }
+
+    @ViewBuilder
+    private var gatedMainView: some View {
+        if hasCompletedOnboarding {
+            EpubLibraryView()
+        } else {
+            OnboardingView()
+        }
     }
 }
 
