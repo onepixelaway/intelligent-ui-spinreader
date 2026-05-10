@@ -40,6 +40,21 @@ struct KokoroDownloadSheet: View {
                     .foregroundColor(.white.opacity(0.65))
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
+                Text("Privacy first — runs entirely on device, nothing sent to the cloud.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.white.opacity(0.65))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                Button {
+                    UserDefaults.standard.set(TTSProvider.apple.rawValue, forKey: TTSPreferenceKeys.provider)
+                    coordinator.cancelKokoroPreparation()
+                } label: {
+                    Text("Use Apple Voice Instead")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.white.opacity(0.85))
+                        .padding(.top, 4)
+                }
+                .buttonStyle(.plain)
             }
 
         case .downloading(let received, let total):

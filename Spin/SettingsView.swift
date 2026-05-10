@@ -128,7 +128,7 @@ struct SettingsView: View {
 // MARK: - Audio Narration Settings
 
 struct AudioNarrationSettingsView: View {
-    @AppStorage(TTSPreferenceKeys.provider) private var providerRaw: String = TTSProvider.apple.rawValue
+    @AppStorage(TTSPreferenceKeys.provider) private var providerRaw: String = TTSProvider.kokoro.rawValue
     @AppStorage(TTSPreferenceKeys.voiceIdentifier) private var voiceIdentifier: String = ""
     @AppStorage(TTSPreferenceKeys.kokoroVoice) private var kokoroVoice: String = KokoroVoiceCatalog.defaultVoice
     @State private var isKokoroModelDownloaded = KokoroPaths.isModelDownloaded
@@ -138,7 +138,7 @@ struct AudioNarrationSettingsView: View {
     private let voices: [AVSpeechSynthesisVoice] = AudioNarrationSettingsView.loadEnglishVoices()
 
     private var selectedProvider: TTSProvider {
-        TTSProvider(rawValue: providerRaw) ?? .apple
+        TTSProvider(rawValue: providerRaw) ?? .kokoro
     }
 
     var body: some View {
@@ -377,8 +377,8 @@ struct AudioNarrationSettingsView: View {
 
 enum TTSVoicePreference {
     static func currentProvider() -> TTSProvider {
-        let raw = UserDefaults.standard.string(forKey: TTSPreferenceKeys.provider) ?? TTSProvider.apple.rawValue
-        return TTSProvider(rawValue: raw) ?? .apple
+        let raw = UserDefaults.standard.string(forKey: TTSPreferenceKeys.provider) ?? TTSProvider.kokoro.rawValue
+        return TTSProvider(rawValue: raw) ?? .kokoro
     }
 
     static func resolvedKokoroVoice() -> String {
