@@ -265,17 +265,23 @@ private enum OnboardingSample {
     """
 }
 
+// Produces NSAttributedString that visually matches the real reader's paragraph
+// rendering (same color, font design, and paragraph line spacing).
 @MainActor
-private func onboardingAttributedText(
+private func readerSampleAttributedText(
     _ text: String,
-    size: CGFloat,
-    weight: UIFont.Weight = .regular,
-    lineSpacing: CGFloat = 8
+    settings: ReaderSettings,
+    weight: UIFont.Weight = .regular
 ) -> NSAttributedString {
+    let size = settings.paragraphSize
+    var font = UIFont.systemFont(ofSize: size, weight: weight)
+    if let descriptor = font.fontDescriptor.withDesign(settings.fontFamily.uiDesign) {
+        font = UIFont(descriptor: descriptor, size: size)
+    }
     let para = NSMutableParagraphStyle()
-    para.lineSpacing = lineSpacing
+    para.lineSpacing = settings.lineSpacingPt(for: size)
     return NSAttributedString(string: text, attributes: [
-        .font: UIFont.systemFont(ofSize: size, weight: weight),
+        .font: font,
         .foregroundColor: UIColor(white: 0.92, alpha: 1.0),
         .paragraphStyle: para
     ])
@@ -285,34 +291,34 @@ private func onboardingAttributedText(
 
 private struct TrackpadOnboardingScreen: View {
     let onComplete: () -> Void
+    @EnvironmentObject private var readerSettings: ReaderSettings
 
     @State private var scrollOffset: CGFloat = 0
-    @State private var cumulativeScroll: CGFloat = 0
-    @State private var showHint = false
+    @State private var swipesRemaining: Int = 3
     @State private var didFireComplete = false
 
-    private let scrollPerSwipe: CGFloat = 100
-    private let scrollThreshold: CGFloat = 80
+    private let scrollPerSwipe: CGFloat = 180
 
     var body: some View {
-        VStack(spacing: 0) {
-            instructionHeader
+        GeometryReader { geo in
+            let topHeight = max(180, geo.size.height * 0.35)
+            VStack(spacing: 0) {
+                VStack(spacing: 0) {
+                    instructionHeader
+                    sampleTextViewport
+                        .padding(.top, 16)
+                }
+                .frame(height: topHeight, alignment: .top)
 
-            sampleTextViewport
-                .padding(.top, 20)
+                Spacer(minLength: 0)
 
-            Spacer(minLength: 0)
-
-            hintLabel
-                .frame(height: 24)
-                .padding(.bottom, 14)
-
-            TrackpadScrollView(
-                onSwipeDown: { handleSwipe(direction: -1) },
-                onSwipeUp: { handleSwipe(direction: 1) }
-            )
-            .frame(width: 220, height: 130)
-            .padding(.bottom, 48)
+                TrackpadScrollView(
+                    onSwipeDown: { handleSwipe(direction: -1) },
+                    onSwipeUp: { handleSwipe(direction: 1) }
+                )
+                .frame(width: 140, height: 110)
+                .padding(.bottom, max(48, geo.size.height * 0.12))
+            }
         }
     }
 
@@ -322,69 +328,57 @@ private struct TrackpadOnboardingScreen: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.white)
 
-            Text("Use the trackpad below to scroll through your reading")
+            Text("Use the trackpad below to scroll through your reading.")
                 .font(.system(size: 15, weight: .regular))
                 .foregroundColor(.white.opacity(0.6))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 32)
+        .padding(.horizontal, readerSettings.margins.horizontalPadding)
         .padding(.top, 40)
     }
 
     private var sampleTextViewport: some View {
         GeometryReader { geo in
-            ZStack(alignment: .top) {
-                Text(OnboardingSample.text)
-                    .font(.system(size: 18))
-                    .foregroundColor(Color(white: 0.92))
-                    .lineSpacing(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 32)
-                    .offset(y: scrollOffset)
-                    .frame(maxWidth: .infinity, alignment: .topLeading)
-            }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
-            .clipped()
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0.0),
-                        .init(color: .black, location: 0.06),
-                        .init(color: .black, location: 0.88),
-                        .init(color: .clear, location: 1.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
+            Text(OnboardingSample.text)
+                .font(.system(
+                    size: readerSettings.paragraphSize,
+                    weight: .regular,
+                    design: readerSettings.fontFamily.design
+                ))
+                .foregroundColor(Color(white: 0.92))
+                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, readerSettings.margins.horizontalPadding)
+                .offset(y: scrollOffset)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+                .clipped()
+                .mask(
+                    LinearGradient(
+                        stops: [
+                            .init(color: .clear, location: 0.0),
+                            .init(color: .black, location: 0.08),
+                            .init(color: .black, location: 0.88),
+                            .init(color: .clear, location: 1.0)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
                 )
-            )
-        }
-        .frame(maxHeight: .infinity)
-    }
-
-    @ViewBuilder
-    private var hintLabel: some View {
-        if showHint {
-            Text("Nice! Keep going →")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
     }
 
     private func handleSwipe(direction: Int) {
         let delta = CGFloat(direction) * -scrollPerSwipe
         withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
-            scrollOffset += delta
+            scrollOffset = min(0, scrollOffset + delta)
         }
-        cumulativeScroll += abs(delta)
-
-        guard !didFireComplete, cumulativeScroll >= scrollThreshold else { return }
+        if direction > 0 {
+            swipesRemaining = max(0, swipesRemaining - 1)
+        }
+        guard !didFireComplete, swipesRemaining == 0 else { return }
         didFireComplete = true
-        withAnimation(.easeIn(duration: 0.35)) {
-            showHint = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             onComplete()
         }
     }
@@ -394,9 +388,9 @@ private struct TrackpadOnboardingScreen: View {
 
 private struct HighlightOnboardingScreen: View {
     let onComplete: () -> Void
+    @EnvironmentObject private var readerSettings: ReaderSettings
 
     @State private var highlights: [Highlight] = []
-    @State private var showHint = false
     @State private var didFireComplete = false
 
     private let sampleContentID = "onboarding.highlight"
@@ -407,27 +401,23 @@ private struct HighlightOnboardingScreen: View {
 
             sampleTextArea
                 .padding(.top, 24)
-                .padding(.bottom, 24)
-
-            hintLabel
-                .frame(height: 28)
                 .padding(.bottom, 48)
         }
     }
 
     private var instructionHeader: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Hold to highlight")
+            Text("Drag to highlight")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.white)
 
-            Text("Long-press any word to start highlighting. Drag to select a passage.")
+            Text("Press and drag across any words to highlight a passage.")
                 .font(.system(size: 15, weight: .regular))
                 .foregroundColor(.white.opacity(0.6))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 32)
+        .padding(.horizontal, readerSettings.margins.horizontalPadding)
         .padding(.top, 40)
     }
 
@@ -435,7 +425,7 @@ private struct HighlightOnboardingScreen: View {
         ScrollView(showsIndicators: false) {
             HighlightableTextView(
                 text: OnboardingSample.text,
-                attributedText: onboardingAttributedText(OnboardingSample.text, size: 18),
+                attributedText: readerSampleAttributedText(OnboardingSample.text, settings: readerSettings),
                 itemIndex: 0,
                 highlights: highlights,
                 playbackHighlight: nil,
@@ -451,17 +441,7 @@ private struct HighlightOnboardingScreen: View {
                 onEmptyTap: {}
             )
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 32)
-        }
-    }
-
-    @ViewBuilder
-    private var hintLabel: some View {
-        if showHint {
-            Text("Perfect →")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.white.opacity(0.7))
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
+            .padding(.horizontal, readerSettings.margins.horizontalPadding)
         }
     }
 
@@ -477,10 +457,7 @@ private struct HighlightOnboardingScreen: View {
 
         guard !didFireComplete else { return }
         didFireComplete = true
-        withAnimation(.easeIn(duration: 0.35)) {
-            showHint = true
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             onComplete()
         }
     }
@@ -516,9 +493,9 @@ private struct AIOnboardingScreen: View {
             Spacer(minLength: 12)
 
             responseArea
-                .frame(height: 80)
-                .padding(.horizontal, 32)
-                .padding(.bottom, 16)
+                .frame(minHeight: 60)
+                .padding(.horizontal, readerSettings.margins.horizontalPadding)
+                .padding(.bottom, 24)
 
             actionPillsRow
                 .padding(.bottom, 48)
@@ -537,17 +514,21 @@ private struct AIOnboardingScreen: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 32)
+        .padding(.horizontal, readerSettings.margins.horizontalPadding)
         .padding(.top, 40)
     }
 
     private var sampleText: some View {
         Text(OnboardingSample.text)
-            .font(.system(size: 17))
+            .font(.system(
+                size: readerSettings.paragraphSize,
+                weight: .regular,
+                design: readerSettings.fontFamily.design
+            ))
             .foregroundColor(Color(white: 0.92))
-            .lineSpacing(7)
+            .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 32)
+            .padding(.horizontal, readerSettings.margins.horizontalPadding)
     }
 
     @ViewBuilder
@@ -581,18 +562,30 @@ private struct AIOnboardingScreen: View {
         return "Asking AI…"
     }
 
+    // Mirrors ControlPanel.actionPillsRow: centered when ≤2 actions, horizontally scrollable otherwise.
+    @ViewBuilder
     private var actionPillsRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(actions) { action in
-                    ActionPill(title: action.name) {
-                        handleTap(action: action)
-                    }
-                    .disabled(phase != .idle)
-                    .opacity(phase == .idle ? 1.0 : 0.55)
-                }
+        if actions.count <= 2 {
+            actionPillsHStack
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                actionPillsHStack
+                    .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
+        }
+    }
+
+    private var actionPillsHStack: some View {
+        HStack(spacing: 8) {
+            ForEach(actions) { action in
+                ActionPill(title: action.name) {
+                    handleTap(action: action)
+                }
+                .disabled(phase != .idle)
+                .opacity(phase == .idle ? 1.0 : 0.55)
+            }
         }
     }
 
@@ -602,11 +595,11 @@ private struct AIOnboardingScreen: View {
         withAnimation(.easeInOut(duration: 0.3)) {
             phase = .thinking
         }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) {
             withAnimation(.easeInOut(duration: 0.45)) {
                 phase = .allSet
             }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
                 onComplete()
             }
         }

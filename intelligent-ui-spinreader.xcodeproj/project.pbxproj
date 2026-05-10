@@ -516,7 +516,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.Spin;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreader;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -536,7 +536,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.Spin;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreader;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
