@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import NaturalLanguage
 
 struct PasteTextView: View {
     let onSave: (String, String) -> Void
@@ -8,6 +9,8 @@ struct PasteTextView: View {
     @State private var title: String = ""
     @State private var content: String = ""
     @State private var didPrefill = false
+    @State private var titleSuggested = false
+    @State private var suggestionTask: Task<Void, Never>?
     @FocusState private var bodyFocused: Bool
 
     var body: some View {
@@ -75,6 +78,12 @@ struct PasteTextView: View {
             }
             bodyFocused = true
         }
+        .onChange(of: content) { _, newValue in
+            handleContentChange(newValue)
+        }
+        .onDisappear {
+            suggestionTask?.cancel()
+        }
     }
 
     private var titlePrompt: Text {
@@ -91,5 +100,107 @@ struct PasteTextView: View {
         guard pb.hasStrings, let str = pb.string else { return nil }
         let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : str
+    }
+
+    private func handleContentChange(_ newContent: String) {
+        let trimmed = newContent.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            titleSuggested = false
+            suggestionTask?.cancel()
+            return
+        }
+        guard title.isEmpty, !titleSuggested else { return }
+
+        suggestionTask?.cancel()
+        suggestionTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled else { return }
+            guard title.isEmpty, !titleSuggested else { return }
+            guard let suggestion = computeTitleSuggestion(from: newContent) else { return }
+            title = suggestion
+            titleSuggested = true
+        }
+    }
+
+    private func computeTitleSuggestion(from text: String) -> String? {
+        if let heading = markdownHeadingTitle(from: text) { return heading }
+        if let extracted = nlExtractedTitle(from: text) { return extracted }
+        return firstLineFallback(from: text)
+    }
+
+    private func markdownHeadingTitle(from text: String) -> String? {
+        let firstLine = text
+            .split(omittingEmptySubsequences: true, whereSeparator: { $0.isNewline })
+            .first
+            .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
+        guard firstLine.hasPrefix("#") else { return nil }
+        let stripped = firstLine
+            .drop(while: { $0 == "#" })
+            .trimmingCharacters(in: .whitespaces)
+        guard !stripped.isEmpty else { return nil }
+        return String(stripped.prefix(60)).trimmingCharacters(in: .whitespaces)
+    }
+
+    private func firstLineFallback(from text: String) -> String? {
+        let lines = text.split(omittingEmptySubsequences: true, whereSeparator: { $0.isNewline })
+        guard let firstNonEmpty = lines
+            .first(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })
+            .map({ $0.trimmingCharacters(in: .whitespaces) })
+        else { return nil }
+        let stripChars: Set<Character> = ["#", "*", "_", ">"]
+        let cleaned = String(firstNonEmpty.filter { !stripChars.contains($0) })
+            .trimmingCharacters(in: .whitespaces)
+        guard !cleaned.isEmpty else { return nil }
+        return String(cleaned.prefix(60)).trimmingCharacters(in: .whitespaces)
+    }
+
+    private func nlExtractedTitle(from text: String) -> String? {
+        let snippet = String(text.prefix(500))
+        let tagger = NLTagger(tagSchemes: [.nameTypeOrLexicalClass])
+        tagger.string = snippet
+
+        let options: NLTagger.Options = [.omitWhitespace, .omitPunctuation, .joinNames]
+        let nameTags: Set<NLTag> = [.personalName, .placeName, .organizationName]
+
+        var properNouns: [String] = []
+        var nouns: [String] = []
+        var seen = Set<String>()
+
+        tagger.enumerateTags(
+            in: snippet.startIndex..<snippet.endIndex,
+            unit: .word,
+            scheme: .nameTypeOrLexicalClass,
+            options: options
+        ) { tag, tokenRange in
+            guard let tag else { return true }
+            let word = String(snippet[tokenRange]).trimmingCharacters(in: .whitespaces)
+            guard word.count > 2 else { return true }
+            let key = word.lowercased()
+            guard !seen.contains(key) else { return true }
+
+            if nameTags.contains(tag) {
+                seen.insert(key)
+                properNouns.append(word)
+            } else if tag == .noun {
+                seen.insert(key)
+                nouns.append(word)
+            }
+            return true
+        }
+
+        var picked = Array(properNouns.prefix(5))
+        if picked.count < 5 {
+            picked.append(contentsOf: nouns.prefix(5 - picked.count))
+        }
+        guard picked.count >= 2 else { return nil }
+
+        let joined = picked.prefix(5).map(titleCased).joined(separator: " ")
+        return String(joined.prefix(60)).trimmingCharacters(in: .whitespaces)
+    }
+
+    private func titleCased(_ word: String) -> String {
+        if word.contains(where: { $0.isUppercase }) { return word }
+        guard let first = word.first else { return word }
+        return first.uppercased() + word.dropFirst().lowercased()
     }
 }
