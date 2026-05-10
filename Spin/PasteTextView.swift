@@ -124,8 +124,25 @@ struct PasteTextView: View {
 
     private func computeTitleSuggestion(from text: String) -> String? {
         if let heading = markdownHeadingTitle(from: text) { return heading }
+        if let firstLine = firstLineTitle(from: text) { return firstLine }
         if let extracted = nlExtractedTitle(from: text) { return extracted }
         return firstLineFallback(from: text)
+    }
+
+    private func firstLineTitle(from text: String) -> String? {
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline })
+        guard let firstRaw = lines.first else { return nil }
+        let firstLine = String(firstRaw).trimmingCharacters(in: .whitespaces)
+        guard !firstLine.isEmpty, firstLine.count <= 100 else { return nil }
+
+        let secondLine = lines.dropFirst().first
+            .map { String($0).trimmingCharacters(in: .whitespaces) } ?? ""
+        let secondIsEmpty = secondLine.isEmpty
+        let secondMuchLonger = !secondIsEmpty && Double(secondLine.count) > Double(firstLine.count) * 1.5
+        let endsWithQuestion = firstLine.hasSuffix("?")
+
+        guard secondIsEmpty || secondMuchLonger || endsWithQuestion else { return nil }
+        return firstLine
     }
 
     private func markdownHeadingTitle(from text: String) -> String? {
