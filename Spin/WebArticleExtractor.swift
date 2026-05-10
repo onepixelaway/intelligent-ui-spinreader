@@ -44,37 +44,122 @@ func extractArticle(from webView: WKWebView, sourceURL: URL) async throws -> Web
     }
 
     let runner = """
-    (function() {
-      try {
-        var article = new Readability(document.cloneNode(true)).parse();
-        return JSON.stringify(article);
-      } catch(e) {
-        return JSON.stringify({ __error: e.toString() });
+    try {
+      var article = new Readability(document.cloneNode(true)).parse();
+      if (!article || !article.content) {
+        return JSON.stringify({ __error: 'No content' });
       }
-    })()
+
+      var coverImage = null;
+      var coverMime = null;
+      try {
+        var temp = document.createElement('div');
+        temp.innerHTML = article.content;
+        var imgs = temp.querySelectorAll('img');
+        var candidate = null;
+        for (var i = 0; i < imgs.length; i++) {
+          var img = imgs[i];
+          var src = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
+          if (!src) continue;
+          var resolvedUrl;
+          try { resolvedUrl = new URL(src, document.baseURI).href; } catch (e) { continue; }
+          var w = parseInt(img.getAttribute('width'), 10) || img.naturalWidth || 0;
+          var h = parseInt(img.getAttribute('height'), 10) || img.naturalHeight || 0;
+          if (w > 0 && w < 100) continue;
+          if (h > 0 && h < 100) continue;
+          candidate = resolvedUrl;
+          if (w === 0 || w >= 300) break;
+        }
+
+        if (candidate) {
+          var resp = await fetch(candidate);
+          if (resp.ok) {
+            var blob = await resp.blob();
+            coverMime = blob.type;
+            coverImage = await new Promise(function(resolve) {
+              var reader = new FileReader();
+              reader.onloadend = function() {
+                var s = reader.result || '';
+                var idx = s.indexOf(',');
+                resolve(idx >= 0 ? s.substring(idx + 1) : null);
+              };
+              reader.onerror = function() { resolve(null); };
+              reader.readAsDataURL(blob);
+            });
+          }
+        }
+      } catch (e) { /* swallow cover extraction errors */ }
+
+      return JSON.stringify({
+        title: article.title,
+        byline: article.byline,
+        content: article.content,
+        coverImage: coverImage,
+        coverMime: coverMime
+      });
+    } catch(e) {
+      return JSON.stringify({ __error: e.toString() });
+    }
     """
 
     let resolvedURL = webView.url ?? sourceURL
 
-    if let parsed: ReadabilityResult = try await evaluateJSON(runner, on: webView),
+    if let parsed: ReadabilityResult = try await evaluateAsyncJSON(runner, on: webView),
        let content = parsed.content, !content.isEmpty {
         var items = ReadabilityHTMLWalker.items(from: content, baseURL: resolvedURL)
         if let byline = parsed.byline?.trimmingCharacters(in: .whitespacesAndNewlines), !byline.isEmpty {
             items.insert(.byline(byline), at: 0)
         }
         if !items.isEmpty {
+            let articleID = UUID()
+            let coverPath = saveCoverImage(
+                base64: parsed.coverImage,
+                mime: parsed.coverMime,
+                articleID: articleID
+            )
             return WebArticle(
-                id: UUID(),
+                id: articleID,
                 title: resolveTitle(parsed.title, fallbackURL: resolvedURL),
                 author: parsed.byline ?? "",
                 sourceURL: resolvedURL,
                 savedAt: Date(),
-                items: items
+                items: items,
+                coverImagePath: coverPath
             )
         }
     }
 
     return try await fallbackArticle(from: webView, sourceURL: resolvedURL)
+}
+
+private func saveCoverImage(base64: String?, mime: String?, articleID: UUID) -> String? {
+    guard let base64, !base64.isEmpty,
+          let data = Data(base64Encoded: base64), !data.isEmpty else { return nil }
+    let ext = imageExtension(for: mime, data: data)
+    let filename = "\(articleID.uuidString).\(ext)"
+    let url = WebArticle.coversDirectory.appendingPathComponent(filename)
+    do {
+        try data.write(to: url, options: .atomic)
+        return "web-covers/\(filename)"
+    } catch {
+        return nil
+    }
+}
+
+private func imageExtension(for mime: String?, data: Data) -> String {
+    if let mime = mime?.lowercased() {
+        if mime.contains("png") { return "png" }
+        if mime.contains("gif") { return "gif" }
+        if mime.contains("webp") { return "webp" }
+        if mime.contains("jpeg") || mime.contains("jpg") { return "jpg" }
+    }
+    if data.count >= 4 {
+        let bytes = [UInt8](data.prefix(4))
+        if bytes[0] == 0x89, bytes[1] == 0x50, bytes[2] == 0x4E, bytes[3] == 0x47 { return "png" }
+        if bytes[0] == 0xFF, bytes[1] == 0xD8, bytes[2] == 0xFF { return "jpg" }
+        if bytes[0] == 0x47, bytes[1] == 0x49, bytes[2] == 0x46 { return "gif" }
+    }
+    return "jpg"
 }
 
 @MainActor
@@ -125,6 +210,8 @@ private struct ReadabilityResult: JSEvalEnvelope {
     let title: String?
     let byline: String?
     let content: String?
+    let coverImage: String?
+    let coverMime: String?
     let __error: String?
 }
 
@@ -142,6 +229,21 @@ private func evaluateJSON<T: JSEvalEnvelope>(_ js: String, on webView: WKWebView
     } catch {
         throw WebArticleError.evaluationFailed(error.localizedDescription)
     }
+    return try decodeEnvelope(raw)
+}
+
+@MainActor
+private func evaluateAsyncJSON<T: JSEvalEnvelope>(_ js: String, on webView: WKWebView) async throws -> T? {
+    let raw: Any?
+    do {
+        raw = try await webView.callAsyncJavaScript(js, arguments: [:], in: nil, contentWorld: .page)
+    } catch {
+        throw WebArticleError.evaluationFailed(error.localizedDescription)
+    }
+    return try decodeEnvelope(raw)
+}
+
+private func decodeEnvelope<T: JSEvalEnvelope>(_ raw: Any?) throws -> T? {
     guard let json = raw as? String, !json.isEmpty, json != "null",
           let data = json.data(using: .utf8) else {
         return nil

@@ -7,6 +7,7 @@ struct WebArticle: Identifiable, Hashable, Sendable, Codable {
     let sourceURL: URL?
     let savedAt: Date
     let items: [ScrollTextView.ReadableItem]
+    var coverImagePath: String?
 
     static func == (lhs: WebArticle, rhs: WebArticle) -> Bool { lhs.id == rhs.id }
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
@@ -20,6 +21,19 @@ struct WebArticle: Identifiable, Hashable, Sendable, Codable {
             depth: 0,
             items: items
         )
+    }
+
+    static let coversDirectory: URL = {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let dir = docs.appendingPathComponent("web-covers", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }()
+
+    var coverImageURL: URL? {
+        guard let coverImagePath, !coverImagePath.isEmpty else { return nil }
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        return docs.appendingPathComponent(coverImagePath)
     }
 }
 
@@ -83,6 +97,9 @@ final class WebArticleStore: ObservableObject {
     func delete(_ article: WebArticle) {
         let url = directory.appendingPathComponent("\(article.id.uuidString).json")
         try? FileManager.default.removeItem(at: url)
+        if let coverURL = article.coverImageURL {
+            try? FileManager.default.removeItem(at: coverURL)
+        }
         articles.removeAll { $0.id == article.id }
     }
 }

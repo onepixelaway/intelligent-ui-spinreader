@@ -475,6 +475,7 @@ private struct BookCard: View {
 
 private struct ArticleCard: View {
     let article: WebArticle
+    @State private var coverImage: UIImage?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -495,6 +496,9 @@ private struct ArticleCard: View {
                 .foregroundColor(.gray.opacity(0.6))
                 .lineLimit(1)
         }
+        .task(id: article.coverImagePath) {
+            await loadCover()
+        }
     }
 
     private var subtitle: String {
@@ -503,7 +507,22 @@ private struct ArticleCard: View {
         return article.sourceURL == nil ? "Pasted" : "Article"
     }
 
+    @ViewBuilder
     private var cover: some View {
+        if let coverImage {
+            ZStack(alignment: .topTrailing) {
+                Image(uiImage: coverImage)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                badge
+                    .padding(8)
+            }
+        } else {
+            placeholderCover
+        }
+    }
+
+    private var placeholderCover: some View {
         GeometryReader { geo in
             let colors = deterministicGradient(for: article.title + (article.sourceURL?.host ?? ""))
             ZStack {
@@ -521,17 +540,36 @@ private struct ArticleCard: View {
                         .padding(.horizontal, 12)
                 }
 
-                Text(article.sourceURL == nil ? "Pasted" : "Article")
-                    .font(.system(size: 9, weight: .semibold))
-                    .tracking(0.6)
-                    .foregroundColor(.white.opacity(0.9))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(Color.white.opacity(0.18)))
+                badge
                     .padding(8)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
         }
+    }
+
+    private var badge: some View {
+        Text(article.sourceURL == nil ? "Pasted" : "Article")
+            .font(.system(size: 9, weight: .semibold))
+            .tracking(0.6)
+            .foregroundColor(.white.opacity(0.9))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(Capsule().fill(Color.black.opacity(0.45)))
+    }
+
+    private func loadCover() async {
+        guard let url = article.coverImageURL else {
+            coverImage = nil
+            return
+        }
+        let data: Data? = await Task.detached(priority: .userInitiated) {
+            try? Data(contentsOf: url)
+        }.value
+        guard let data, let image = UIImage(data: data) else {
+            coverImage = nil
+            return
+        }
+        coverImage = image
     }
 }
 
