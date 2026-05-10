@@ -4,7 +4,7 @@ struct WebArticle: Identifiable, Hashable, Sendable, Codable {
     let id: UUID
     let title: String
     let author: String
-    let sourceURL: URL
+    let sourceURL: URL?
     let savedAt: Date
     let items: [ScrollTextView.ReadableItem]
 

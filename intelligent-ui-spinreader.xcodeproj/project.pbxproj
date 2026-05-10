@@ -19,6 +19,8 @@
 		BB00000000000000BB000002 /* BrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000BB000001 /* BrowserView.swift */; };
 		BB00000000000000BB000004 /* WebArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000BB000003 /* WebArticle.swift */; };
 		BB00000000000000BB000006 /* WebArticleExtractor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000BB000005 /* WebArticleExtractor.swift */; };
+		BB00000000000000BB00000A /* MarkdownParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000BB000009 /* MarkdownParser.swift */; };
+		BB00000000000000BB00000C /* PasteTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000BB00000B /* PasteTextView.swift */; };
 		2E4096303B3515FBFEE1A2EE /* Paginator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */; };
 		32817F46D9C99D8C53547611 /* PanelActionsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 96839001ED8847AB3E31287E /* PanelActionsSettingsView.swift */; };
 		3975A2A7995E82A12596BD46 /* KokoroTTSEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = BE14765183FA3E297A1DC153 /* KokoroTTSEngine.swift */; };
@@ -133,6 +135,8 @@
 		BB00000000000000BB000001 /* BrowserView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserView.swift; sourceTree = "<group>"; };
 		BB00000000000000BB000003 /* WebArticle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebArticle.swift; sourceTree = "<group>"; };
 		BB00000000000000BB000005 /* WebArticleExtractor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebArticleExtractor.swift; sourceTree = "<group>"; };
+		BB00000000000000BB000009 /* MarkdownParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownParser.swift; sourceTree = "<group>"; };
+		BB00000000000000BB00000B /* PasteTextView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasteTextView.swift; sourceTree = "<group>"; };
 		B8C2821EE55C5AD6773ED71C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paginator.swift; sourceTree = "<group>"; };
 		BE14765183FA3E297A1DC153 /* KokoroTTSEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroTTSEngine.swift; sourceTree = "<group>"; };
@@ -242,6 +246,8 @@
 				1E6DBEF2C370158A139D205E /* SpinApp.swift */,
 				BB00000000000000BB000003 /* WebArticle.swift */,
 				BB00000000000000BB000005 /* WebArticleExtractor.swift */,
+				BB00000000000000BB000009 /* MarkdownParser.swift */,
+				BB00000000000000BB00000B /* PasteTextView.swift */,
 				73A96AC97C915EB3E44A0F60 /* Controls */,
 				0DD146B77B67F44A203920F7 /* Preview Content */,
 				3AE181C481C1863CB7148DCB /* Resources */,
@@ -422,6 +428,8 @@
 				BB00000000000000BB000002 /* BrowserView.swift in Sources */,
 				BB00000000000000BB000004 /* WebArticle.swift in Sources */,
 				BB00000000000000BB000006 /* WebArticleExtractor.swift in Sources */,
+				BB00000000000000BB00000A /* MarkdownParser.swift in Sources */,
+				BB00000000000000BB00000C /* PasteTextView.swift in Sources */,
 				BD529FBF973641B3AA7AFFAC /* CircularReaderButton.swift in Sources */,
 				4164ABF4568234949AD132AF /* Config.swift in Sources */,
 				F8FFCCED2F28AA90380CBF58 /* ControlPanel.swift in Sources */,

@@ -8,6 +8,7 @@ struct EpubLibraryView: View {
     @StateObject private var articleStore = WebArticleStore()
     @State private var showImporter = false
     @State private var showBrowser = false
+    @State private var showPasteText = false
     @State private var errorMessage: String?
     @State private var isImportingArticle = false
     @State private var isJiggling = false
@@ -134,6 +135,15 @@ struct EpubLibraryView: View {
                     Task { await handleArticleImport(webView: webView, url: url) }
                 }
             }
+            .sheet(isPresented: $showPasteText) {
+                PasteTextView(
+                    onSave: { title, body in
+                        showPasteText = false
+                        Task { await handlePastedText(title: title, body: body) }
+                    },
+                    onCancel: { showPasteText = false }
+                )
+            }
             .overlay {
                 if isImportingArticle {
                     ZStack {
@@ -199,6 +209,11 @@ struct EpubLibraryView: View {
                 showBrowser = true
             } label: {
                 Label("Save from the web", systemImage: "globe")
+            }
+            Button {
+                showPasteText = true
+            } label: {
+                Label("Paste Text", systemImage: "doc.on.clipboard")
             }
             Button {
                 showImporter = true
@@ -360,6 +375,25 @@ struct EpubLibraryView: View {
         }
     }
 
+    private func handlePastedText(title: String, body: String) async {
+        let resolvedTitle = MarkdownParser.resolveTitle(userInput: title, from: body)
+        let items = MarkdownParser.parse(text: body, title: resolvedTitle)
+        guard !items.isEmpty else { return }
+        let article = WebArticle(
+            id: UUID(),
+            title: resolvedTitle,
+            author: "",
+            sourceURL: nil,
+            savedAt: Date(),
+            items: items
+        )
+        do {
+            try await articleStore.save(article)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func handleArticleImport(webView: WKWebView, url: URL) async {
         isImportingArticle = true
         defer { isImportingArticle = false }
@@ -456,21 +490,27 @@ private struct ArticleCard: View {
                 .lineLimit(2)
                 .multilineTextAlignment(.leading)
 
-            Text(article.author.isEmpty ? (article.sourceURL.host ?? "Article") : article.author)
+            Text(subtitle)
                 .font(.system(size: 11))
                 .foregroundColor(.gray.opacity(0.6))
                 .lineLimit(1)
         }
     }
 
+    private var subtitle: String {
+        if !article.author.isEmpty { return article.author }
+        if let host = article.sourceURL?.host { return host }
+        return article.sourceURL == nil ? "Pasted" : "Article"
+    }
+
     private var cover: some View {
         GeometryReader { geo in
-            let colors = deterministicGradient(for: article.title + (article.sourceURL.host ?? ""))
+            let colors = deterministicGradient(for: article.title + (article.sourceURL?.host ?? ""))
             ZStack {
                 LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
 
                 VStack(spacing: 10) {
-                    Image(systemName: "globe")
+                    Image(systemName: article.sourceURL == nil ? "doc.on.clipboard" : "globe")
                         .font(.system(size: min(geo.size.width * 0.28, 48), weight: .light))
                         .foregroundColor(.white.opacity(0.85))
                     Text(article.title)
@@ -481,7 +521,7 @@ private struct ArticleCard: View {
                         .padding(.horizontal, 12)
                 }
 
-                Text("Article")
+                Text(article.sourceURL == nil ? "Pasted" : "Article")
                     .font(.system(size: 9, weight: .semibold))
                     .tracking(0.6)
                     .foregroundColor(.white.opacity(0.9))
