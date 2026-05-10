@@ -287,6 +287,65 @@ private func readerSampleAttributedText(
     ])
 }
 
+// MARK: - Onboarding panel helper
+//
+// Builds the real reader ControlPanel with neutral defaults so each tutorial
+// screen can wire just the callbacks relevant to its step (trackpad swipes,
+// action pill taps) while still showing the full widget — circular highlight
+// and play buttons, trackpad, tag pills, and AI action pills.
+private struct OnboardingControlPanel: View {
+    @EnvironmentObject private var readerSettings: ReaderSettings
+
+    var tags: [String] = []
+    var onTrackpadSwipeDown: () -> Void = {}
+    var onTrackpadSwipeUp: () -> Void = {}
+    var onActionTap: (PanelAction) -> Void = { _ in }
+
+    private var actions: [PanelAction] {
+        let configured = readerSettings.panelActions
+        return configured.isEmpty ? PanelAction.defaults : configured
+    }
+
+    var body: some View {
+        ControlPanel(
+            isHighlightMode: false,
+            isPlaybackMode: false,
+            availableHighlightColors: readerSettings.highlightColors,
+            availableHighlightEmojis: readerSettings.highlightEmojis,
+            selectedHighlightColor: readerSettings.highlightColors.first ?? .yellow,
+            selectedHighlightEmoji: nil,
+            onHighlight: {},
+            onHighlightColorSelected: { _ in },
+            onHighlightEmojiSelected: { _ in },
+            onCancelHighlight: {},
+            onTrackpadSwipeDown: onTrackpadSwipeDown,
+            onTrackpadSwipeUp: onTrackpadSwipeUp,
+            isPlaybackSpeaking: false,
+            isPlaybackPaused: false,
+            isPlaybackPreparing: false,
+            playbackSpeed: 1.0,
+            playbackLevel: 0,
+            onPlaybackToggle: {},
+            onPlaybackSpeedTap: {},
+            onPlaybackSkipBackward: {},
+            onPlaybackSkipForward: {},
+            onPlaybackStop: {},
+            tags: tags,
+            actions: actions,
+            onActionTap: onActionTap,
+            showQuestion: false,
+            currentQuestion: "",
+            isLoadingQuestion: false,
+            onQuestionTap: {},
+            onTagTap: { _ in }
+        )
+        .padding(.horizontal, 34)
+        .padding(.bottom, 24)
+    }
+}
+
+private let onboardingSampleTags = ["Walden", "Thoreau", "deliberately"]
+
 // MARK: - Screen 2: trackpad
 
 private struct TrackpadOnboardingScreen: View {
@@ -300,25 +359,18 @@ private struct TrackpadOnboardingScreen: View {
     private let scrollPerSwipe: CGFloat = 180
 
     var body: some View {
-        GeometryReader { geo in
-            let topHeight = max(180, geo.size.height * 0.35)
-            VStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    instructionHeader
-                    sampleTextViewport
-                        .padding(.top, 16)
-                }
-                .frame(height: topHeight, alignment: .top)
+        VStack(spacing: 0) {
+            instructionHeader
 
-                Spacer(minLength: 0)
+            sampleTextViewport
+                .padding(.top, 16)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                TrackpadScrollView(
-                    onSwipeDown: { handleSwipe(direction: -1) },
-                    onSwipeUp: { handleSwipe(direction: 1) }
-                )
-                .frame(width: 140, height: 110)
-                .padding(.bottom, max(48, geo.size.height * 0.12))
-            }
+            OnboardingControlPanel(
+                tags: onboardingSampleTags,
+                onTrackpadSwipeDown: { handleSwipe(direction: -1) },
+                onTrackpadSwipeUp: { handleSwipe(direction: 1) }
+            )
         }
     }
 
@@ -401,7 +453,9 @@ private struct HighlightOnboardingScreen: View {
 
             sampleTextArea
                 .padding(.top, 24)
-                .padding(.bottom, 48)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            OnboardingControlPanel(tags: onboardingSampleTags)
         }
     }
 
@@ -478,11 +532,6 @@ private struct AIOnboardingScreen: View {
         case allSet
     }
 
-    private var actions: [PanelAction] {
-        let configured = readerSettings.panelActions
-        return configured.isEmpty ? PanelAction.defaults : configured
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             instructionHeader
@@ -495,10 +544,13 @@ private struct AIOnboardingScreen: View {
             responseArea
                 .frame(minHeight: 60)
                 .padding(.horizontal, readerSettings.margins.horizontalPadding)
-                .padding(.bottom, 24)
+                .padding(.bottom, 8)
 
-            actionPillsRow
-                .padding(.bottom, 48)
+            OnboardingControlPanel(
+                tags: onboardingSampleTags,
+                onActionTap: { handleTap(action: $0) }
+            )
+            .allowsHitTesting(phase == .idle)
         }
     }
 
@@ -560,33 +612,6 @@ private struct AIOnboardingScreen: View {
             return "Asking AI to \(name.lowercased())…"
         }
         return "Asking AI…"
-    }
-
-    // Mirrors ControlPanel.actionPillsRow: centered when ≤2 actions, horizontally scrollable otherwise.
-    @ViewBuilder
-    private var actionPillsRow: some View {
-        if actions.count <= 2 {
-            actionPillsHStack
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24)
-        } else {
-            ScrollView(.horizontal, showsIndicators: false) {
-                actionPillsHStack
-                    .padding(.horizontal, 24)
-            }
-        }
-    }
-
-    private var actionPillsHStack: some View {
-        HStack(spacing: 8) {
-            ForEach(actions) { action in
-                ActionPill(title: action.name) {
-                    handleTap(action: action)
-                }
-                .disabled(phase != .idle)
-                .opacity(phase == .idle ? 1.0 : 0.55)
-            }
-        }
     }
 
     private func handleTap(action: PanelAction) {
