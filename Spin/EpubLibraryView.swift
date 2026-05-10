@@ -2,6 +2,7 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 import WebKit
+import ImageIO
 
 struct EpubLibraryView: View {
     @StateObject private var library = EpubLibrary()
@@ -377,7 +378,7 @@ struct EpubLibraryView: View {
 
     private func handlePastedText(title: String, body: String) async {
         let resolvedTitle = MarkdownParser.resolveTitle(userInput: title, from: body)
-        let items = MarkdownParser.parse(text: body, title: resolvedTitle)
+        let items = MarkdownParser.parse(text: body)
         guard !items.isEmpty else { return }
         let article = WebArticle(
             id: UUID(),
@@ -562,15 +563,24 @@ private struct ArticleCard: View {
             coverImage = nil
             return
         }
-        let data: Data? = await Task.detached(priority: .userInitiated) {
-            try? Data(contentsOf: url)
+        let image: UIImage? = await Task.detached(priority: .userInitiated) {
+            downsampledImage(at: url, maxPixelSize: 600)
         }.value
-        guard let data, let image = UIImage(data: data) else {
-            coverImage = nil
-            return
-        }
         coverImage = image
     }
+}
+
+private func downsampledImage(at url: URL, maxPixelSize: Int) -> UIImage? {
+    let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else { return nil }
+    let options = [
+        kCGImageSourceCreateThumbnailFromImageAlways: true,
+        kCGImageSourceShouldCacheImmediately: true,
+        kCGImageSourceCreateThumbnailWithTransform: true,
+        kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+    ] as CFDictionary
+    guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return nil }
+    return UIImage(cgImage: cgImage)
 }
 
 private struct PlaceholderCover: View {

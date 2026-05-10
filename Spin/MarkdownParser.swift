@@ -1,7 +1,7 @@
 import Foundation
 
 enum MarkdownParser {
-    static func parse(text: String, title _: String = "") -> [ScrollTextView.ReadableItem] {
+    static func parse(text: String) -> [ScrollTextView.ReadableItem] {
         let lines = text.components(separatedBy: "\n")
 
         var items: [ScrollTextView.ReadableItem] = []
@@ -99,17 +99,20 @@ enum MarkdownParser {
     static func resolveTitle(userInput: String, from text: String) -> String {
         let trimmedUser = userInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedUser.isEmpty { return trimmedUser }
-        if let heading = firstHeading(in: text) { return heading }
+        if let heading = leadingHeadingTitle(in: text) { return heading }
         return "Untitled"
     }
 
-    private static func firstHeading(in text: String) -> String? {
-        for rawLine in text.components(separatedBy: "\n") {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
-            if line.hasPrefix("# ") {
-                let candidate = String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-                if !candidate.isEmpty { return candidate }
-            }
+    /// Returns the first non-empty line of `text` if it's a markdown heading
+    /// (any leading `#` count), trimmed and capped to 60 characters.
+    static func leadingHeadingTitle(in text: String) -> String? {
+        for raw in text.split(omittingEmptySubsequences: false, whereSeparator: { $0.isNewline }) {
+            let line = raw.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty { continue }
+            guard line.hasPrefix("#") else { return nil }
+            let stripped = line.drop(while: { $0 == "#" }).trimmingCharacters(in: .whitespaces)
+            guard !stripped.isEmpty else { return nil }
+            return String(stripped.prefix(60)).trimmingCharacters(in: .whitespaces)
         }
         return nil
     }

@@ -123,7 +123,7 @@ struct PasteTextView: View {
     }
 
     private func computeTitleSuggestion(from text: String) -> String? {
-        if let heading = markdownHeadingTitle(from: text) { return heading }
+        if let heading = MarkdownParser.leadingHeadingTitle(in: text) { return heading }
         if let firstLine = firstLineTitle(from: text) { return firstLine }
         if let extracted = nlExtractedTitle(from: text) { return extracted }
         return firstLineFallback(from: text)
@@ -143,19 +143,6 @@ struct PasteTextView: View {
 
         guard secondIsEmpty || secondMuchLonger || endsWithQuestion else { return nil }
         return firstLine
-    }
-
-    private func markdownHeadingTitle(from text: String) -> String? {
-        let firstLine = text
-            .split(omittingEmptySubsequences: true, whereSeparator: { $0.isNewline })
-            .first
-            .map { $0.trimmingCharacters(in: .whitespaces) } ?? ""
-        guard firstLine.hasPrefix("#") else { return nil }
-        let stripped = firstLine
-            .drop(while: { $0 == "#" })
-            .trimmingCharacters(in: .whitespaces)
-        guard !stripped.isEmpty else { return nil }
-        return String(stripped.prefix(60)).trimmingCharacters(in: .whitespaces)
     }
 
     private func firstLineFallback(from text: String) -> String? {

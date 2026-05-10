@@ -44,67 +44,48 @@ func extractArticle(from webView: WKWebView, sourceURL: URL) async throws -> Web
     }
 
     let runner = """
-    try {
-      var article = new Readability(document.cloneNode(true)).parse();
-      if (!article || !article.content) {
-        return JSON.stringify({ __error: 'No content' });
-      }
-
-      var coverImage = null;
-      var coverMime = null;
+    (function() {
       try {
-        var temp = document.createElement('div');
-        temp.innerHTML = article.content;
-        var imgs = temp.querySelectorAll('img');
-        var candidate = null;
-        for (var i = 0; i < imgs.length; i++) {
-          var img = imgs[i];
-          var src = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
-          if (!src) continue;
-          var resolvedUrl;
-          try { resolvedUrl = new URL(src, document.baseURI).href; } catch (e) { continue; }
-          var w = parseInt(img.getAttribute('width'), 10) || img.naturalWidth || 0;
-          var h = parseInt(img.getAttribute('height'), 10) || img.naturalHeight || 0;
-          if (w > 0 && w < 100) continue;
-          if (h > 0 && h < 100) continue;
-          candidate = resolvedUrl;
-          if (w === 0 || w >= 300) break;
+        var article = new Readability(document.cloneNode(true)).parse();
+        if (!article || !article.content) {
+          return JSON.stringify({ __error: 'No content' });
         }
 
-        if (candidate) {
-          var resp = await fetch(candidate);
-          if (resp.ok) {
-            var blob = await resp.blob();
-            coverMime = blob.type;
-            coverImage = await new Promise(function(resolve) {
-              var reader = new FileReader();
-              reader.onloadend = function() {
-                var s = reader.result || '';
-                var idx = s.indexOf(',');
-                resolve(idx >= 0 ? s.substring(idx + 1) : null);
-              };
-              reader.onerror = function() { resolve(null); };
-              reader.readAsDataURL(blob);
-            });
+        var coverImageURL = null;
+        try {
+          var temp = document.createElement('div');
+          temp.innerHTML = article.content;
+          var imgs = temp.querySelectorAll('img');
+          for (var i = 0; i < imgs.length; i++) {
+            var img = imgs[i];
+            var src = img.getAttribute('src') || img.getAttribute('data-src') || img.getAttribute('data-original') || '';
+            if (!src) continue;
+            var resolvedUrl;
+            try { resolvedUrl = new URL(src, document.baseURI).href; } catch (e) { continue; }
+            var w = parseInt(img.getAttribute('width'), 10) || img.naturalWidth || 0;
+            var h = parseInt(img.getAttribute('height'), 10) || img.naturalHeight || 0;
+            if (w > 0 && w < 100) continue;
+            if (h > 0 && h < 100) continue;
+            coverImageURL = resolvedUrl;
+            if (w === 0 || w >= 300) break;
           }
-        }
-      } catch (e) { /* swallow cover extraction errors */ }
+        } catch (e) {}
 
-      return JSON.stringify({
-        title: article.title,
-        byline: article.byline,
-        content: article.content,
-        coverImage: coverImage,
-        coverMime: coverMime
-      });
-    } catch(e) {
-      return JSON.stringify({ __error: e.toString() });
-    }
+        return JSON.stringify({
+          title: article.title,
+          byline: article.byline,
+          content: article.content,
+          coverImageURL: coverImageURL
+        });
+      } catch(e) {
+        return JSON.stringify({ __error: e.toString() });
+      }
+    })()
     """
 
     let resolvedURL = webView.url ?? sourceURL
 
-    if let parsed: ReadabilityResult = try await evaluateAsyncJSON(runner, on: webView),
+    if let parsed: ReadabilityResult = try await evaluateJSON(runner, on: webView),
        let content = parsed.content, !content.isEmpty {
         var items = ReadabilityHTMLWalker.items(from: content, baseURL: resolvedURL)
         if let byline = parsed.byline?.trimmingCharacters(in: .whitespacesAndNewlines), !byline.isEmpty {
@@ -112,11 +93,7 @@ func extractArticle(from webView: WKWebView, sourceURL: URL) async throws -> Web
         }
         if !items.isEmpty {
             let articleID = UUID()
-            let coverPath = saveCoverImage(
-                base64: parsed.coverImage,
-                mime: parsed.coverMime,
-                articleID: articleID
-            )
+            let coverPath = await downloadCoverImage(from: parsed.coverImageURL, articleID: articleID)
             return WebArticle(
                 id: articleID,
                 title: resolveTitle(parsed.title, fallbackURL: resolvedURL),
@@ -132,18 +109,22 @@ func extractArticle(from webView: WKWebView, sourceURL: URL) async throws -> Web
     return try await fallbackArticle(from: webView, sourceURL: resolvedURL)
 }
 
-private func saveCoverImage(base64: String?, mime: String?, articleID: UUID) -> String? {
-    guard let base64, !base64.isEmpty,
-          let data = Data(base64Encoded: base64), !data.isEmpty else { return nil }
-    let ext = imageExtension(for: mime, data: data)
-    let filename = "\(articleID.uuidString).\(ext)"
-    let url = WebArticle.coversDirectory.appendingPathComponent(filename)
-    do {
-        try data.write(to: url, options: .atomic)
-        return "web-covers/\(filename)"
-    } catch {
-        return nil
-    }
+private func downloadCoverImage(from urlString: String?, articleID: UUID) async -> String? {
+    guard let urlString, let url = URL(string: urlString) else { return nil }
+    return await Task.detached {
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            guard !data.isEmpty else { return nil }
+            let mime = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Type")
+            let ext = imageExtension(for: mime, data: data)
+            let filename = "\(articleID.uuidString).\(ext)"
+            let fileURL = WebArticle.coversDirectory.appendingPathComponent(filename)
+            try data.write(to: fileURL, options: .atomic)
+            return "web-covers/\(filename)"
+        } catch {
+            return nil
+        }
+    }.value
 }
 
 private func imageExtension(for mime: String?, data: Data) -> String {
@@ -210,8 +191,7 @@ private struct ReadabilityResult: JSEvalEnvelope {
     let title: String?
     let byline: String?
     let content: String?
-    let coverImage: String?
-    let coverMime: String?
+    let coverImageURL: String?
     let __error: String?
 }
 
@@ -226,17 +206,6 @@ private func evaluateJSON<T: JSEvalEnvelope>(_ js: String, on webView: WKWebView
     let raw: Any?
     do {
         raw = try await webView.evaluateJavaScript(js)
-    } catch {
-        throw WebArticleError.evaluationFailed(error.localizedDescription)
-    }
-    return try decodeEnvelope(raw)
-}
-
-@MainActor
-private func evaluateAsyncJSON<T: JSEvalEnvelope>(_ js: String, on webView: WKWebView) async throws -> T? {
-    let raw: Any?
-    do {
-        raw = try await webView.callAsyncJavaScript(js, arguments: [:], in: nil, contentWorld: .page)
     } catch {
         throw WebArticleError.evaluationFailed(error.localizedDescription)
     }
