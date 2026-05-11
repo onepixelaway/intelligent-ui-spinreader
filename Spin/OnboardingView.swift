@@ -416,7 +416,7 @@ private struct TutorialContainer: View {
                     }
                 )
                 .scaleEffect(tooltipVisible ? 1.0 : 0.85, anchor: .bottom)
-                .opacity(tooltipVisible && tooltipSize.width > 0 ? 1.0 : 0.0)
+                .opacity(tooltipVisible ? 1.0 : 0.0)
                 .position(x: bubbleCenterX, y: bubbleCenterY)
             }
         }
@@ -649,8 +649,8 @@ private struct TutorialTooltip: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .fixedSize(horizontal: true, vertical: true)
         .frame(maxWidth: maxBubbleWidth, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
         .background(
             RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .fill(bubbleColor)
