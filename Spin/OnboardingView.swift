@@ -258,6 +258,13 @@ private enum FinishPhase {
     case fading    // entire container fades out
 }
 
+private struct TooltipSizeKey: PreferenceKey {
+    static let defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        value = nextValue()
+    }
+}
+
 private struct TutorialContainer: View {
     let onFinish: () -> Void
     @EnvironmentObject private var readerSettings: ReaderSettings
@@ -278,12 +285,15 @@ private struct TutorialContainer: View {
 
     @State private var panelHeight: CGFloat = 0
     @State private var tooltipVisible: Bool = false
+    @State private var tooltipSize: CGSize = .zero
 
     private let scrollPerSwipe: CGFloat = 180
     private let trackpadAdvanceThreshold: CGFloat = 80
     private let onboardingContentID = "onboarding-sample"
     private let panelBottomInset: CGFloat = 24
     private let tooltipPanelGap: CGFloat = 14
+    private let textTopPadding: CGFloat = 21
+    private let itemSpacing: CGFloat = 28
 
     private var actions: [PanelAction] {
         let configured = readerSettings.panelActions
@@ -302,11 +312,6 @@ private struct TutorialContainer: View {
             sampleTextLayer
                 .offset(y: slideOut ? -200 : 0)
                 .opacity(slideOut ? 0 : 1)
-
-            tooltipLayer
-                .offset(y: slideOut ? -120 : 0)
-                .opacity(slideOut ? 0 : 1)
-                .allowsHitTesting(false)
 
             ControlPanel(
                 isHighlightMode: isHighlightMode,
@@ -356,6 +361,12 @@ private struct TutorialContainer: View {
                 panelHeight = value
             }
         }
+        .overlayPreferenceValue(ControlPanelAnchorsKey.self) { anchors in
+            tooltipOverlay(anchors: anchors)
+                .offset(y: slideOut ? -120 : 0)
+                .opacity(slideOut ? 0 : 1)
+                .allowsHitTesting(false)
+        }
         .opacity(entireFade ? 0 : 1)
         .allowsHitTesting(contentInteractive)
         .sheet(item: $explainerURL, onDismiss: handleSheetDismissed) { item in
@@ -371,27 +382,57 @@ private struct TutorialContainer: View {
     }
 
     @ViewBuilder
-    private var tooltipLayer: some View {
-        let copy = currentTooltipCopy
-        let tipClearance = panelHeight + panelBottomInset + tooltipPanelGap
-        TutorialTooltip(
-            title: copy.title,
-            subtitle: copy.subtitle,
-            pointerSide: copy.pointerSide
-        )
-        .scaleEffect(tooltipVisible ? 1.0 : 0.85, anchor: .bottom)
-        .opacity(tooltipVisible && panelHeight > 0 ? 1.0 : 0.0)
-        .frame(maxWidth: .infinity, alignment: copy.bubbleAlignment)
-        .padding(.horizontal, copy.bubbleHorizontalPadding)
-        .padding(.bottom, tipClearance)
+    private func tooltipOverlay(anchors: [ControlPanelAnchor: Anchor<CGRect>]) -> some View {
+        GeometryReader { proxy in
+            let copy = currentTooltipCopy
+            if let anchor = anchors[copy.anchor] {
+                let rect = proxy[anchor]
+                let pointerCenterX = pointerCenterOffset(for: copy.pointerSide)
+                let bubbleCenterX = rect.midX + tooltipSize.width / 2 - pointerCenterX
+                let bubbleBottomY = rect.minY - tooltipPanelGap - TutorialTooltip.pointerHeight
+                let bubbleCenterY = bubbleBottomY - tooltipSize.height / 2
+
+                TutorialTooltip(
+                    title: copy.title,
+                    subtitle: copy.subtitle,
+                    pointerSide: copy.pointerSide
+                )
+                .background(
+                    GeometryReader { g in
+                        Color.clear.preference(key: TooltipSizeKey.self, value: g.size)
+                    }
+                )
+                .scaleEffect(tooltipVisible ? 1.0 : 0.85, anchor: .bottom)
+                .opacity(tooltipVisible && tooltipSize.width > 0 ? 1.0 : 0.0)
+                .position(x: bubbleCenterX, y: bubbleCenterY)
+            }
+        }
+        .onPreferenceChange(TooltipSizeKey.self) { newSize in
+            if abs(newSize.width - tooltipSize.width) > 0.5
+                || abs(newSize.height - tooltipSize.height) > 0.5 {
+                tooltipSize = newSize
+            }
+        }
+    }
+
+    private func pointerCenterOffset(for side: TooltipPointerSide) -> CGFloat {
+        switch side {
+        case .leading:
+            return TutorialTooltip.pointerEdgeInset + TutorialTooltip.pointerWidth / 2
+        case .center:
+            return tooltipSize.width / 2
+        case .trailing:
+            return tooltipSize.width
+                - TutorialTooltip.pointerEdgeInset
+                - TutorialTooltip.pointerWidth / 2
+        }
     }
 
     private struct TooltipCopy {
         let title: String
         let subtitle: String
         let pointerSide: TooltipPointerSide
-        let bubbleAlignment: Alignment
-        let bubbleHorizontalPadding: CGFloat
+        let anchor: ControlPanelAnchor
     }
 
     private var currentTooltipCopy: TooltipCopy {
@@ -401,24 +442,21 @@ private struct TutorialContainer: View {
                 title: "Swipe to read",
                 subtitle: "Drag up on the trackpad",
                 pointerSide: .center,
-                bubbleAlignment: .center,
-                bubbleHorizontalPadding: 24
+                anchor: .trackpad
             )
         case .ai:
             return TooltipCopy(
                 title: "Ask anything",
                 subtitle: "Tap a button to explore",
-                pointerSide: .trailing,
-                bubbleAlignment: .trailing,
-                bubbleHorizontalPadding: 44
+                pointerSide: .center,
+                anchor: .actionPillRow
             )
         case .highlight:
             return TooltipCopy(
                 title: "Highlight a passage",
                 subtitle: "Tap the pencil, then drag",
                 pointerSide: .leading,
-                bubbleAlignment: .leading,
-                bubbleHorizontalPadding: 44
+                anchor: .highlightButton
             )
         }
     }
@@ -430,29 +468,14 @@ private struct TutorialContainer: View {
                 : 0.72
             let fadeEnd = min(1.0, fadeStart + 0.08)
 
-            HighlightableTextView(
-                text: OnboardingSample.text,
-                attributedText: OnboardingSample.attributedText(
-                    bodySize: readerSettings.paragraphSize,
-                    fontFamily: readerSettings.fontFamily,
-                    lineSpacing: readerSettings.lineSpacingPt(for: readerSettings.paragraphSize)
-                ),
-                itemIndex: 0,
-                highlights: localHighlights,
-                playbackHighlight: nil,
-                isPlaybackActive: false,
-                pendingHighlight: nil,
-                pendingOpacity: 0.25,
-                showsPendingCursor: false,
-                onHighlightCreated: handleHighlightCreated,
-                onHighlightRemoved: { _ in },
-                onPlaybackWordTapped: { _ in },
-                onEmptyTap: {}
-            )
-            .allowsHitTesting(textHitTestEnabled)
+            VStack(alignment: .leading, spacing: itemSpacing) {
+                ForEach(Array(OnboardingSample.items.enumerated()), id: \.offset) { index, item in
+                    sampleItemView(item, index: index)
+                        .padding(.horizontal, readerSettings.margins.horizontalPadding)
+                }
+            }
+            .padding(.top, textTopPadding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, readerSettings.margins.horizontalPadding)
-            .padding(.top, 8)
             .offset(y: scrollOffset)
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             .clipped()
@@ -468,6 +491,40 @@ private struct TutorialContainer: View {
                 )
             )
         }
+    }
+
+    @ViewBuilder
+    private func sampleItemView(_ item: OnboardingSample.Item, index: Int) -> some View {
+        let itemID = onboardingItemContentID(at: index)
+        let matching = localHighlights.filter { $0.contentID == itemID }
+        HighlightableTextView(
+            text: item.text,
+            attributedText: OnboardingSample.attributedText(
+                for: item,
+                bodySize: readerSettings.paragraphSize,
+                fontFamily: readerSettings.fontFamily,
+                lineSpacing: readerSettings.lineSpacingPt(for: readerSettings.paragraphSize)
+            ),
+            itemIndex: index,
+            highlights: matching,
+            playbackHighlight: nil,
+            isPlaybackActive: false,
+            pendingHighlight: nil,
+            pendingOpacity: 0.25,
+            showsPendingCursor: false,
+            onHighlightCreated: { text, start, end in
+                handleHighlightCreated(itemIndex: index, text: text, start: start, end: end)
+            },
+            onHighlightRemoved: { _ in },
+            onPlaybackWordTapped: { _ in },
+            onEmptyTap: {}
+        )
+        .allowsHitTesting(textHitTestEnabled)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func onboardingItemContentID(at index: Int) -> String {
+        "\(onboardingContentID)#item-\(index)"
     }
 
     // MARK: Callbacks
@@ -518,12 +575,12 @@ private struct TutorialContainer: View {
         }
     }
 
-    private func handleHighlightCreated(_ selectedText: String, _ start: Int, _ end: Int) {
+    private func handleHighlightCreated(itemIndex: Int, text: String, start: Int, end: Int) {
         guard step == .highlight, isHighlightMode, !didTriggerCompletion else { return }
         let color = (readerSettings.highlightColors.first ?? .yellow).rawValue
         let highlight = Highlight(
-            contentID: onboardingContentID,
-            text: selectedText,
+            contentID: onboardingItemContentID(at: itemIndex),
+            text: text,
             startOffset: start,
             endOffset: end,
             color: color
@@ -589,9 +646,9 @@ private struct TutorialTooltip: View {
 
     private let bubbleColor = Color(red: 0.102, green: 0.157, blue: 0.275) // ~#1a2846
     private let cornerRadius: CGFloat = 12
-    private let pointerWidth: CGFloat = 16
-    private let pointerHeight: CGFloat = 8
-    private let pointerEdgeInset: CGFloat = 22
+    static let pointerWidth: CGFloat = 16
+    static let pointerHeight: CGFloat = 8
+    static let pointerEdgeInset: CGFloat = 22
     private let maxBubbleWidth: CGFloat = 200
 
     var body: some View {
@@ -614,9 +671,9 @@ private struct TutorialTooltip: View {
         .overlay(alignment: pointerOverlayAlignment) {
             TooltipPointer()
                 .fill(bubbleColor)
-                .frame(width: pointerWidth, height: pointerHeight)
+                .frame(width: Self.pointerWidth, height: Self.pointerHeight)
                 .padding(pointerPadEdge, pointerPadAmount)
-                .offset(y: pointerHeight)
+                .offset(y: Self.pointerHeight)
         }
         .shadow(color: .black.opacity(0.35), radius: 10, x: 0, y: 5)
     }
@@ -640,7 +697,7 @@ private struct TutorialTooltip: View {
     private var pointerPadAmount: CGFloat {
         switch pointerSide {
         case .center: return 0
-        case .leading, .trailing: return pointerEdgeInset
+        case .leading, .trailing: return Self.pointerEdgeInset
         }
     }
 }
@@ -648,32 +705,39 @@ private struct TutorialTooltip: View {
 // MARK: - Sample text shared across reader screens
 
 private enum OnboardingSample {
-    static let title = "Put something back"
+    enum Item {
+        case title(String)
+        case paragraph(String)
+        case author(String)
 
-    static let paragraphs: [String] = [
-        "I grow little of the food I eat, and of the little I do grow I did not breed or perfect the seeds.",
-        "I do not make any of my own clothing.",
-        "I speak a language I did not invent or refine.",
-        "I did not discover the mathematics I use.",
-        "I am protected by freedoms and laws I did not conceive of or legislate, and do not enforce or adjudicate.",
-        "I am moved by music I did not create myself.",
-        "When I needed medical attention, I was helpless to help myself survive.",
-        "I did not invent the transistor, the microprocessor, object oriented programming, or most of the technology I work with.",
-        "I love and admire my species, living and dead, and am totally dependent on them for my life and well being."
+        var text: String {
+            switch self {
+            case .title(let s), .paragraph(let s), .author(let s):
+                return s
+            }
+        }
+    }
+
+    static let items: [Item] = [
+        .title("Put something back"),
+        .paragraph("I grow little of the food I eat, and of the little I do grow I did not breed or perfect the seeds."),
+        .paragraph("I do not make any of my own clothing."),
+        .paragraph("I speak a language I did not invent or refine."),
+        .paragraph("I did not discover the mathematics I use."),
+        .paragraph("I am protected by freedoms and laws I did not conceive of or legislate, and do not enforce or adjudicate."),
+        .paragraph("I am moved by music I did not create myself."),
+        .paragraph("When I needed medical attention, I was helpless to help myself survive."),
+        .paragraph("I did not invent the transistor, the microprocessor, object oriented programming, or most of the technology I work with."),
+        .paragraph("I love and admire my species, living and dead, and am totally dependent on them for my life and well being."),
+        .author("— Steve Jobs")
     ]
 
-    static let author = "— Steve Jobs"
-
-    // Plain string used for both Perplexity context and HighlightableTextView's
-    // offset math. Must exactly match `attributedText(...).string`.
-    static let text: String = {
-        var pieces: [String] = [title]
-        pieces.append(contentsOf: paragraphs)
-        pieces.append(author)
-        return pieces.joined(separator: "\n\n")
-    }()
+    // Plain string used as the Perplexity context. Joined with single newlines
+    // so the text reads naturally without blank-line gaps.
+    static let text: String = items.map(\.text).joined(separator: "\n")
 
     static func attributedText(
+        for item: Item,
         bodySize: CGFloat,
         fontFamily: ReaderFontFamily,
         lineSpacing: CGFloat
@@ -681,56 +745,29 @@ private enum OnboardingSample {
         let titleSize = bodySize + 10
         let authorSize = max(13, bodySize - 2)
 
-        let titleFont = designedFont(size: titleSize, weight: .bold, family: fontFamily)
-        let bodyFont = designedFont(size: bodySize, weight: .regular, family: fontFamily)
-        let authorFont = italicFont(size: authorSize, family: fontFamily)
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = lineSpacing
 
-        let bodyPara = NSMutableParagraphStyle()
-        bodyPara.lineSpacing = lineSpacing
-        bodyPara.paragraphSpacing = bodySize * 0.6
-
-        let titlePara = NSMutableParagraphStyle()
-        titlePara.lineSpacing = lineSpacing
-        titlePara.paragraphSpacing = bodySize * 0.9
-
-        let authorPara = NSMutableParagraphStyle()
-        authorPara.lineSpacing = lineSpacing
-
-        let bodyColor = UIColor(white: 0.92, alpha: 1.0)
-        let titleColor = UIColor.white
-        let authorColor = UIColor(white: 0.55, alpha: 1.0)
-
-        let result = NSMutableAttributedString()
-
-        result.append(NSAttributedString(string: title, attributes: [
-            .font: titleFont,
-            .foregroundColor: titleColor,
-            .paragraphStyle: titlePara
-        ]))
-
-        for paragraph in paragraphs {
-            result.append(NSAttributedString(string: "\n\n", attributes: [
-                .font: bodyFont,
-                .paragraphStyle: bodyPara
-            ]))
-            result.append(NSAttributedString(string: paragraph, attributes: [
-                .font: bodyFont,
-                .foregroundColor: bodyColor,
-                .paragraphStyle: bodyPara
-            ]))
+        switch item {
+        case .title(let s):
+            return NSAttributedString(string: s, attributes: [
+                .font: designedFont(size: titleSize, weight: .bold, family: fontFamily),
+                .foregroundColor: UIColor.white,
+                .paragraphStyle: para
+            ])
+        case .paragraph(let s):
+            return NSAttributedString(string: s, attributes: [
+                .font: designedFont(size: bodySize, weight: .regular, family: fontFamily),
+                .foregroundColor: UIColor(white: 0.92, alpha: 1.0),
+                .paragraphStyle: para
+            ])
+        case .author(let s):
+            return NSAttributedString(string: s, attributes: [
+                .font: italicFont(size: authorSize, family: fontFamily),
+                .foregroundColor: UIColor(white: 0.55, alpha: 1.0),
+                .paragraphStyle: para
+            ])
         }
-
-        result.append(NSAttributedString(string: "\n\n", attributes: [
-            .font: bodyFont,
-            .paragraphStyle: bodyPara
-        ]))
-        result.append(NSAttributedString(string: author, attributes: [
-            .font: authorFont,
-            .foregroundColor: authorColor,
-            .paragraphStyle: authorPara
-        ]))
-
-        return result
     }
 
     private static func designedFont(size: CGFloat, weight: UIFont.Weight, family: ReaderFontFamily) -> UIFont {

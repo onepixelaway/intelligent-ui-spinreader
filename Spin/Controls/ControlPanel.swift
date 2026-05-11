@@ -1,5 +1,21 @@
 import SwiftUI
 
+enum ControlPanelAnchor: Hashable {
+    case highlightButton
+    case trackpad
+    case actionPillRow
+}
+
+struct ControlPanelAnchorsKey: PreferenceKey {
+    static let defaultValue: [ControlPanelAnchor: Anchor<CGRect>] = [:]
+    static func reduce(
+        value: inout [ControlPanelAnchor: Anchor<CGRect>],
+        nextValue: () -> [ControlPanelAnchor: Anchor<CGRect>]
+    ) {
+        value.merge(nextValue(), uniquingKeysWith: { $1 })
+    }
+}
+
 struct ControlPanel: View {
     let isHighlightMode: Bool
     let isPlaybackMode: Bool
@@ -217,12 +233,18 @@ struct ControlPanel: View {
             )
             .scaleEffect(isHighlightMode ? 1.08 : 1.0)
             .animation(.easeInOut(duration: 0.15), value: isHighlightMode)
+            .anchorPreference(key: ControlPanelAnchorsKey.self, value: .bounds) {
+                [.highlightButton: $0]
+            }
 
             TrackpadScrollView(
                 onSwipeDown: onTrackpadSwipeDown,
                 onSwipeUp: onTrackpadSwipeUp
             )
             .frame(width: 140, height: 110)
+            .anchorPreference(key: ControlPanelAnchorsKey.self, value: .bounds) {
+                [.trackpad: $0]
+            }
 
             CircularReaderButton(
                 systemImage: isPlaybackSpeaking ? "pause.fill" : "play.fill",
@@ -266,10 +288,16 @@ struct ControlPanel: View {
             actionPillsHStack
                 .frame(maxWidth: .infinity)
                 .padding(.horizontal, 24)
+                .anchorPreference(key: ControlPanelAnchorsKey.self, value: .bounds) {
+                    [.actionPillRow: $0]
+                }
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 actionPillsHStack
                     .padding(.horizontal, 24)
+                    .anchorPreference(key: ControlPanelAnchorsKey.self, value: .bounds) {
+                        [.actionPillRow: $0]
+                    }
             }
         }
     }
