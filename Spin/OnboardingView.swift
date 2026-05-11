@@ -276,9 +276,14 @@ private struct TutorialContainer: View {
     @State private var didTriggerCompletion = false
     @State private var finishPhase: FinishPhase = .idle
 
+    @State private var panelHeight: CGFloat = 0
+    @State private var tooltipVisible: Bool = false
+
     private let scrollPerSwipe: CGFloat = 180
     private let trackpadAdvanceThreshold: CGFloat = 80
     private let onboardingContentID = "onboarding-sample"
+    private let panelBottomInset: CGFloat = 24
+    private let tooltipPanelGap: CGFloat = 14
 
     private var actions: [PanelAction] {
         let configured = readerSettings.panelActions
@@ -293,16 +298,15 @@ private struct TutorialContainer: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            instructionZone
+        ZStack(alignment: .bottom) {
+            sampleTextLayer
                 .offset(y: slideOut ? -200 : 0)
                 .opacity(slideOut ? 0 : 1)
 
-            sampleTextViewport
-                .padding(.top, 16)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .offset(y: slideOut ? -200 : 0)
+            tooltipLayer
+                .offset(y: slideOut ? -120 : 0)
                 .opacity(slideOut ? 0 : 1)
+                .allowsHitTesting(false)
 
             ControlPanel(
                 isHighlightMode: isHighlightMode,
@@ -336,82 +340,96 @@ private struct TutorialContainer: View {
                 onQuestionTap: {},
                 onTagTap: { _ in }
             )
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(key: ControlPanelHeightKey.self, value: geo.size.height)
+                }
+            )
             .padding(.horizontal, 34)
-            .padding(.bottom, 24)
+            .padding(.bottom, panelBottomInset)
             .offset(y: slideOut ? 240 : 0)
             .opacity(slideOut ? 0 : 1)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onPreferenceChange(ControlPanelHeightKey.self) { value in
+            if abs(value - panelHeight) > 0.5 {
+                panelHeight = value
+            }
         }
         .opacity(entireFade ? 0 : 1)
         .allowsHitTesting(contentInteractive)
         .sheet(item: $explainerURL, onDismiss: handleSheetDismissed) { item in
             SafariView(url: item.url)
         }
-    }
-
-    private var instructionZone: some View {
-        ZStack(alignment: .topLeading) {
-            instructionContent(for: currentCopy)
-                .id(currentCopy.id)
-                .transition(.opacity)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
+                    tooltipVisible = true
+                }
+            }
         }
-        .animation(.easeInOut(duration: 0.35), value: currentCopy.id)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, readerSettings.margins.horizontalPadding)
-        .padding(.top, 40)
     }
 
     @ViewBuilder
-    private func instructionContent(for copy: InstructionCopy) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(copy.title)
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.white)
-
-            Text(copy.subtitle)
-                .font(.system(size: 15, weight: .regular))
-                .foregroundColor(.white.opacity(0.6))
-                .fixedSize(horizontal: false, vertical: true)
-        }
+    private var tooltipLayer: some View {
+        let copy = currentTooltipCopy
+        let tipClearance = panelHeight + panelBottomInset + tooltipPanelGap
+        TutorialTooltip(
+            title: copy.title,
+            subtitle: copy.subtitle,
+            pointerSide: copy.pointerSide
+        )
+        .scaleEffect(tooltipVisible ? 1.0 : 0.85, anchor: .bottom)
+        .opacity(tooltipVisible && panelHeight > 0 ? 1.0 : 0.0)
+        .frame(maxWidth: .infinity, alignment: copy.bubbleAlignment)
+        .padding(.horizontal, copy.bubbleHorizontalPadding)
+        .padding(.bottom, tipClearance)
     }
 
-    private struct InstructionCopy {
-        let id: String
+    private struct TooltipCopy {
         let title: String
         let subtitle: String
+        let pointerSide: TooltipPointerSide
+        let bubbleAlignment: Alignment
+        let bubbleHorizontalPadding: CGFloat
     }
 
-    private var currentCopy: InstructionCopy {
+    private var currentTooltipCopy: TooltipCopy {
         switch step {
         case .trackpad:
-            return InstructionCopy(
-                id: "trackpad",
+            return TooltipCopy(
                 title: "Swipe to read",
-                subtitle: "Use the trackpad to scroll through your reading."
+                subtitle: "Drag up on the trackpad",
+                pointerSide: .center,
+                bubbleAlignment: .center,
+                bubbleHorizontalPadding: 24
             )
         case .ai:
-            return InstructionCopy(
-                id: "ai",
-                title: "Your AI reading companion",
-                subtitle: "Tap a button to look something up."
+            return TooltipCopy(
+                title: "Ask anything",
+                subtitle: "Tap a button to explore",
+                pointerSide: .trailing,
+                bubbleAlignment: .trailing,
+                bubbleHorizontalPadding: 44
             )
         case .highlight:
-            if isHighlightMode {
-                return InstructionCopy(
-                    id: "highlight-armed",
-                    title: "Drag across the text",
-                    subtitle: "Press and drag to highlight a passage."
-                )
-            }
-            return InstructionCopy(
-                id: "highlight",
-                title: "Tap the pencil to highlight",
-                subtitle: "Use the pencil button on the left of the control pad."
+            return TooltipCopy(
+                title: "Highlight a passage",
+                subtitle: "Tap the pencil, then drag",
+                pointerSide: .leading,
+                bubbleAlignment: .leading,
+                bubbleHorizontalPadding: 44
             )
         }
     }
 
-    private var sampleTextViewport: some View {
+    private var sampleTextLayer: some View {
         GeometryReader { geo in
+            let fadeStart: CGFloat = panelHeight > 0
+                ? max(0.5, (geo.size.height - panelHeight - panelBottomInset - 8) / geo.size.height)
+                : 0.72
+            let fadeEnd = min(1.0, fadeStart + 0.08)
+
             HighlightableTextView(
                 text: OnboardingSample.text,
                 attributedText: OnboardingSample.attributedText(
@@ -434,16 +452,16 @@ private struct TutorialContainer: View {
             .allowsHitTesting(textHitTestEnabled)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, readerSettings.margins.horizontalPadding)
+            .padding(.top, 8)
             .offset(y: scrollOffset)
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
             .clipped()
             .mask(
                 LinearGradient(
                     stops: [
-                        .init(color: .clear, location: 0.0),
-                        .init(color: .black, location: 0.08),
-                        .init(color: .black, location: 0.88),
-                        .init(color: .clear, location: 1.0)
+                        .init(color: .black, location: 0.0),
+                        .init(color: .black, location: fadeStart),
+                        .init(color: .clear, location: fadeEnd)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
@@ -533,8 +551,96 @@ private struct TutorialContainer: View {
     }
 
     private func advance(to next: TutorialStep) {
-        withAnimation(.easeInOut(duration: 0.35)) {
-            step = next
+        withAnimation(.easeOut(duration: 0.2)) {
+            tooltipVisible = false
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                step = next
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
+                    tooltipVisible = true
+                }
+            }
+        }
+    }
+}
+
+private enum TooltipPointerSide {
+    case leading, center, trailing
+}
+
+private struct TooltipPointer: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct TutorialTooltip: View {
+    let title: String
+    let subtitle: String
+    let pointerSide: TooltipPointerSide
+
+    private let bubbleColor = Color(red: 0.102, green: 0.157, blue: 0.275) // ~#1a2846
+    private let cornerRadius: CGFloat = 12
+    private let pointerWidth: CGFloat = 16
+    private let pointerHeight: CGFloat = 8
+    private let pointerEdgeInset: CGFloat = 22
+    private let maxBubbleWidth: CGFloat = 200
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundColor(.white)
+            Text(subtitle)
+                .font(.system(size: 13, weight: .regular))
+                .foregroundColor(.white.opacity(0.62))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .frame(maxWidth: maxBubbleWidth, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(bubbleColor)
+        )
+        .overlay(alignment: pointerOverlayAlignment) {
+            TooltipPointer()
+                .fill(bubbleColor)
+                .frame(width: pointerWidth, height: pointerHeight)
+                .padding(pointerPadEdge, pointerPadAmount)
+                .offset(y: pointerHeight)
+        }
+        .shadow(color: .black.opacity(0.35), radius: 10, x: 0, y: 5)
+    }
+
+    private var pointerOverlayAlignment: Alignment {
+        switch pointerSide {
+        case .leading: return .bottomLeading
+        case .center: return .bottom
+        case .trailing: return .bottomTrailing
+        }
+    }
+
+    private var pointerPadEdge: Edge.Set {
+        switch pointerSide {
+        case .leading: return .leading
+        case .center: return []
+        case .trailing: return .trailing
+        }
+    }
+
+    private var pointerPadAmount: CGFloat {
+        switch pointerSide {
+        case .center: return 0
+        case .leading, .trailing: return pointerEdgeInset
         }
     }
 }
