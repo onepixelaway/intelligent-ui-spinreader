@@ -3,27 +3,23 @@ import UIKit
 
 struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
-    @State private var step: OnboardingStep = .splash
+    @State private var showTutorial: Bool = false
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            Group {
-                switch step {
-                case .splash:
-                    SplashScreen(onContinue: { advance(to: .trackpad) })
-                        .transition(screenTransition)
-                case .trackpad:
-                    TrackpadOnboardingScreen(onComplete: { advance(to: .ai) })
-                        .transition(screenTransition)
-                case .ai:
-                    AIOnboardingScreen(onComplete: { advance(to: .highlight) })
-                        .transition(screenTransition)
-                case .highlight:
-                    HighlightOnboardingScreen(onComplete: finish)
-                        .transition(screenTransition)
-                }
+            if showTutorial {
+                TutorialContainer(onFinish: finish)
+                    .transition(.opacity)
+            } else {
+                SplashScreen(onContinue: enterTutorial)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .move(edge: .bottom)),
+                            removal: .opacity
+                        )
+                    )
             }
         }
         .preferredColorScheme(.dark)
@@ -31,29 +27,15 @@ struct OnboardingView: View {
         .statusBar(hidden: true)
     }
 
-    private var screenTransition: AnyTransition {
-        .asymmetric(
-            insertion: .opacity.combined(with: .move(edge: .bottom)),
-            removal: .opacity
-        )
-    }
-
-    private func advance(to next: OnboardingStep) {
+    private func enterTutorial() {
         withAnimation(.easeInOut(duration: 0.4)) {
-            step = next
+            showTutorial = true
         }
     }
 
     private func finish() {
         hasCompletedOnboarding = true
     }
-}
-
-private enum OnboardingStep {
-    case splash
-    case trackpad
-    case ai
-    case highlight
 }
 
 // MARK: - Splash
@@ -253,32 +235,39 @@ private struct DiagonalSheenLayer: View {
     }
 }
 
-// MARK: - Sample text shared across reader screens
+// MARK: - Tutorial container
+//
+// One persistent layout for all three tutorial steps. The real ControlPanel is
+// instantiated exactly once and stays mounted across step changes; only the
+// instruction text above it crossfades. The Safari sheet for the AI step is
+// presented from this container so it survives the step transition.
 
-private enum OnboardingSample {
-    static let text: String = """
-    I went to the woods because I wished to live deliberately, to front only the essential facts of life, and see if I could not learn what it had to teach, and not when I came to die, discover that I had not lived.
-
-    I did not wish to live what was not life, living is so dear; nor did I wish to practise resignation, unless it was quite necessary. I wanted to live deep and suck out all the marrow of life, to live so sturdily and Spartan-like as to put to rout all that was not life, to cut a broad swath and shave close, to drive life into a corner, and reduce it to its lowest terms.
-
-    — Henry David Thoreau, Walden
-    """
+private enum TutorialStep: Hashable {
+    case trackpad
+    case ai
+    case highlight
 }
 
-// MARK: - Onboarding panel helper
-//
-// Builds the real reader ControlPanel with neutral defaults so each tutorial
-// screen can wire just the callbacks relevant to its step (trackpad swipes,
-// action pill taps) while still showing the full widget — circular highlight
-// and play buttons, trackpad, tag pills, and AI action pills.
-private struct OnboardingControlPanel: View {
+private let onboardingSampleTags = ["Walden", "Thoreau", "deliberately"]
+
+private struct TutorialContainer: View {
+    let onFinish: () -> Void
     @EnvironmentObject private var readerSettings: ReaderSettings
 
-    var tags: [String] = []
-    var onTrackpadSwipeDown: () -> Void = {}
-    var onTrackpadSwipeUp: () -> Void = {}
-    var onActionTap: (PanelAction) -> Void = { _ in }
-    var onHighlight: () -> Void = {}
+    @State private var step: TutorialStep = .trackpad
+
+    @State private var scrollOffset: CGFloat = 0
+    @State private var cumulativeScroll: CGFloat = 0
+    @State private var didAdvanceTrackpad = false
+
+    @State private var explainerURL: IdentifiableURL?
+    @State private var aiAdvanceArmed = false
+
+    @State private var isHighlightMode = false
+    @State private var didFinish = false
+
+    private let scrollPerSwipe: CGFloat = 180
+    private let trackpadAdvanceThreshold: CGFloat = 80
 
     private var actions: [PanelAction] {
         let configured = readerSettings.panelActions
@@ -286,87 +275,89 @@ private struct OnboardingControlPanel: View {
     }
 
     var body: some View {
-        ControlPanel(
-            isHighlightMode: false,
-            isPlaybackMode: false,
-            availableHighlightColors: readerSettings.highlightColors,
-            availableHighlightEmojis: readerSettings.highlightEmojis,
-            selectedHighlightColor: readerSettings.highlightColors.first ?? .yellow,
-            selectedHighlightEmoji: nil,
-            onHighlight: onHighlight,
-            onHighlightColorSelected: { _ in },
-            onHighlightEmojiSelected: { _ in },
-            onCancelHighlight: {},
-            onTrackpadSwipeDown: onTrackpadSwipeDown,
-            onTrackpadSwipeUp: onTrackpadSwipeUp,
-            isPlaybackSpeaking: false,
-            isPlaybackPaused: false,
-            isPlaybackPreparing: false,
-            playbackSpeed: 1.0,
-            playbackLevel: 0,
-            onPlaybackToggle: {},
-            onPlaybackSpeedTap: {},
-            onPlaybackSkipBackward: {},
-            onPlaybackSkipForward: {},
-            onPlaybackStop: {},
-            tags: tags,
-            actions: actions,
-            onActionTap: onActionTap,
-            showQuestion: false,
-            currentQuestion: "",
-            isLoadingQuestion: false,
-            onQuestionTap: {},
-            onTagTap: { _ in }
-        )
-        .padding(.horizontal, 34)
-        .padding(.bottom, 24)
-    }
-}
-
-private let onboardingSampleTags = ["Walden", "Thoreau", "deliberately"]
-
-// MARK: - Screen 2: trackpad
-
-private struct TrackpadOnboardingScreen: View {
-    let onComplete: () -> Void
-    @EnvironmentObject private var readerSettings: ReaderSettings
-
-    @State private var scrollOffset: CGFloat = 0
-    @State private var swipesRemaining: Int = 3
-    @State private var didFireComplete = false
-
-    private let scrollPerSwipe: CGFloat = 180
-
-    var body: some View {
         VStack(spacing: 0) {
-            instructionHeader
+            instructionZone
 
             sampleTextViewport
                 .padding(.top, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            OnboardingControlPanel(
-                tags: onboardingSampleTags,
+            ControlPanel(
+                isHighlightMode: isHighlightMode,
+                isPlaybackMode: false,
+                availableHighlightColors: readerSettings.highlightColors,
+                availableHighlightEmojis: readerSettings.highlightEmojis,
+                selectedHighlightColor: readerSettings.highlightColors.first ?? .yellow,
+                selectedHighlightEmoji: nil,
+                onHighlight: handleHighlightTap,
+                onHighlightColorSelected: { _ in },
+                onHighlightEmojiSelected: { _ in },
+                onCancelHighlight: { isHighlightMode = false },
                 onTrackpadSwipeDown: { handleSwipe(direction: -1) },
-                onTrackpadSwipeUp: { handleSwipe(direction: 1) }
+                onTrackpadSwipeUp: { handleSwipe(direction: 1) },
+                isPlaybackSpeaking: false,
+                isPlaybackPaused: false,
+                isPlaybackPreparing: false,
+                playbackSpeed: 1.0,
+                playbackLevel: 0,
+                onPlaybackToggle: {},
+                onPlaybackSpeedTap: {},
+                onPlaybackSkipBackward: {},
+                onPlaybackSkipForward: {},
+                onPlaybackStop: {},
+                tags: onboardingSampleTags,
+                actions: actions,
+                onActionTap: handleActionTap,
+                showQuestion: false,
+                currentQuestion: "",
+                isLoadingQuestion: false,
+                onQuestionTap: {},
+                onTagTap: { _ in }
             )
+            .padding(.horizontal, 34)
+            .padding(.bottom, 24)
+        }
+        .sheet(item: $explainerURL, onDismiss: handleSheetDismissed) { item in
+            SafariView(url: item.url)
         }
     }
 
-    private var instructionHeader: some View {
+    private var instructionZone: some View {
+        ZStack(alignment: .topLeading) {
+            instructionContent(for: step)
+                .id(step)
+                .transition(.opacity)
+        }
+        .animation(.easeInOut(duration: 0.35), value: step)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, readerSettings.margins.horizontalPadding)
+        .padding(.top, 40)
+    }
+
+    @ViewBuilder
+    private func instructionContent(for step: TutorialStep) -> some View {
+        let copy = Self.copy(for: step)
         VStack(alignment: .leading, spacing: 10) {
-            Text("Swipe to read")
+            Text(copy.title)
                 .font(.system(size: 22, weight: .bold))
                 .foregroundColor(.white)
 
-            Text("Use the trackpad below to scroll through your reading.")
+            Text(copy.subtitle)
                 .font(.system(size: 15, weight: .regular))
                 .foregroundColor(.white.opacity(0.6))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, readerSettings.margins.horizontalPadding)
-        .padding(.top, 40)
+    }
+
+    private static func copy(for step: TutorialStep) -> (title: String, subtitle: String) {
+        switch step {
+        case .trackpad:
+            return ("Swipe to read", "Use the trackpad to scroll through your reading.")
+        case .ai:
+            return ("Your AI reading companion", "Tap a button to look something up.")
+        case .highlight:
+            return ("Tap the pencil to highlight", "Use the pencil button on the left of the control pad.")
+        }
     }
 
     private var sampleTextViewport: some View {
@@ -399,152 +390,65 @@ private struct TrackpadOnboardingScreen: View {
         }
     }
 
+    // MARK: Callbacks
+
     private func handleSwipe(direction: Int) {
         let delta = CGFloat(direction) * -scrollPerSwipe
         withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
             scrollOffset = min(0, scrollOffset + delta)
         }
-        if direction > 0 {
-            swipesRemaining = max(0, swipesRemaining - 1)
-        }
-        guard !didFireComplete, swipesRemaining == 0 else { return }
-        didFireComplete = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-            onComplete()
-        }
-    }
-}
 
-// MARK: - Screen 4: highlight
-
-private struct HighlightOnboardingScreen: View {
-    let onComplete: () -> Void
-    @EnvironmentObject private var readerSettings: ReaderSettings
-
-    @State private var didFireComplete = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            instructionHeader
-
-            sampleText
-                .padding(.top, 24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-            OnboardingControlPanel(
-                tags: onboardingSampleTags,
-                onHighlight: handlePencilTap
-            )
+        guard step == .trackpad, !didAdvanceTrackpad else { return }
+        cumulativeScroll += abs(delta)
+        guard cumulativeScroll >= trackpadAdvanceThreshold else { return }
+        didAdvanceTrackpad = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            advance(to: .ai)
         }
     }
 
-    private var instructionHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Tap the pencil to highlight")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.white)
-
-            Text("Use the pencil button on the left of the control pad to highlight what you're reading.")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundColor(.white.opacity(0.6))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, readerSettings.margins.horizontalPadding)
-        .padding(.top, 40)
-    }
-
-    private var sampleText: some View {
-        Text(OnboardingSample.text)
-            .font(.system(
-                size: readerSettings.paragraphSize,
-                weight: .regular,
-                design: readerSettings.fontFamily.design
-            ))
-            .foregroundColor(Color(white: 0.92))
-            .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, readerSettings.margins.horizontalPadding)
-    }
-
-    private func handlePencilTap() {
-        guard !didFireComplete else { return }
-        didFireComplete = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            onComplete()
-        }
-    }
-}
-
-// MARK: - Screen 3: AI buttons
-
-private struct AIOnboardingScreen: View {
-    let onComplete: () -> Void
-    @EnvironmentObject private var readerSettings: ReaderSettings
-
-    @State private var explainerURL: IdentifiableURL?
-    @State private var didFireComplete = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            instructionHeader
-
-            sampleText
-                .padding(.top, 24)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-            OnboardingControlPanel(
-                tags: onboardingSampleTags,
-                onActionTap: { handleTap(action: $0) }
-            )
-        }
-        .sheet(item: $explainerURL, onDismiss: advanceIfNeeded) { item in
-            SafariView(url: item.url)
-        }
-    }
-
-    private var instructionHeader: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Your AI reading companion")
-                .font(.system(size: 22, weight: .bold))
-                .foregroundColor(.white)
-
-            Text("These buttons unlock deeper understanding. Tap one to try it.")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundColor(.white.opacity(0.6))
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, readerSettings.margins.horizontalPadding)
-        .padding(.top, 40)
-    }
-
-    private var sampleText: some View {
-        Text(OnboardingSample.text)
-            .font(.system(
-                size: readerSettings.paragraphSize,
-                weight: .regular,
-                design: readerSettings.fontFamily.design
-            ))
-            .foregroundColor(Color(white: 0.92))
-            .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, readerSettings.margins.horizontalPadding)
-    }
-
-    private func handleTap(action: PanelAction) {
-        guard explainerURL == nil else { return }
+    private func handleActionTap(_ action: PanelAction) {
+        guard step == .ai, explainerURL == nil else { return }
         let query = action.prompt + "\n\n" + OnboardingSample.text
         guard let url = perplexityURL(for: query) else { return }
+        aiAdvanceArmed = true
         explainerURL = IdentifiableURL(url: url)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            advanceIfNeeded()
+    }
+
+    private func handleSheetDismissed() {
+        guard aiAdvanceArmed else { return }
+        aiAdvanceArmed = false
+        guard step == .ai else { return }
+        advance(to: .highlight)
+    }
+
+    private func handleHighlightTap() {
+        // Mirror the real reader: tapping the pencil toggles highlight mode.
+        // During the highlight step, the first tap also completes onboarding so
+        // the user gets a brief confirmation glimpse of the mode change first.
+        isHighlightMode.toggle()
+        guard step == .highlight, !didFinish, isHighlightMode else { return }
+        didFinish = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            onFinish()
         }
     }
 
-    private func advanceIfNeeded() {
-        guard !didFireComplete else { return }
-        didFireComplete = true
-        onComplete()
+    private func advance(to next: TutorialStep) {
+        withAnimation(.easeInOut(duration: 0.35)) {
+            step = next
+        }
     }
+}
+
+// MARK: - Sample text shared across reader screens
+
+private enum OnboardingSample {
+    static let text: String = """
+    I went to the woods because I wished to live deliberately, to front only the essential facts of life, and see if I could not learn what it had to teach, and not when I came to die, discover that I had not lived.
+
+    I did not wish to live what was not life, living is so dear; nor did I wish to practise resignation, unless it was quite necessary. I wanted to live deep and suck out all the marrow of life, to live so sturdily and Spartan-like as to put to rout all that was not life, to cut a broad swath and shave close, to drive life into a corner, and reduce it to its lowest terms.
+
+    — Henry David Thoreau, Walden
+    """
 }
