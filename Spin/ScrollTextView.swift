@@ -6,6 +6,14 @@ import NaturalLanguage
 import QuartzCore
 import SafariServices
 
+// External callbacks for non-reader hosts (e.g. onboarding) that need to drive
+// their own UI off the real reader's interactions without copying its internals.
+struct ScrollTextViewObserver {
+    var onTrackpadSwipe: ((_ isHighlightMode: Bool) -> Void)? = nil
+    var onHighlightModeChanged: ((_ isHighlightMode: Bool) -> Void)? = nil
+    var onExplainerDismissed: (() -> Void)? = nil
+}
+
 struct ScrollTextView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(HighlightStore.self) var highlightStore
@@ -86,6 +94,7 @@ struct ScrollTextView: View {
     let bookTitle: String
     let bookAuthor: String
     let bookDescription: String
+    let observer: ScrollTextViewObserver
     // Must stay same length/order as `items`. Each entry scopes persisted highlights to one rendered item.
     @State var itemContentIDs: [String] = []
     // Editorial whitespace between the status bar/safe area and the first line of body text.
@@ -105,7 +114,8 @@ struct ScrollTextView: View {
         bookID: String = "",
         bookTitle: String = "",
         bookAuthor: String = "",
-        bookDescription: String = ""
+        bookDescription: String = "",
+        observer: ScrollTextViewObserver = ScrollTextViewObserver()
     ) {
         let chapter = chapters[startingIndex]
         var built = chapter.items
@@ -127,6 +137,7 @@ struct ScrollTextView: View {
         self.bookTitle = bookTitle
         self.bookAuthor = bookAuthor
         self.bookDescription = bookDescription
+        self.observer = observer
         _itemContentIDs = State(initialValue: Self.itemContentIDs(for: built, chapterContentID: cid))
     }
 
@@ -511,8 +522,13 @@ struct ScrollTextView: View {
         .sheet(isPresented: $showHighlightsList) {
             HighlightsListView(contentIDs: Array(Set(itemContentIDs)))
         }
-        .sheet(item: $explainerURL) { item in
+        .sheet(item: $explainerURL, onDismiss: {
+            observer.onExplainerDismissed?()
+        }) { item in
             SafariView(url: item.url)
+        }
+        .onChange(of: autoHighlightSelection != nil) { _, newValue in
+            observer.onHighlightModeChanged?(newValue)
         }
         .sheet(isPresented: Binding(
             get: { speechCoordinator.kokoroPreparation.isPresenting },
@@ -638,6 +654,7 @@ struct ScrollTextView: View {
         viewportHeight: CGFloat,
         isHighlightMode: Bool
     ) {
+        observer.onTrackpadSwipe?(isHighlightMode)
         if isHighlightMode {
             let extendDown = isSwipeUp == readerSettings.invertHighlightSwipe
             if extendDown {

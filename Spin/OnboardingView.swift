@@ -239,10 +239,11 @@ private struct DiagonalSheenLayer: View {
 
 // MARK: - Tutorial container
 //
-// One persistent layout for all three tutorial steps. The real ControlPanel is
-// instantiated exactly once and stays mounted across step changes; only the
-// instruction text above it crossfades. The Safari sheet for the AI step is
-// presented from this container so it survives the step transition.
+// The tutorial IS the real ScrollTextView with Steve Jobs as the in-memory
+// chapter. Every interaction — trackpad page flips, AI action pills, the
+// highlight cycle — is the live reader's own behavior. Onboarding only adds a
+// tooltip layer and observes a small set of events surfaced via
+// `ScrollTextViewObserver` so it can advance steps.
 
 private enum TutorialStep: Hashable {
     case trackpad
@@ -250,12 +251,10 @@ private enum TutorialStep: Hashable {
     case highlight
 }
 
-private let onboardingSampleTags = ["Steve Jobs", "gratitude", "humanity"]
-
 private enum FinishPhase {
-    case idle      // normal interaction
-    case sliding   // text/panel slide+fade
-    case fading    // entire container fades out
+    case idle
+    case sliding
+    case fading
 }
 
 private struct TooltipSizeKey: PreferenceKey {
@@ -270,97 +269,34 @@ private struct TutorialContainer: View {
     @EnvironmentObject private var readerSettings: ReaderSettings
 
     @State private var step: TutorialStep = .trackpad
-
-    @State private var scrollOffset: CGFloat = 0
-    @State private var cumulativeScroll: CGFloat = 0
-    @State private var didAdvanceTrackpad = false
-
-    @State private var explainerURL: IdentifiableURL?
-    @State private var aiAdvanceArmed = false
-
-    @State private var isHighlightMode = false
-    @State private var localHighlights: [Highlight] = []
     @State private var didTriggerCompletion = false
     @State private var finishPhase: FinishPhase = .idle
-
-    @State private var panelHeight: CGFloat = 0
-    @State private var tooltipVisible: Bool = false
+    @State private var tooltipVisible = false
     @State private var tooltipSize: CGSize = .zero
 
-    private let scrollPerSwipe: CGFloat = 180
-    private let trackpadAdvanceThreshold: CGFloat = 80
-    private let onboardingContentID = "onboarding-sample"
-    private let panelBottomInset: CGFloat = 24
     private let tooltipPanelGap: CGFloat = 14
-    private let textTopPadding: CGFloat = 21
-    private let itemSpacing: CGFloat = 28
-
-    private var actions: [PanelAction] {
-        let configured = readerSettings.panelActions
-        return configured.isEmpty ? PanelAction.defaults : configured
-    }
 
     private var slideOut: Bool { finishPhase != .idle }
     private var entireFade: Bool { finishPhase == .fading }
     private var contentInteractive: Bool { finishPhase == .idle && !didTriggerCompletion }
-    private var textHitTestEnabled: Bool {
-        contentInteractive && step == .highlight && isHighlightMode
-    }
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            sampleTextLayer
-                .offset(y: slideOut ? -200 : 0)
-                .opacity(slideOut ? 0 : 1)
-
-            ControlPanel(
-                isHighlightMode: isHighlightMode,
-                isPlaybackMode: false,
-                availableHighlightColors: readerSettings.highlightColors,
-                availableHighlightEmojis: readerSettings.highlightEmojis,
-                selectedHighlightColor: readerSettings.highlightColors.first ?? .yellow,
-                selectedHighlightEmoji: nil,
-                onHighlight: handleHighlightTap,
-                onHighlightColorSelected: { _ in },
-                onHighlightEmojiSelected: { _ in },
-                onCancelHighlight: handleCancelHighlight,
-                onTrackpadSwipeDown: { handleSwipe(direction: -1) },
-                onTrackpadSwipeUp: { handleSwipe(direction: 1) },
-                isPlaybackSpeaking: false,
-                isPlaybackPaused: false,
-                isPlaybackPreparing: false,
-                playbackSpeed: 1.0,
-                playbackLevel: 0,
-                onPlaybackToggle: {},
-                onPlaybackSpeedTap: {},
-                onPlaybackSkipBackward: {},
-                onPlaybackSkipForward: {},
-                onPlaybackStop: {},
-                tags: onboardingSampleTags,
-                actions: actions,
-                onActionTap: handleActionTap,
-                showQuestion: false,
-                currentQuestion: "",
-                isLoadingQuestion: false,
-                onQuestionTap: {},
-                onTagTap: { _ in }
+        ZStack {
+            ScrollTextView(
+                chapters: [Self.steveJobsChapter],
+                startingIndex: 0,
+                bookID: Self.onboardingBookID,
+                bookTitle: "Put something back",
+                bookAuthor: "Steve Jobs",
+                observer: ScrollTextViewObserver(
+                    onTrackpadSwipe: handleTrackpadSwipe,
+                    onExplainerDismissed: handleExplainerDismissed
+                )
             )
-            .background(
-                GeometryReader { geo in
-                    Color.clear.preference(key: ControlPanelHeightKey.self, value: geo.size.height)
-                }
-            )
-            .padding(.horizontal, 34)
-            .padding(.bottom, panelBottomInset)
-            .offset(y: slideOut ? 240 : 0)
             .opacity(slideOut ? 0 : 1)
+            .offset(y: slideOut ? -40 : 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onPreferenceChange(ControlPanelHeightKey.self) { value in
-            if abs(value - panelHeight) > 0.5 {
-                panelHeight = value
-            }
-        }
         .overlayPreferenceValue(ControlPanelAnchorsKey.self) { anchors in
             tooltipOverlay(anchors: anchors)
                 .offset(y: slideOut ? -120 : 0)
@@ -369,9 +305,6 @@ private struct TutorialContainer: View {
         }
         .opacity(entireFade ? 0 : 1)
         .allowsHitTesting(contentInteractive)
-        .sheet(item: $explainerURL, onDismiss: handleSheetDismissed) { item in
-            SafariView(url: item.url)
-        }
         .onAppear {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
@@ -380,6 +313,8 @@ private struct TutorialContainer: View {
             }
         }
     }
+
+    // MARK: Tooltip overlay
 
     @ViewBuilder
     private func tooltipOverlay(anchors: [ControlPanelAnchor: Anchor<CGRect>]) -> some View {
@@ -453,146 +388,57 @@ private struct TutorialContainer: View {
             )
         case .highlight:
             return TooltipCopy(
-                title: "Highlight a passage",
-                subtitle: "Tap the pencil, then drag",
+                title: "Highlight a sentence",
+                subtitle: "Swipe the trackpad to move between sentences",
                 pointerSide: .leading,
                 anchor: .highlightButton
             )
         }
     }
 
-    private var sampleTextLayer: some View {
-        GeometryReader { geo in
-            let fadeStart: CGFloat = panelHeight > 0
-                ? max(0.5, (geo.size.height - panelHeight - panelBottomInset - 8) / geo.size.height)
-                : 0.72
-            let fadeEnd = min(1.0, fadeStart + 0.08)
+    // MARK: Observer callbacks
 
-            VStack(alignment: .leading, spacing: itemSpacing) {
-                ForEach(Array(OnboardingSample.items.enumerated()), id: \.offset) { index, item in
-                    sampleItemView(item, index: index)
-                        .padding(.horizontal, readerSettings.margins.horizontalPadding)
-                }
-            }
-            .padding(.top, textTopPadding)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .offset(y: scrollOffset)
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-            .clipped()
-            .mask(
-                LinearGradient(
-                    stops: [
-                        .init(color: .black, location: 0.0),
-                        .init(color: .black, location: fadeStart),
-                        .init(color: .clear, location: fadeEnd)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
-            .contentShape(Rectangle())
-        }
-    }
-
-    @ViewBuilder
-    private func sampleItemView(_ item: OnboardingSample.Item, index: Int) -> some View {
-        let itemID = onboardingItemContentID(at: index)
-        let matching = localHighlights.filter { $0.contentID == itemID }
-        HighlightableTextView(
-            text: item.text,
-            attributedText: OnboardingSample.attributedText(
-                for: item,
-                bodySize: readerSettings.paragraphSize,
-                fontFamily: readerSettings.fontFamily,
-                lineSpacing: readerSettings.lineSpacingPt(for: readerSettings.paragraphSize)
-            ),
-            itemIndex: index,
-            highlights: matching,
-            playbackHighlight: nil,
-            isPlaybackActive: false,
-            pendingHighlight: nil,
-            pendingOpacity: 0.25,
-            showsPendingCursor: false,
-            onHighlightCreated: { text, start, end in
-                handleHighlightCreated(itemIndex: index, text: text, start: start, end: end)
-            },
-            onHighlightRemoved: { _ in },
-            onPlaybackWordTapped: { _ in },
-            onEmptyTap: {}
-        )
-        .allowsHitTesting(textHitTestEnabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private func onboardingItemContentID(at index: Int) -> String {
-        "\(onboardingContentID)#item-\(index)"
-    }
-
-    // MARK: Callbacks
-
-    private func handleSwipe(direction: Int) {
-        let delta = CGFloat(direction) * -scrollPerSwipe
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
-            scrollOffset = min(0, scrollOffset + delta)
-        }
-
-        guard step == .trackpad, !didAdvanceTrackpad else { return }
-        cumulativeScroll += abs(delta)
-        guard cumulativeScroll >= trackpadAdvanceThreshold else { return }
-        didAdvanceTrackpad = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+    private func handleTrackpadSwipe(isHighlightMode: Bool) {
+        guard contentInteractive else { return }
+        switch step {
+        case .trackpad:
+            guard !isHighlightMode else { return }
             advance(to: .ai)
+        case .highlight:
+            // Spec: pencil tap (enters highlight mode) AND then a trackpad swipe
+            // while in highlight mode. Both conditions are captured by checking
+            // `isHighlightMode` here — the swipe can only be in highlight mode
+            // if the user already entered it.
+            guard isHighlightMode, !didTriggerCompletion else { return }
+            didTriggerCompletion = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                beginCompletionAnimation()
+            }
+        case .ai:
+            return
         }
     }
 
-    private func handleActionTap(_ action: PanelAction) {
-        guard step == .ai, explainerURL == nil else { return }
-        let query = action.prompt + "\n\n" + OnboardingSample.text
-        guard let url = perplexityURL(for: query) else { return }
-        aiAdvanceArmed = true
-        explainerURL = IdentifiableURL(url: url)
-    }
-
-    private func handleSheetDismissed() {
-        guard aiAdvanceArmed else { return }
-        aiAdvanceArmed = false
-        guard step == .ai else { return }
+    private func handleExplainerDismissed() {
+        guard contentInteractive, step == .ai else { return }
         advance(to: .highlight)
     }
 
-    private func handleHighlightTap() {
-        // Pencil toggles highlight mode, but only on the highlight step. Before
-        // that, tapping pencil during the trackpad/ai steps would silently arm
-        // highlight mode and then a later tap on the highlight step would
-        // *cancel* it — leaving the user dragging on text that won't respond.
-        guard step == .highlight, !didTriggerCompletion else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            isHighlightMode.toggle()
-        }
-    }
+    // MARK: Step transitions and completion
 
-    private func handleCancelHighlight() {
-        guard step == .highlight else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
-            isHighlightMode = false
+    private func advance(to next: TutorialStep) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            tooltipVisible = false
         }
-    }
-
-    private func handleHighlightCreated(itemIndex: Int, text: String, start: Int, end: Int) {
-        guard step == .highlight, isHighlightMode, !didTriggerCompletion else { return }
-        let color = (readerSettings.highlightColors.first ?? .yellow).rawValue
-        let highlight = Highlight(
-            contentID: onboardingItemContentID(at: itemIndex),
-            text: text,
-            startOffset: start,
-            endOffset: end,
-            color: color
-        )
-        localHighlights.append(highlight)
-        didTriggerCompletion = true
-        // Brief beat so the user sees the highlight land before the dismiss kicks in.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            beginCompletionAnimation()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            withAnimation(.easeInOut(duration: 0.3)) {
+                step = next
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
+                    tooltipVisible = true
+                }
+            }
         }
     }
 
@@ -610,22 +456,38 @@ private struct TutorialContainer: View {
         }
     }
 
-    private func advance(to next: TutorialStep) {
-        withAnimation(.easeOut(duration: 0.2)) {
-            tooltipVisible = false
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                step = next
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
-                    tooltipVisible = true
-                }
-            }
-        }
-    }
+    // MARK: Steve Jobs in-memory chapter
+
+    private static let onboardingBookID = "onboarding-put-something-back"
+
+    private static let steveJobsBody: [String] = [
+        "I grow little of the food I eat, and of the little I do grow I did not breed or perfect the seeds.",
+        "I do not make any of my own clothing.",
+        "I speak a language I did not invent or refine.",
+        "I did not discover the mathematics I use.",
+        "I am protected by freedoms and laws I did not conceive of or legislate, and do not enforce or adjudicate.",
+        "I am moved by music I did not create myself.",
+        "When I needed medical attention, I was helpless to help myself survive.",
+        "I did not invent the transistor, the microprocessor, object oriented programming, or most of the technology I work with.",
+        "I love and admire my species, living and dead, and am totally dependent on them for my life and well being."
+    ]
+
+    private static let steveJobsChapter: EpubChapter = {
+        var items: [ScrollTextView.ReadableItem] = [.title("Put something back")]
+        items.append(contentsOf: steveJobsBody.map { .paragraph($0) })
+        items.append(.byline("— Steve Jobs"))
+        return EpubChapter(
+            id: 0,
+            title: "Put something back",
+            xhtmlPath: "onboarding-put-something-back.xhtml",
+            anchor: nil,
+            depth: 0,
+            items: items
+        )
+    }()
 }
+
+// MARK: - Tooltip view (unchanged styling, used by TutorialContainer)
 
 private enum TooltipPointerSide {
     case leading, center, trailing
@@ -702,94 +564,5 @@ private struct TutorialTooltip: View {
         case .center: return 0
         case .leading, .trailing: return Self.pointerEdgeInset
         }
-    }
-}
-
-// MARK: - Sample text shared across reader screens
-
-private enum OnboardingSample {
-    enum Item {
-        case title(String)
-        case paragraph(String)
-        case author(String)
-
-        var text: String {
-            switch self {
-            case .title(let s), .paragraph(let s), .author(let s):
-                return s
-            }
-        }
-    }
-
-    static let items: [Item] = [
-        .title("Put something back"),
-        .paragraph("I grow little of the food I eat, and of the little I do grow I did not breed or perfect the seeds."),
-        .paragraph("I do not make any of my own clothing."),
-        .paragraph("I speak a language I did not invent or refine."),
-        .paragraph("I did not discover the mathematics I use."),
-        .paragraph("I am protected by freedoms and laws I did not conceive of or legislate, and do not enforce or adjudicate."),
-        .paragraph("I am moved by music I did not create myself."),
-        .paragraph("When I needed medical attention, I was helpless to help myself survive."),
-        .paragraph("I did not invent the transistor, the microprocessor, object oriented programming, or most of the technology I work with."),
-        .paragraph("I love and admire my species, living and dead, and am totally dependent on them for my life and well being."),
-        .author("— Steve Jobs")
-    ]
-
-    // Plain string used as the Perplexity context. Joined with single newlines
-    // so the text reads naturally without blank-line gaps.
-    static let text: String = items.map(\.text).joined(separator: "\n")
-
-    static func attributedText(
-        for item: Item,
-        bodySize: CGFloat,
-        fontFamily: ReaderFontFamily,
-        lineSpacing: CGFloat
-    ) -> NSAttributedString {
-        let titleSize = bodySize + 10
-        let authorSize = max(13, bodySize - 2)
-
-        let para = NSMutableParagraphStyle()
-        para.lineSpacing = lineSpacing
-
-        switch item {
-        case .title(let s):
-            return NSAttributedString(string: s, attributes: [
-                .font: designedFont(size: titleSize, weight: .bold, family: fontFamily),
-                .foregroundColor: UIColor.white,
-                .paragraphStyle: para
-            ])
-        case .paragraph(let s):
-            return NSAttributedString(string: s, attributes: [
-                .font: designedFont(size: bodySize, weight: .regular, family: fontFamily),
-                .foregroundColor: UIColor(white: 0.92, alpha: 1.0),
-                .paragraphStyle: para
-            ])
-        case .author(let s):
-            return NSAttributedString(string: s, attributes: [
-                .font: italicFont(size: authorSize, family: fontFamily),
-                .foregroundColor: UIColor(white: 0.55, alpha: 1.0),
-                .paragraphStyle: para
-            ])
-        }
-    }
-
-    private static func designedFont(size: CGFloat, weight: UIFont.Weight, family: ReaderFontFamily) -> UIFont {
-        var font = UIFont.systemFont(ofSize: size, weight: weight)
-        if let descriptor = font.fontDescriptor.withDesign(family.uiDesign) {
-            font = UIFont(descriptor: descriptor, size: size)
-        }
-        return font
-    }
-
-    private static func italicFont(size: CGFloat, family: ReaderFontFamily) -> UIFont {
-        let base = UIFont.systemFont(ofSize: size, weight: .regular)
-        var descriptor = base.fontDescriptor
-        if let designed = descriptor.withDesign(family.uiDesign) {
-            descriptor = designed
-        }
-        if let italic = descriptor.withSymbolicTraits(.traitItalic) {
-            descriptor = italic
-        }
-        return UIFont(descriptor: descriptor, size: size)
     }
 }

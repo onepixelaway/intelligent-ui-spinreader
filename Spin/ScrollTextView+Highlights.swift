@@ -3,6 +3,24 @@ import UIKit
 import NaturalLanguage
 import CoreText
 
+// Sentence tokenizer shared by the reader's highlight cycle and the onboarding
+// tutorial. Module scope (not a ScrollTextView method) so non-reader screens —
+// which don't own ScrollTextView's pagination state — can call it directly.
+func tokenizeSentences(in text: String, minTrimmedLength: Int = 5) -> [(text: String, start: Int, end: Int)] {
+    let tokenizer = NLTokenizer(unit: .sentence)
+    tokenizer.string = text
+    var result: [(text: String, start: Int, end: Int)] = []
+    tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
+        let raw = String(text[range])
+        guard raw.trimmingCharacters(in: .whitespacesAndNewlines).count >= minTrimmedLength else { return true }
+        let start = range.lowerBound.utf16Offset(in: text)
+        let end = range.upperBound.utf16Offset(in: text)
+        result.append((raw, start, end))
+        return true
+    }
+    return result
+}
+
 extension ScrollTextView {
     struct AutoHighlightSelection {
         let itemIndex: Int
@@ -562,21 +580,6 @@ extension ScrollTextView {
             return firstNonWhitespace.location
         }
         return lineRange.location
-    }
-
-    func tokenizeSentences(in text: String, minTrimmedLength: Int = 5) -> [(text: String, start: Int, end: Int)] {
-        let tokenizer = NLTokenizer(unit: .sentence)
-        tokenizer.string = text
-        var result: [(text: String, start: Int, end: Int)] = []
-        tokenizer.enumerateTokens(in: text.startIndex..<text.endIndex) { range, _ in
-            let raw = String(text[range])
-            guard raw.trimmingCharacters(in: .whitespacesAndNewlines).count >= minTrimmedLength else { return true }
-            let start = range.lowerBound.utf16Offset(in: text)
-            let end = range.upperBound.utf16Offset(in: text)
-            result.append((raw, start, end))
-            return true
-        }
-        return result
     }
 
     func firstVisiblePlaybackLocation(viewport: CGRect) -> PlaybackTextLocation? {
