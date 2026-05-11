@@ -401,9 +401,12 @@ private struct TutorialContainer: View {
             if let anchor = anchors[copy.anchor] {
                 let rect = proxy[anchor]
                 let pointerCenterX = pointerCenterOffset(for: copy.pointerSide)
-                let bubbleCenterX = rect.midX + tooltipSize.width / 2 - pointerCenterX
+                let effectiveW = max(tooltipSize.width, 120)
+                let effectiveH = max(tooltipSize.height, 44)
+                let rawCenterX = rect.midX + effectiveW / 2 - pointerCenterX
+                let bubbleCenterX = min(max(rawCenterX, effectiveW / 2 + 8), proxy.size.width - effectiveW / 2 - 8)
                 let bubbleBottomY = rect.minY - tooltipPanelGap - TutorialTooltip.pointerHeight
-                let bubbleCenterY = bubbleBottomY - tooltipSize.height / 2
+                let bubbleCenterY = bubbleBottomY - effectiveH / 2
 
                 TutorialTooltip(
                     title: copy.title,
