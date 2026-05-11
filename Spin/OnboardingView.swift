@@ -3,7 +3,7 @@ import UIKit
 
 struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
-    @State private var showTutorial: Bool = false
+    @State private var showTutorial: Bool = true
     @State private var showCompletionSequence: Bool = false
 
     var body: some View {
