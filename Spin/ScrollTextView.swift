@@ -11,6 +11,7 @@ import SafariServices
 struct ScrollTextViewObserver {
     var onTrackpadSwipe: ((_ isHighlightMode: Bool) -> Void)? = nil
     var onHighlightModeChanged: ((_ isHighlightMode: Bool) -> Void)? = nil
+    var onHighlightCommit: (() -> Void)? = nil
     var onExplainerDismissed: (() -> Void)? = nil
 }
 
@@ -701,6 +702,7 @@ struct ScrollTextView: View {
     ) {
         if autoHighlightSelection != nil {
             confirmPendingHighlight()
+            observer.onHighlightCommit?()
             return
         }
 

@@ -290,6 +290,7 @@ private struct TutorialContainer: View {
                 bookAuthor: "Steve Jobs",
                 observer: ScrollTextViewObserver(
                     onTrackpadSwipe: handleTrackpadSwipe,
+                    onHighlightCommit: handleHighlightCommit,
                     onExplainerDismissed: handleExplainerDismissed
                 )
             )
@@ -405,17 +406,17 @@ private struct TutorialContainer: View {
             guard !isHighlightMode else { return }
             advance(to: .ai)
         case .highlight:
-            // Spec: pencil tap (enters highlight mode) AND then a trackpad swipe
-            // while in highlight mode. Both conditions are captured by checking
-            // `isHighlightMode` here — the swipe can only be in highlight mode
-            // if the user already entered it.
-            guard isHighlightMode, !didTriggerCompletion else { return }
-            didTriggerCompletion = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                beginCompletionAnimation()
-            }
+            return
         case .ai:
             return
+        }
+    }
+
+    private func handleHighlightCommit() {
+        guard contentInteractive, step == .highlight, !didTriggerCompletion else { return }
+        didTriggerCompletion = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            beginCompletionAnimation()
         }
     }
 
