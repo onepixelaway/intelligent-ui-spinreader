@@ -4,7 +4,6 @@ enum ControlPanelAnchor: Hashable {
     case highlightButton
     case trackpad
     case actionPillRow
-    case firstActionPill
 }
 
 struct ControlPanelAnchorsKey: PreferenceKey {
@@ -305,12 +304,9 @@ struct ControlPanel: View {
 
     private var actionPillsHStack: some View {
         HStack(spacing: 8) {
-            ForEach(Array(actions.enumerated()), id: \.element.id) { index, action in
+            ForEach(actions) { action in
                 ActionPill(title: action.name) {
                     onActionTap(action)
-                }
-                .anchorPreference(key: ControlPanelAnchorsKey.self, value: .bounds) { anchor in
-                    index == 0 ? [.firstActionPill: anchor] : [:]
                 }
             }
         }
