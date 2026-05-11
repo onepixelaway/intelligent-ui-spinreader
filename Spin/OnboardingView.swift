@@ -3,7 +3,7 @@ import UIKit
 
 struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
-    @State private var showTutorial: Bool = false
+    @State private var showTutorial: Bool = true
     @State private var showCompletionSequence: Bool = false
 
     var body: some View {
@@ -462,7 +462,7 @@ private struct TutorialContainer: View {
                 title: "Dig deeper",
                 subtitle: "Tap to learn more",
                 pointerSide: .leading,
-                anchor: .firstActionPill
+                anchor: .actionPillRow
             )
         case .highlight:
             switch highlightPhase {
