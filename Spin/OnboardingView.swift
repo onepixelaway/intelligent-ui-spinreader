@@ -34,7 +34,9 @@ struct OnboardingView: View {
     }
 
     private func finish() {
-        hasCompletedOnboarding = true
+        withAnimation(.easeInOut(duration: 0.3)) {
+            hasCompletedOnboarding = true
+        }
     }
 }
 
@@ -248,7 +250,13 @@ private enum TutorialStep: Hashable {
     case highlight
 }
 
-private let onboardingSampleTags = ["Walden", "Thoreau", "deliberately"]
+private let onboardingSampleTags = ["Steve Jobs", "gratitude", "humanity"]
+
+private enum FinishPhase {
+    case idle      // normal interaction
+    case sliding   // text/panel slide+fade
+    case fading    // entire container fades out
+}
 
 private struct TutorialContainer: View {
     let onFinish: () -> Void
@@ -264,23 +272,37 @@ private struct TutorialContainer: View {
     @State private var aiAdvanceArmed = false
 
     @State private var isHighlightMode = false
-    @State private var didFinish = false
+    @State private var localHighlights: [Highlight] = []
+    @State private var didTriggerCompletion = false
+    @State private var finishPhase: FinishPhase = .idle
 
     private let scrollPerSwipe: CGFloat = 180
     private let trackpadAdvanceThreshold: CGFloat = 80
+    private let onboardingContentID = "onboarding-sample"
 
     private var actions: [PanelAction] {
         let configured = readerSettings.panelActions
         return configured.isEmpty ? PanelAction.defaults : configured
     }
 
+    private var slideOut: Bool { finishPhase != .idle }
+    private var entireFade: Bool { finishPhase == .fading }
+    private var contentInteractive: Bool { finishPhase == .idle && !didTriggerCompletion }
+    private var textHitTestEnabled: Bool {
+        contentInteractive && step == .highlight && isHighlightMode
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             instructionZone
+                .offset(y: slideOut ? -200 : 0)
+                .opacity(slideOut ? 0 : 1)
 
             sampleTextViewport
                 .padding(.top, 16)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .offset(y: slideOut ? -200 : 0)
+                .opacity(slideOut ? 0 : 1)
 
             ControlPanel(
                 isHighlightMode: isHighlightMode,
@@ -292,7 +314,7 @@ private struct TutorialContainer: View {
                 onHighlight: handleHighlightTap,
                 onHighlightColorSelected: { _ in },
                 onHighlightEmojiSelected: { _ in },
-                onCancelHighlight: { isHighlightMode = false },
+                onCancelHighlight: handleCancelHighlight,
                 onTrackpadSwipeDown: { handleSwipe(direction: -1) },
                 onTrackpadSwipeUp: { handleSwipe(direction: 1) },
                 isPlaybackSpeaking: false,
@@ -316,7 +338,11 @@ private struct TutorialContainer: View {
             )
             .padding(.horizontal, 34)
             .padding(.bottom, 24)
+            .offset(y: slideOut ? 240 : 0)
+            .opacity(slideOut ? 0 : 1)
         }
+        .opacity(entireFade ? 0 : 1)
+        .allowsHitTesting(contentInteractive)
         .sheet(item: $explainerURL, onDismiss: handleSheetDismissed) { item in
             SafariView(url: item.url)
         }
@@ -324,19 +350,18 @@ private struct TutorialContainer: View {
 
     private var instructionZone: some View {
         ZStack(alignment: .topLeading) {
-            instructionContent(for: step)
-                .id(step)
+            instructionContent(for: currentCopy)
+                .id(currentCopy.id)
                 .transition(.opacity)
         }
-        .animation(.easeInOut(duration: 0.35), value: step)
+        .animation(.easeInOut(duration: 0.35), value: currentCopy.id)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, readerSettings.margins.horizontalPadding)
         .padding(.top, 40)
     }
 
     @ViewBuilder
-    private func instructionContent(for step: TutorialStep) -> some View {
-        let copy = Self.copy(for: step)
+    private func instructionContent(for copy: InstructionCopy) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(copy.title)
                 .font(.system(size: 22, weight: .bold))
@@ -349,44 +374,81 @@ private struct TutorialContainer: View {
         }
     }
 
-    private static func copy(for step: TutorialStep) -> (title: String, subtitle: String) {
+    private struct InstructionCopy {
+        let id: String
+        let title: String
+        let subtitle: String
+    }
+
+    private var currentCopy: InstructionCopy {
         switch step {
         case .trackpad:
-            return ("Swipe to read", "Use the trackpad to scroll through your reading.")
+            return InstructionCopy(
+                id: "trackpad",
+                title: "Swipe to read",
+                subtitle: "Use the trackpad to scroll through your reading."
+            )
         case .ai:
-            return ("Your AI reading companion", "Tap a button to look something up.")
+            return InstructionCopy(
+                id: "ai",
+                title: "Your AI reading companion",
+                subtitle: "Tap a button to look something up."
+            )
         case .highlight:
-            return ("Tap the pencil to highlight", "Use the pencil button on the left of the control pad.")
+            if isHighlightMode {
+                return InstructionCopy(
+                    id: "highlight-armed",
+                    title: "Drag across the text",
+                    subtitle: "Press and drag to highlight a passage."
+                )
+            }
+            return InstructionCopy(
+                id: "highlight",
+                title: "Tap the pencil to highlight",
+                subtitle: "Use the pencil button on the left of the control pad."
+            )
         }
     }
 
     private var sampleTextViewport: some View {
         GeometryReader { geo in
-            Text(OnboardingSample.text)
-                .font(.system(
-                    size: readerSettings.paragraphSize,
-                    weight: .regular,
-                    design: readerSettings.fontFamily.design
-                ))
-                .foregroundColor(Color(white: 0.92))
-                .lineSpacing(readerSettings.lineSpacingPt(for: readerSettings.paragraphSize))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, readerSettings.margins.horizontalPadding)
-                .offset(y: scrollOffset)
-                .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
-                .clipped()
-                .mask(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .clear, location: 0.0),
-                            .init(color: .black, location: 0.08),
-                            .init(color: .black, location: 0.88),
-                            .init(color: .clear, location: 1.0)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
+            HighlightableTextView(
+                text: OnboardingSample.text,
+                attributedText: OnboardingSample.attributedText(
+                    bodySize: readerSettings.paragraphSize,
+                    fontFamily: readerSettings.fontFamily,
+                    lineSpacing: readerSettings.lineSpacingPt(for: readerSettings.paragraphSize)
+                ),
+                itemIndex: 0,
+                highlights: localHighlights,
+                playbackHighlight: nil,
+                isPlaybackActive: false,
+                pendingHighlight: nil,
+                pendingOpacity: 0.25,
+                showsPendingCursor: false,
+                onHighlightCreated: handleHighlightCreated,
+                onHighlightRemoved: { _ in },
+                onPlaybackWordTapped: { _ in },
+                onEmptyTap: {}
+            )
+            .allowsHitTesting(textHitTestEnabled)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, readerSettings.margins.horizontalPadding)
+            .offset(y: scrollOffset)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+            .clipped()
+            .mask(
+                LinearGradient(
+                    stops: [
+                        .init(color: .clear, location: 0.0),
+                        .init(color: .black, location: 0.08),
+                        .init(color: .black, location: 0.88),
+                        .init(color: .clear, location: 1.0)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
+            )
         }
     }
 
@@ -423,14 +485,50 @@ private struct TutorialContainer: View {
     }
 
     private func handleHighlightTap() {
-        // Mirror the real reader: tapping the pencil toggles highlight mode.
-        // During the highlight step, the first tap also completes onboarding so
-        // the user gets a brief confirmation glimpse of the mode change first.
-        isHighlightMode.toggle()
-        guard step == .highlight, !didFinish, isHighlightMode else { return }
-        didFinish = true
+        // Pencil toggles highlight mode. When armed, the text above becomes
+        // pan-draggable for selection. The completion animation is driven by
+        // an actual highlight being created — not just the mode toggle.
+        guard !didTriggerCompletion else { return }
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isHighlightMode.toggle()
+        }
+    }
+
+    private func handleCancelHighlight() {
+        withAnimation(.easeInOut(duration: 0.2)) {
+            isHighlightMode = false
+        }
+    }
+
+    private func handleHighlightCreated(_ selectedText: String, _ start: Int, _ end: Int) {
+        guard step == .highlight, isHighlightMode, !didTriggerCompletion else { return }
+        let color = (readerSettings.highlightColors.first ?? .yellow).rawValue
+        let highlight = Highlight(
+            contentID: onboardingContentID,
+            text: selectedText,
+            startOffset: start,
+            endOffset: end,
+            color: color
+        )
+        localHighlights.append(highlight)
+        didTriggerCompletion = true
+        // Brief beat so the user sees the highlight land before the dismiss kicks in.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
-            onFinish()
+            beginCompletionAnimation()
+        }
+    }
+
+    private func beginCompletionAnimation() {
+        withAnimation(.easeOut(duration: 0.55)) {
+            finishPhase = .sliding
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
+            withAnimation(.easeIn(duration: 0.3)) {
+                finishPhase = .fading
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                onFinish()
+            }
         }
     }
 
@@ -444,11 +542,108 @@ private struct TutorialContainer: View {
 // MARK: - Sample text shared across reader screens
 
 private enum OnboardingSample {
-    static let text: String = """
-    I went to the woods because I wished to live deliberately, to front only the essential facts of life, and see if I could not learn what it had to teach, and not when I came to die, discover that I had not lived.
+    static let title = "Put something back"
 
-    I did not wish to live what was not life, living is so dear; nor did I wish to practise resignation, unless it was quite necessary. I wanted to live deep and suck out all the marrow of life, to live so sturdily and Spartan-like as to put to rout all that was not life, to cut a broad swath and shave close, to drive life into a corner, and reduce it to its lowest terms.
+    static let paragraphs: [String] = [
+        "I grow little of the food I eat, and of the little I do grow I did not breed or perfect the seeds.",
+        "I do not make any of my own clothing.",
+        "I speak a language I did not invent or refine.",
+        "I did not discover the mathematics I use.",
+        "I am protected by freedoms and laws I did not conceive of or legislate, and do not enforce or adjudicate.",
+        "I am moved by music I did not create myself.",
+        "When I needed medical attention, I was helpless to help myself survive.",
+        "I did not invent the transistor, the microprocessor, object oriented programming, or most of the technology I work with.",
+        "I love and admire my species, living and dead, and am totally dependent on them for my life and well being."
+    ]
 
-    — Henry David Thoreau, Walden
-    """
+    static let author = "— Steve Jobs"
+
+    // Plain string used for both Perplexity context and HighlightableTextView's
+    // offset math. Must exactly match `attributedText(...).string`.
+    static let text: String = {
+        var pieces: [String] = [title]
+        pieces.append(contentsOf: paragraphs)
+        pieces.append(author)
+        return pieces.joined(separator: "\n\n")
+    }()
+
+    static func attributedText(
+        bodySize: CGFloat,
+        fontFamily: ReaderFontFamily,
+        lineSpacing: CGFloat
+    ) -> NSAttributedString {
+        let titleSize = bodySize + 10
+        let authorSize = max(13, bodySize - 2)
+
+        let titleFont = designedFont(size: titleSize, weight: .bold, family: fontFamily)
+        let bodyFont = designedFont(size: bodySize, weight: .regular, family: fontFamily)
+        let authorFont = italicFont(size: authorSize, family: fontFamily)
+
+        let bodyPara = NSMutableParagraphStyle()
+        bodyPara.lineSpacing = lineSpacing
+        bodyPara.paragraphSpacing = bodySize * 0.6
+
+        let titlePara = NSMutableParagraphStyle()
+        titlePara.lineSpacing = lineSpacing
+        titlePara.paragraphSpacing = bodySize * 0.9
+
+        let authorPara = NSMutableParagraphStyle()
+        authorPara.lineSpacing = lineSpacing
+
+        let bodyColor = UIColor(white: 0.92, alpha: 1.0)
+        let titleColor = UIColor.white
+        let authorColor = UIColor(white: 0.55, alpha: 1.0)
+
+        let result = NSMutableAttributedString()
+
+        result.append(NSAttributedString(string: title, attributes: [
+            .font: titleFont,
+            .foregroundColor: titleColor,
+            .paragraphStyle: titlePara
+        ]))
+
+        for paragraph in paragraphs {
+            result.append(NSAttributedString(string: "\n\n", attributes: [
+                .font: bodyFont,
+                .paragraphStyle: bodyPara
+            ]))
+            result.append(NSAttributedString(string: paragraph, attributes: [
+                .font: bodyFont,
+                .foregroundColor: bodyColor,
+                .paragraphStyle: bodyPara
+            ]))
+        }
+
+        result.append(NSAttributedString(string: "\n\n", attributes: [
+            .font: bodyFont,
+            .paragraphStyle: bodyPara
+        ]))
+        result.append(NSAttributedString(string: author, attributes: [
+            .font: authorFont,
+            .foregroundColor: authorColor,
+            .paragraphStyle: authorPara
+        ]))
+
+        return result
+    }
+
+    private static func designedFont(size: CGFloat, weight: UIFont.Weight, family: ReaderFontFamily) -> UIFont {
+        var font = UIFont.systemFont(ofSize: size, weight: weight)
+        if let descriptor = font.fontDescriptor.withDesign(family.uiDesign) {
+            font = UIFont(descriptor: descriptor, size: size)
+        }
+        return font
+    }
+
+    private static func italicFont(size: CGFloat, family: ReaderFontFamily) -> UIFont {
+        let base = UIFont.systemFont(ofSize: size, weight: .regular)
+        var descriptor = base.fontDescriptor
+        if let designed = descriptor.withDesign(family.uiDesign) {
+            descriptor = designed
+        }
+        if let italic = descriptor.withSymbolicTraits(.traitItalic) {
+            descriptor = italic
+        }
+        return UIFont(descriptor: descriptor, size: size)
+    }
 }
