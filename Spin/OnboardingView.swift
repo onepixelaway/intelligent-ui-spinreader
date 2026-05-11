@@ -53,9 +53,9 @@ struct OnboardingView: View {
 private struct CompletionSequence: View {
     let onFinish: () -> Void
 
-    private let words = ["Ponder", "now", "time", "to", "read"]
+    private let words = ["now", "time", "to", "read"]
     private let fadeIn: Double = 0.3
-    private let hold: Double = 0.4
+    private let hold: Double = 0.6
     private let fadeOut: Double = 0.2
 
     @State private var index: Int = 0
