@@ -4,13 +4,17 @@ import UIKit
 struct OnboardingView: View {
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @State private var showTutorial: Bool = false
+    @State private var showCompletionSequence: Bool = false
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            if showTutorial {
-                TutorialContainer(onFinish: finish)
+            if showCompletionSequence {
+                CompletionSequence(onFinish: completeOnboarding)
+                    .transition(.opacity)
+            } else if showTutorial {
+                TutorialContainer(onFinish: beginCompletionSequence)
                     .transition(.opacity)
             } else {
                 SplashScreen(onContinue: enterTutorial)
@@ -33,9 +37,62 @@ struct OnboardingView: View {
         }
     }
 
-    private func finish() {
+    private func beginCompletionSequence() {
+        showCompletionSequence = true
+    }
+
+    private func completeOnboarding() {
         withAnimation(.easeInOut(duration: 0.3)) {
             hasCompletedOnboarding = true
+        }
+    }
+}
+
+// MARK: - Completion sequence
+
+private struct CompletionSequence: View {
+    let onFinish: () -> Void
+
+    private let words = ["Ponder", "now", "time", "to", "read"]
+    private let fadeIn: Double = 0.3
+    private let hold: Double = 0.4
+    private let fadeOut: Double = 0.2
+
+    @State private var index: Int = 0
+    @State private var visible: Bool = false
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+
+            if index < words.count {
+                Text(words[index])
+                    .font(.system(size: 48, weight: .heavy))
+                    .foregroundColor(.white)
+                    .opacity(visible ? 1 : 0)
+            }
+        }
+        .onAppear {
+            showCurrentWord()
+        }
+    }
+
+    private func showCurrentWord() {
+        guard index < words.count else {
+            onFinish()
+            return
+        }
+        withAnimation(.easeIn(duration: fadeIn)) {
+            visible = true
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + fadeIn + hold) {
+            withAnimation(.easeOut(duration: fadeOut)) {
+                visible = false
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + fadeOut) {
+                index += 1
+                showCurrentWord()
+            }
         }
     }
 }
@@ -45,6 +102,11 @@ struct OnboardingView: View {
 private struct SplashScreen: View {
     let onContinue: () -> Void
     @State private var showButton = false
+    @State private var visibleWordCount = 0
+
+    private let taglineWords = ["Dig", "deeper", "on", "what", "you", "read"]
+    private let taglineStartDelay: Double = 0.25
+    private let taglineWordStagger: Double = 0.15
 
     var body: some View {
         ZStack {
@@ -59,9 +121,14 @@ private struct SplashScreen: View {
                     .foregroundColor(.white)
                     .tracking(-1)
 
-                Text("Dig deeper on what you read")
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundColor(.white.opacity(0.55))
+                HStack(spacing: 4) {
+                    ForEach(Array(taglineWords.enumerated()), id: \.offset) { index, word in
+                        Text(word)
+                            .font(.system(size: 18, weight: .regular))
+                            .foregroundColor(.white.opacity(0.55))
+                            .opacity(index < visibleWordCount ? 1 : 0)
+                    }
+                }
 
                 Spacer()
                     .frame(height: 64)
@@ -89,6 +156,14 @@ private struct SplashScreen: View {
             .padding(.horizontal, 32)
         }
         .onAppear {
+            for index in taglineWords.indices {
+                let delay = taglineStartDelay + Double(index) * taglineWordStagger
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    withAnimation(.easeIn(duration: 0.3)) {
+                        visibleWordCount = index + 1
+                    }
+                }
+            }
             DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
                 withAnimation(.easeOut(duration: 0.55)) {
                     showButton = true
