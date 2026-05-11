@@ -490,6 +490,7 @@ private struct TutorialContainer: View {
                     endPoint: .bottom
                 )
             )
+            .contentShape(Rectangle())
         }
     }
 
@@ -560,16 +561,18 @@ private struct TutorialContainer: View {
     }
 
     private func handleHighlightTap() {
-        // Pencil toggles highlight mode. When armed, the text above becomes
-        // pan-draggable for selection. The completion animation is driven by
-        // an actual highlight being created — not just the mode toggle.
-        guard !didTriggerCompletion else { return }
+        // Pencil toggles highlight mode, but only on the highlight step. Before
+        // that, tapping pencil during the trackpad/ai steps would silently arm
+        // highlight mode and then a later tap on the highlight step would
+        // *cancel* it — leaving the user dragging on text that won't respond.
+        guard step == .highlight, !didTriggerCompletion else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             isHighlightMode.toggle()
         }
     }
 
     private func handleCancelHighlight() {
+        guard step == .highlight else { return }
         withAnimation(.easeInOut(duration: 0.2)) {
             isHighlightMode = false
         }
