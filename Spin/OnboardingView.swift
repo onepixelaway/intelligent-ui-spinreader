@@ -326,6 +326,10 @@ private enum TutorialStep: Hashable {
     case highlight
 }
 
+private enum HighlightPhase {
+    case askTap, askSwipe, askFinish
+}
+
 private enum FinishPhase {
     case idle
     case sliding
@@ -344,7 +348,7 @@ private struct TutorialContainer: View {
     @EnvironmentObject private var readerSettings: ReaderSettings
 
     @State private var step: TutorialStep = .trackpad
-    @State private var highlightPhase: Int = 0
+    @State private var highlightPhase: HighlightPhase = .askTap
     @State private var didTriggerCompletion = false
     @State private var finishPhase: FinishPhase = .idle
     @State private var tooltipVisible = false
@@ -469,21 +473,21 @@ private struct TutorialContainer: View {
             )
         case .highlight:
             switch highlightPhase {
-            case 0:
+            case .askTap:
                 return TooltipCopy(
                     title: "Tap to highlight",
                     subtitle: nil,
                     pointerSide: .leading,
                     anchor: .highlightButton
                 )
-            case 1:
+            case .askSwipe:
                 return TooltipCopy(
                     title: "Swipe to select",
                     subtitle: nil,
                     pointerSide: .center,
                     anchor: .trackpad
                 )
-            default:
+            case .askFinish:
                 return TooltipCopy(
                     title: "Tap to finish",
                     subtitle: nil,
@@ -503,8 +507,8 @@ private struct TutorialContainer: View {
             guard !isHighlightMode else { return }
             advance(to: .ai)
         case .highlight:
-            if isHighlightMode && highlightPhase == 1 {
-                advanceHighlightPhase(to: 2)
+            if isHighlightMode, highlightPhase == .askSwipe {
+                advanceHighlightPhase(to: .askFinish)
             }
         case .ai:
             return
@@ -513,13 +517,20 @@ private struct TutorialContainer: View {
 
     private func handleHighlightModeChanged(isHighlightMode: Bool) {
         guard contentInteractive, step == .highlight else { return }
-        if highlightPhase == 0 && isHighlightMode {
-            advanceHighlightPhase(to: 1)
+        switch (highlightPhase, isHighlightMode) {
+        case (.askTap, true):
+            advanceHighlightPhase(to: .askSwipe)
+        case (.askSwipe, false), (.askFinish, false):
+            // User cancelled the pending highlight mid-tutorial; reset so
+            // the tooltip points back at the highlight button.
+            advanceHighlightPhase(to: .askTap)
+        default:
+            break
         }
     }
 
     private func handleHighlightCommit() {
-        guard contentInteractive, step == .highlight, highlightPhase == 2, !didTriggerCompletion else { return }
+        guard contentInteractive, step == .highlight, highlightPhase == .askFinish, !didTriggerCompletion else { return }
         didTriggerCompletion = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             beginCompletionAnimation()
@@ -534,28 +545,20 @@ private struct TutorialContainer: View {
     // MARK: Step transitions and completion
 
     private func advance(to next: TutorialStep) {
-        withAnimation(.easeOut(duration: 0.2)) {
-            tooltipVisible = false
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
-            withAnimation(.easeInOut(duration: 0.3)) {
-                step = next
-            }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
-                    tooltipVisible = true
-                }
-            }
-        }
+        crossfadeTooltip { step = next }
     }
 
-    private func advanceHighlightPhase(to phase: Int) {
+    private func advanceHighlightPhase(to phase: HighlightPhase) {
+        crossfadeTooltip { highlightPhase = phase }
+    }
+
+    private func crossfadeTooltip(_ mutate: @escaping () -> Void) {
         withAnimation(.easeOut(duration: 0.2)) {
             tooltipVisible = false
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
             withAnimation(.easeInOut(duration: 0.3)) {
-                highlightPhase = phase
+                mutate()
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
                 withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) {
@@ -610,7 +613,7 @@ private struct TutorialContainer: View {
     }()
 }
 
-// MARK: - Tooltip view (unchanged styling, used by TutorialContainer)
+// MARK: - Tooltip view
 
 private enum TooltipPointerSide {
     case leading, center, trailing
