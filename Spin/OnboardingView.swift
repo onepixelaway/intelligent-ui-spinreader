@@ -344,6 +344,7 @@ private struct TutorialContainer: View {
     @EnvironmentObject private var readerSettings: ReaderSettings
 
     @State private var step: TutorialStep = .trackpad
+    @State private var highlightPhase: Int = 0  // 0=pencil, 1=trackpad swipe, 2=checkmark
     @State private var didTriggerCompletion = false
     @State private var finishPhase: FinishPhase = .idle
     @State private var tooltipVisible = false
@@ -365,6 +366,7 @@ private struct TutorialContainer: View {
                 bookAuthor: "Steve Jobs",
                 observer: ScrollTextViewObserver(
                     onTrackpadSwipe: handleTrackpadSwipe,
+                    onHighlightModeChanged: handleHighlightModeChanged,
                     onHighlightCommit: handleHighlightCommit,
                     onExplainerDismissed: handleExplainerDismissed
                 )
@@ -441,7 +443,7 @@ private struct TutorialContainer: View {
 
     private struct TooltipCopy {
         let title: String
-        let subtitle: String
+        let subtitle: String?
         let pointerSide: TooltipPointerSide
         let anchor: ControlPanelAnchor
     }
@@ -450,25 +452,42 @@ private struct TutorialContainer: View {
         switch step {
         case .trackpad:
             return TooltipCopy(
-                title: "Swipe to read",
+                title: "Swipe up",
                 subtitle: "Drag up on the trackpad",
                 pointerSide: .center,
                 anchor: .trackpad
             )
         case .ai:
             return TooltipCopy(
-                title: "Ask anything",
-                subtitle: "Tap a button to explore",
-                pointerSide: .center,
-                anchor: .actionPillRow
+                title: "Dig deeper",
+                subtitle: "Tap to learn more",
+                pointerSide: .leading,
+                anchor: .firstActionPill
             )
         case .highlight:
-            return TooltipCopy(
-                title: "Highlight a sentence",
-                subtitle: "Swipe the trackpad to move between sentences",
-                pointerSide: .leading,
-                anchor: .highlightButton
-            )
+            switch highlightPhase {
+            case 0:
+                return TooltipCopy(
+                    title: "Tap to highlight",
+                    subtitle: nil,
+                    pointerSide: .leading,
+                    anchor: .highlightButton
+                )
+            case 1:
+                return TooltipCopy(
+                    title: "Swipe to select",
+                    subtitle: nil,
+                    pointerSide: .center,
+                    anchor: .trackpad
+                )
+            default:
+                return TooltipCopy(
+                    title: "Tap to finish",
+                    subtitle: nil,
+                    pointerSide: .leading,
+                    anchor: .highlightButton
+                )
+            }
         }
     }
 
@@ -481,17 +500,31 @@ private struct TutorialContainer: View {
             guard !isHighlightMode else { return }
             advance(to: .ai)
         case .highlight:
-            return
+            guard isHighlightMode, highlightPhase == 1 else { return }
+            advanceHighlightPhase(to: 2)
         case .ai:
             return
         }
     }
 
+    private func handleHighlightModeChanged(isHighlightMode: Bool) {
+        guard contentInteractive, step == .highlight, highlightPhase == 0, isHighlightMode else { return }
+        advanceHighlightPhase(to: 1)
+    }
+
     private func handleHighlightCommit() {
-        guard contentInteractive, step == .highlight, !didTriggerCompletion else { return }
+        guard contentInteractive, step == .highlight, highlightPhase == 2, !didTriggerCompletion else { return }
         didTriggerCompletion = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             beginCompletionAnimation()
+        }
+    }
+
+    private func advanceHighlightPhase(to phase: Int) {
+        withAnimation(.easeOut(duration: 0.2)) { tooltipVisible = false }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            highlightPhase = phase
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.72)) { tooltipVisible = true }
         }
     }
 
@@ -582,7 +615,7 @@ private struct TooltipPointer: Shape {
 
 private struct TutorialTooltip: View {
     let title: String
-    let subtitle: String
+    let subtitle: String?
     let pointerSide: TooltipPointerSide
 
     private let bubbleColor = Color(red: 0.102, green: 0.157, blue: 0.275) // ~#1a2846
@@ -597,9 +630,11 @@ private struct TutorialTooltip: View {
             Text(title)
                 .font(.system(size: 15, weight: .bold))
                 .foregroundColor(.white)
-            Text(subtitle)
-                .font(.system(size: 13, weight: .regular))
-                .foregroundColor(.white.opacity(0.62))
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundColor(.white.opacity(0.62))
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
