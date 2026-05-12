@@ -1,6 +1,25 @@
 import Foundation
 import WebKit
 
+extension URL {
+    var displayHost: String? {
+        guard var h = host?.lowercased(), !h.isEmpty else { return nil }
+        if h.hasPrefix("www.")    { h = String(h.dropFirst(4)) }
+        if h.hasPrefix("mobile.") { h = String(h.dropFirst(7)) }
+        return h
+    }
+
+    var isTwitterHost: Bool {
+        guard let h = displayHost else { return false }
+        return h == "twitter.com" || h == "x.com"
+    }
+}
+
+enum WebUserAgent {
+    static let safari =
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
+}
+
 enum WebArticleError: LocalizedError {
     case scriptUnavailable
     case evaluationFailed(String)
@@ -28,6 +47,15 @@ private let jsResultDecoder = JSONDecoder()
 
 @MainActor
 func extractArticle(from webView: WKWebView, sourceURL: URL) async throws -> WebArticle {
+    var resolvedURL = webView.url ?? sourceURL
+
+    if resolvedURL.isTwitterHost,
+       let tcoURL = await findTcoLinkInTweet(webView: webView),
+       let realURL = await resolveTcoURL(tcoURL) {
+        await navigateAndWait(webView: webView, to: realURL)
+        resolvedURL = webView.url ?? realURL
+    }
+
     guard let script = readabilityScript else {
         throw WebArticleError.scriptUnavailable
     }
@@ -45,10 +73,25 @@ func extractArticle(from webView: WKWebView, sourceURL: URL) async throws -> Web
 
     let runner = """
     (function() {
+      function metaContent(sel) {
+        var el = document.querySelector(sel);
+        return el ? (el.getAttribute('content') || '').trim() : '';
+      }
+      function resolveURL(u) {
+        if (!u) return '';
+        try { return new URL(u, document.baseURI).href; } catch (e) { return ''; }
+      }
+      var ogImage = resolveURL(
+        metaContent('meta[property="og:image"]') ||
+        metaContent('meta[name="twitter:image"]') ||
+        metaContent('meta[property="og:image:url"]')
+      );
+      var ogTitle = metaContent('meta[property="og:title"]')
+                 || metaContent('meta[name="twitter:title"]');
       try {
         var article = new Readability(document.cloneNode(true)).parse();
         if (!article || !article.content) {
-          return JSON.stringify({ __error: 'No content' });
+          return JSON.stringify({ __error: 'No content', ogImage: ogImage, ogTitle: ogTitle });
         }
 
         var coverImageURL = null;
@@ -75,15 +118,15 @@ func extractArticle(from webView: WKWebView, sourceURL: URL) async throws -> Web
           title: article.title,
           byline: article.byline,
           content: article.content,
-          coverImageURL: coverImageURL
+          coverImageURL: coverImageURL,
+          ogImage: ogImage,
+          ogTitle: ogTitle
         });
       } catch(e) {
-        return JSON.stringify({ __error: e.toString() });
+        return JSON.stringify({ __error: e.toString(), ogImage: ogImage, ogTitle: ogTitle });
       }
     })()
     """
-
-    let resolvedURL = webView.url ?? sourceURL
 
     if let parsed: ReadabilityResult = try await evaluateJSON(runner, on: webView),
        let content = parsed.content, !content.isEmpty {
@@ -93,10 +136,11 @@ func extractArticle(from webView: WKWebView, sourceURL: URL) async throws -> Web
         }
         if !items.isEmpty {
             let articleID = UUID()
-            let coverPath = await downloadCoverImage(from: parsed.coverImageURL, articleID: articleID)
+            let coverSource = nonEmpty(parsed.ogImage) ?? nonEmpty(parsed.coverImageURL)
+            let coverPath = await downloadCoverImage(from: coverSource, articleID: articleID)
             return WebArticle(
                 id: articleID,
-                title: resolveTitle(parsed.title, fallbackURL: resolvedURL),
+                title: resolveTitle(parsed.title ?? parsed.ogTitle, fallbackURL: resolvedURL),
                 author: parsed.byline ?? "",
                 sourceURL: resolvedURL,
                 savedAt: Date(),
@@ -147,13 +191,28 @@ private func imageExtension(for mime: String?, data: Data) -> String {
 private func fallbackArticle(from webView: WKWebView, sourceURL: URL) async throws -> WebArticle {
     let fallbackJS = """
     (function() {
+      function metaContent(sel) {
+        var el = document.querySelector(sel);
+        return el ? (el.getAttribute('content') || '').trim() : '';
+      }
+      function resolveURL(u) {
+        if (!u) return '';
+        try { return new URL(u, document.baseURI).href; } catch (e) { return ''; }
+      }
+      var ogImage = resolveURL(
+        metaContent('meta[property="og:image"]') ||
+        metaContent('meta[name="twitter:image"]') ||
+        metaContent('meta[property="og:image:url"]')
+      );
+      var ogTitle = metaContent('meta[property="og:title"]')
+                 || metaContent('meta[name="twitter:title"]');
       try {
         var t = (document.title || "").toString();
         var b = (document.body && document.body.innerText) ? document.body.innerText : "";
         if (b.length > 5000) { b = b.substring(0, 5000); }
-        return JSON.stringify({ title: t, body: b });
+        return JSON.stringify({ title: t, body: b, ogImage: ogImage, ogTitle: ogTitle });
       } catch(e) {
-        return JSON.stringify({ __error: e.toString() });
+        return JSON.stringify({ __error: e.toString(), ogImage: ogImage, ogTitle: ogTitle });
       }
     })()
     """
@@ -173,14 +232,91 @@ private func fallbackArticle(from webView: WKWebView, sourceURL: URL) async thro
 
     guard !paragraphs.isEmpty else { throw WebArticleError.noContent }
 
+    let articleID = UUID()
+    let coverPath = await downloadCoverImage(from: nonEmpty(fb.ogImage), articleID: articleID)
+
     return WebArticle(
-        id: UUID(),
-        title: resolveTitle(fb.title, fallbackURL: sourceURL),
+        id: articleID,
+        title: resolveTitle(fb.title ?? fb.ogTitle, fallbackURL: sourceURL),
         author: "",
         sourceURL: sourceURL,
         savedAt: Date(),
-        items: paragraphs
+        items: paragraphs,
+        coverImagePath: coverPath
     )
+}
+
+private func nonEmpty(_ s: String?) -> String? {
+    guard let s else { return nil }
+    let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+    return trimmed.isEmpty ? nil : trimmed
+}
+
+// MARK: - Twitter/X t.co resolution
+
+@MainActor
+private func findTcoLinkInTweet(webView: WKWebView) async -> URL? {
+    let js = """
+    (function() {
+      var desc = document.querySelector("meta[property=\"og:description\"]");
+      if (desc) {
+        var match = desc.content.match(/https:\\/\\/t\\.co\\/[A-Za-z0-9]+/);
+        if (match) return match[0];
+      }
+      var metas = document.querySelectorAll("meta");
+      for (var i = 0; i < metas.length; i++) {
+        var c = metas[i].getAttribute("content") || "";
+        var m = c.match(/https:\\/\\/t\\.co\\/[A-Za-z0-9]+/);
+        if (m) return m[0];
+      }
+      var anchors = document.querySelectorAll("a[href*=\"t.co\"]");
+      for (var j = 0; j < anchors.length; j++) {
+        var href = anchors[j].href;
+        if (href && href.includes("t.co")) return href;
+      }
+      return null;
+    })()
+    """
+    do {
+        let raw = try await webView.evaluateJavaScript(js)
+        guard let str = raw as? String else { return nil }
+        return URL(string: str)
+    } catch {
+        return nil
+    }
+}
+
+private func resolveTcoURL(_ tcoURL: URL) async -> URL? {
+    var request = URLRequest(url: tcoURL)
+    request.httpMethod = "HEAD"
+    request.setValue(WebUserAgent.safari, forHTTPHeaderField: "User-Agent")
+    do {
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse,
+              let finalURL = http.url,
+              let host = finalURL.displayHost,
+              host != "t.co",
+              !finalURL.isTwitterHost
+        else { return nil }
+        return finalURL
+    } catch {
+        return nil
+    }
+}
+
+@MainActor
+private func navigateAndWait(webView: WKWebView, to url: URL) async {
+    webView.load(URLRequest(url: url))
+    // WebKit may not flip isLoading immediately after load(); briefly wait for it.
+    for _ in 0..<20 {
+        if webView.isLoading { break }
+        try? await Task.sleep(nanoseconds: 50_000_000)
+    }
+    // Then wait for the load to finish (cap ~15s).
+    for _ in 0..<150 {
+        if !webView.isLoading { return }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+    }
 }
 
 private protocol JSEvalEnvelope: Decodable {
@@ -192,12 +328,16 @@ private struct ReadabilityResult: JSEvalEnvelope {
     let byline: String?
     let content: String?
     let coverImageURL: String?
+    let ogImage: String?
+    let ogTitle: String?
     let __error: String?
 }
 
 private struct FallbackResult: JSEvalEnvelope {
     let title: String?
     let body: String?
+    let ogImage: String?
+    let ogTitle: String?
     let __error: String?
 }
 

@@ -29,16 +29,23 @@ struct BrowserView: View {
     @State private var addressText: String = ""
     @State private var didPrefill: Bool = false
     @FocusState private var addressFocused: Bool
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
-            ZStack {
-                Color.black
-                WebContainer(model: model)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            header
+                .padding(.horizontal, 16)
+                .padding(.top, 8)
+                .padding(.bottom, 10)
 
-            toolbar
+            WebContainer(model: model)
+                .background(Color.black)
+                .ignoresSafeArea(edges: [.horizontal, .bottom])
+                .overlay(alignment: .bottom) {
+                    toolbar
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 4)
+                }
         }
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
@@ -60,101 +67,112 @@ struct BrowserView: View {
         }
     }
 
+    private var header: some View {
+        ZStack {
+            Text("Save Article from Web")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity, alignment: .center)
+
+            HStack {
+                Spacer()
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(width: 32, height: 32)
+                }
+                .darkFrosted(in: Circle())
+            }
+        }
+    }
+
     private var toolbar: some View {
         let saveTarget = saveTargetURL()
         let canSave = saveTarget != nil && model.webView != nil
-        let canReload = model.currentURL != nil || model.isLoading
 
-        return HStack(spacing: 14) {
-            navButton(systemName: "chevron.left", enabled: model.canGoBack, action: model.goBack)
-            navButton(systemName: "chevron.right", enabled: model.canGoForward, action: model.goForward)
+        return HStack(spacing: 10) {
+            Button {
+                model.goBack()
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 48, height: 48)
+            }
+            .darkFrosted(in: Circle())
+            .dimmedDisabled(!model.canGoBack)
 
             addressField
-
-            Button {
-                if model.isLoading { model.stopLoading() } else { model.reload() }
-            } label: {
-                Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise")
-                    .font(.system(size: 16, weight: .medium))
-                    .frame(width: 28, height: 32)
-                    .contentTransition(.symbolEffect(.replace))
-            }
-            .foregroundColor(.white)
-            .dimmedDisabled(!canReload)
 
             Button {
                 if let target = saveTarget, let webView = model.webView {
                     onImport(webView, target)
                 }
             } label: {
-                Image(systemName: "text.badge.plus")
-                    .font(.system(size: 16, weight: .medium))
-                    .frame(width: 28, height: 32)
+                Image(systemName: "arrow.down.to.line")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 48, height: 48)
             }
-            .foregroundColor(.white)
+            .darkFrosted(in: Circle())
             .dimmedDisabled(!canSave)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(
-            Color(white: 0.08)
-                .overlay(
-                    Rectangle()
-                        .frame(height: 0.5)
-                        .foregroundColor(.white.opacity(0.08)),
-                    alignment: .top
-                )
-                .ignoresSafeArea(edges: .bottom)
-        )
-    }
-
-    private func navButton(systemName: String, enabled: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: systemName)
-                .font(.system(size: 18, weight: .medium))
-                .frame(width: 28, height: 32)
-        }
-        .disabled(!enabled)
-        .foregroundColor(enabled ? .white : .white.opacity(0.25))
     }
 
     private var addressField: some View {
-        ZStack(alignment: .leading) {
-            TextField("Search or enter address", text: $addressText)
-                .focused($addressFocused)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .keyboardType(.URL)
-                .submitLabel(.go)
-                .foregroundColor(.white)
-                .tint(.white)
-                .font(.system(size: 14))
-                .onSubmit(submitAddress)
-                .opacity(showHostOverlay ? 0 : 1)
+        let canReload = model.currentURL != nil || model.isLoading
 
-            if showHostOverlay {
-                HStack(spacing: 6) {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.5))
-                    Text(model.currentURL?.host() ?? "")
-                        .font(.system(size: 14))
+        return HStack(spacing: 10) {
+            Image(systemName: "puzzlepiece.extension.fill")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundColor(.white.opacity(0.7))
+                .frame(width: 22, height: 22)
+
+            ZStack {
+                TextField("Search or enter address", text: $addressText)
+                    .focused($addressFocused)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .keyboardType(.URL)
+                    .submitLabel(.go)
+                    .foregroundColor(.white)
+                    .tint(.white)
+                    .font(.system(size: 16, weight: .semibold))
+                    .multilineTextAlignment(addressFocused ? .leading : .center)
+                    .onSubmit(submitAddress)
+                    .opacity(showHostOverlay ? 0 : 1)
+
+                if showHostOverlay {
+                    Text(displayDomain)
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Spacer(minLength: 0)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .allowsHitTesting(false)
                 }
-                .allowsHitTesting(false)
             }
+            .frame(maxWidth: .infinity)
+
+            Button {
+                if model.isLoading { model.stopLoading() } else { model.reload() }
+            } label: {
+                Image(systemName: model.isLoading ? "xmark" : "arrow.clockwise")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.white)
+                    .frame(width: 22, height: 22)
+                    .contentTransition(.symbolEffect(.replace))
+            }
+            .dimmedDisabled(!canReload)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 16)
+        .frame(height: 48)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color(white: 0.18))
-        )
-        .contentShape(Rectangle())
+        .darkFrosted(in: Capsule())
+        .contentShape(Capsule())
         .onTapGesture {
             guard !addressFocused else { return }
             if let current = model.currentURL?.absoluteString, current != addressText {
@@ -166,6 +184,10 @@ struct BrowserView: View {
 
     private var showHostOverlay: Bool {
         !addressFocused && (model.currentURL?.host()?.isEmpty == false)
+    }
+
+    private var displayDomain: String {
+        model.currentURL?.displayHost ?? ""
     }
 
     private func saveTargetURL() -> URL? {
@@ -235,7 +257,7 @@ private struct WebContainer: UIViewRepresentable {
         webView.isOpaque = false
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
-        webView.customUserAgent = Self.safariUserAgent
+        webView.customUserAgent = WebUserAgent.safari
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
 
@@ -249,9 +271,6 @@ private struct WebContainer: UIViewRepresentable {
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
         coordinator.detach()
     }
-
-    static let safariUserAgent =
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
         let model: BrowserModel

@@ -5,6 +5,7 @@ struct SpinApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @State private var highlightStore = HighlightStore()
     @StateObject private var readerSettings = ReaderSettings()
+    @StateObject private var shareInbox = ShareImportInbox()
     @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding: Bool = false
     @Environment(\.scenePhase) private var scenePhase
 
@@ -13,13 +14,20 @@ struct SpinApp: App {
             rootView
                 .environment(highlightStore)
                 .environmentObject(readerSettings)
+                .environmentObject(shareInbox)
                 .task {
                     EmojiColorExtractor.shared.preloadDefaults()
+                    shareInbox.consumePendingFromAppGroup()
+                }
+                .onOpenURL { url in
+                    shareInbox.handleIncomingURL(url)
                 }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .background {
                 highlightStore.flush()
+            } else if phase == .active {
+                shareInbox.consumePendingFromAppGroup()
             }
         }
     }

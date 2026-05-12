@@ -7,14 +7,7 @@
     <key>teamID</key>
     <string>72P6RBSM9C</string>
     <key>signingStyle</key>
-    <string>manual</string>
-    <key>signingCertificate</key>
-    <string>iPhone Distribution: TAREQ IBNE ISMAIL (72P6RBSM9C)</string>
-    <key>provisioningProfiles</key>
-    <dict>
-        <key>com.tareqismail.spinreader</key>
-        <string>Ponder AdHoc</string>
-    </dict>
+    <string>automatic</string>
     <key>stripSwiftSymbols</key>
     <true/>
     <key>compileBitcode</key>

@@ -7,6 +7,8 @@ import ImageIO
 struct EpubLibraryView: View {
     @StateObject private var library = EpubLibrary()
     @StateObject private var articleStore = WebArticleStore()
+    @StateObject private var backgroundImporter = BackgroundArticleImporter()
+    @EnvironmentObject private var shareInbox: ShareImportInbox
     @State private var showImporter = false
     @State private var showBrowser = false
     @State private var showPasteText = false
@@ -80,7 +82,7 @@ struct EpubLibraryView: View {
                         }
                 }
             }
-            .navigationTitle("Books")
+            .navigationTitle("Library")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -101,11 +103,6 @@ struct EpubLibraryView: View {
                             Text("Done")
                                 .font(.system(size: 16, weight: .semibold))
                                 .foregroundColor(.white)
-                        }
-                    } else {
-                        addMenu {
-                            Image(systemName: "plus")
-                                .foregroundColor(.white.opacity(0.7))
                         }
                     }
                 }
@@ -165,6 +162,10 @@ struct EpubLibraryView: View {
                     .transition(.opacity)
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                ImportToast(phase: backgroundImporter.phase)
+                    .animation(.easeInOut(duration: 0.25), value: backgroundImporter.phase)
+            }
             .alert(
                 "Couldn't import",
                 isPresented: errorBinding,
@@ -200,6 +201,11 @@ struct EpubLibraryView: View {
             if articleStore.articles.isEmpty {
                 await articleStore.loadFromDisk()
             }
+        }
+        .onChange(of: shareInbox.pendingURL, initial: true) { _, url in
+            guard let url else { return }
+            shareInbox.clear()
+            Task { await backgroundImporter.importArticle(from: url, into: articleStore) }
         }
     }
 
@@ -465,9 +471,13 @@ private struct BookCard: View {
     @ViewBuilder
     private var coverImage: some View {
         if let data = book.coverImageData, let uiImage = UIImage(data: data) {
-            Image(uiImage: uiImage)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+            Color.clear
+                .overlay {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFill()
+                }
+                .clipped()
         } else {
             PlaceholderCover(title: book.title, author: book.author)
         }
@@ -504,20 +514,23 @@ private struct ArticleCard: View {
 
     private var subtitle: String {
         if !article.author.isEmpty { return article.author }
-        if let host = article.sourceURL?.host { return host }
+        if let host = article.sourceURL?.displayHost { return host }
         return article.sourceURL == nil ? "Pasted" : "Article"
     }
 
     @ViewBuilder
     private var cover: some View {
         if let coverImage {
-            ZStack(alignment: .topTrailing) {
-                Image(uiImage: coverImage)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-                badge
-                    .padding(8)
-            }
+            Color.clear
+                .overlay {
+                    Image(uiImage: coverImage)
+                        .resizable()
+                        .scaledToFill()
+                }
+                .overlay(alignment: .topTrailing) {
+                    badge.padding(8)
+                }
+                .clipped()
         } else {
             placeholderCover
         }
@@ -548,14 +561,30 @@ private struct ArticleCard: View {
         }
     }
 
+    @ViewBuilder
     private var badge: some View {
-        Text(article.sourceURL == nil ? "Pasted" : "Article")
-            .font(.system(size: 9, weight: .semibold))
-            .tracking(0.6)
-            .foregroundColor(.white.opacity(0.9))
-            .padding(.horizontal, 8)
+        if let host = article.sourceURL?.displayHost {
+            HStack(spacing: 4) {
+                FaviconView(host: host)
+                    .frame(width: 12, height: 12)
+
+                Text(host)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.9))
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(Capsule().fill(Color.black.opacity(0.45)))
+            .background(Capsule().fill(Color.black.opacity(0.55)))
+        } else {
+            Text("Pasted")
+                .font(.system(size: 9, weight: .semibold))
+                .tracking(0.6)
+                .foregroundColor(.white.opacity(0.9))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(Capsule().fill(Color.black.opacity(0.45)))
+        }
     }
 
     private func loadCover() async {
@@ -629,6 +658,137 @@ private func deterministicGradient(for seed: String) -> [Color] {
         Color(hue: hue1, saturation: 0.55, brightness: 0.38),
         Color(hue: hue2, saturation: 0.62, brightness: 0.24)
     ]
+}
+
+@MainActor
+private final class FaviconCache {
+    static let shared = FaviconCache()
+    private var images: [String: UIImage] = [:]
+    private var inflight: [String: Task<UIImage?, Never>] = [:]
+
+    func image(for host: String) -> UIImage? { images[host] }
+
+    func load(host: String) async -> UIImage? {
+        if let cached = images[host] { return cached }
+        if let task = inflight[host] { return await task.value }
+        guard let url = URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=32") else {
+            return nil
+        }
+        let task = Task<UIImage?, Never> {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                return UIImage(data: data)
+            } catch {
+                return nil
+            }
+        }
+        inflight[host] = task
+        let image = await task.value
+        inflight[host] = nil
+        if let image { images[host] = image }
+        return image
+    }
+}
+
+private struct FaviconView: View {
+    let host: String
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image).resizable().scaledToFit()
+            } else {
+                Color.clear
+            }
+        }
+        .task(id: host) {
+            if let cached = FaviconCache.shared.image(for: host) {
+                image = cached
+                return
+            }
+            image = await FaviconCache.shared.load(host: host)
+        }
+    }
+}
+
+private struct ImportToast: View {
+    let phase: BackgroundArticleImporter.Phase
+
+    var body: some View {
+        if case .idle = phase {
+            EmptyView()
+        } else {
+            pill
+                .frame(maxWidth: .infinity, alignment: .center)
+                .padding(.bottom, 16)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
+    }
+
+    @ViewBuilder
+    private var pill: some View {
+        switch phase {
+        case .idle:
+            EmptyView()
+        case .importing(let progress):
+            pillBody(label: "Saving article…", progress: progress) {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .scaleEffect(0.55)
+                    .tint(.white.opacity(0.9))
+                    .frame(width: 16, height: 16)
+            }
+        case .success:
+            pillBody(label: "Article saved", progress: nil) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                    .frame(width: 16, height: 16)
+            }
+        case .failure:
+            pillBody(label: "Couldn't import article", progress: nil) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.85))
+                    .frame(width: 16, height: 16)
+            }
+        }
+    }
+
+    private func pillBody<Leading: View>(
+        label: String,
+        progress: Double?,
+        @ViewBuilder leading: () -> Leading
+    ) -> some View {
+        HStack(spacing: 10) {
+            leading()
+            VStack(alignment: .leading, spacing: progress == nil ? 0 : 5) {
+                Text(label)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.white)
+                    .fixedSize()
+                if let progress {
+                    Capsule()
+                        .fill(Color.white.opacity(0.15))
+                        .frame(width: 140, height: 3)
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(Color.white.opacity(0.9))
+                                .frame(width: 140 * progress, height: 3)
+                                .animation(.easeOut(duration: 0.2), value: progress)
+                        }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .darkFrosted(in: Capsule())
+        .overlay(
+            Capsule().stroke(Color.white.opacity(0.08), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
+    }
 }
 
 private struct ChapterListView: View {

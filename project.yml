@@ -37,12 +37,15 @@ targets:
       - package: MLXUtilsLibrary
       - package: mlx-swift
         product: MLX
+      - target: SpinShareExtension
     settings:
       base:
         SWIFT_VERSION: 6.0.3
         ENABLE_TESTABILITY: YES
         DEVELOPMENT_TEAM: 72P6RBSM9C
         CODE_SIGN_STYLE: Automatic
+        PRODUCT_BUNDLE_IDENTIFIER: com.tareqismail.ponder
+        CODE_SIGN_ENTITLEMENTS: Spin/Spin.entitlements
     info:
       path: Sources/Info.plist
       properties:
@@ -53,6 +56,42 @@ targets:
         UILaunchStoryboardName: LaunchScreen
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
+        CFBundleURLTypes:
+          - CFBundleURLName: com.tareqismail.ponder
+            CFBundleURLSchemes:
+              - spinreader
+
+  SpinShareExtension:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "18.1"
+    sources:
+      - path: SpinShareExtension
+        excludes:
+          - "*.entitlements"
+          - "Info.plist"
+    settings:
+      base:
+        SWIFT_VERSION: 6.0.3
+        DEVELOPMENT_TEAM: 72P6RBSM9C
+        CODE_SIGN_STYLE: Automatic
+        PRODUCT_BUNDLE_IDENTIFIER: com.tareqismail.ponder.ShareExtension
+        CODE_SIGN_ENTITLEMENTS: SpinShareExtension/SpinShareExtension.entitlements
+        INFOPLIST_KEY_CFBundleDisplayName: Spin Reader
+    info:
+      path: SpinShareExtension/Info.plist
+      properties:
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        CFBundleDisplayName: Spin Reader
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).ShareViewController
+          NSExtensionAttributes:
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsWebPageWithMaxCount: 1
+
   SpinTests:
     type: bundle.unit-test
     platform: iOS

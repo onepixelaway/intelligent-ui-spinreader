@@ -14,4 +14,10 @@ extension View {
             self.background(shape.fill(.ultraThinMaterial))
         }
     }
+
+    func darkFrosted<S: Shape>(in shape: S) -> some View {
+        self
+            .background(.black.opacity(0.55), in: shape)
+            .background(.ultraThinMaterial, in: shape)
+    }
 }

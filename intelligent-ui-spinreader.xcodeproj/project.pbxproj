@@ -31,6 +31,7 @@
 		6AD150376974E0D2CCF4F7C9 /* EpubParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EC98AFB877549811CD73826 /* EpubParser.swift */; };
 		6AD8816A6B0810A601ECB62A /* ReaderSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9890C234F5B38111DBBA0AE5 /* ReaderSettings.swift */; };
 		6C5F756CBE5880EFB348E536 /* ReaderSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79326A8051DC88E0961A8E54 /* ReaderSettingsSheet.swift */; };
+		6D724996EDA24E0E67F18E82 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF935D8A4DCF55959D3DF36 /* ShareViewController.swift */; };
 		6FA32A38C66DCCC765BDBEF1 /* LiquidGlass.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0E864B792179C0ECDC3B94E /* LiquidGlass.swift */; };
 		72B235AF885DD1D1407FC8DA /* SpinTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15863A718A24869A18BD8340 /* SpinTests.swift */; };
 		745DDCAB063E41875C4C71E6 /* WebArticle.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB5B4B3142548203F05FB763 /* WebArticle.swift */; };
@@ -46,6 +47,7 @@
 		9F4D08315CFA403590F387CA /* ScrollTextView+ContentRendering.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2241C458D35528A038EAE7C4 /* ScrollTextView+ContentRendering.swift */; };
 		A23151C8E9A472A61A2245AE /* MLXUtilsLibrary in Frameworks */ = {isa = PBXBuildFile; productRef = 182627D19FF1A8C99DB0BB12 /* MLXUtilsLibrary */; };
 		A5CBAC45CCDF8CF7A9E315A2 /* KokoroVoices.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBF49DBD0D8E34B359D7E06B /* KokoroVoices.swift */; };
+		A6E996CA805D2CD2CA4FCB5A /* SpinShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 2C21D9542600473ECAB810F5 /* SpinShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		A9A0B113B6D7361D2ED26F42 /* HighlightsListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70562CEDAC69322951D76474 /* HighlightsListView.swift */; };
 		B6531C56E7F53620DF034242 /* ScrollTextView+Highlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = E700A7CF2FF7006E8FE18AFE /* ScrollTextView+Highlights.swift */; };
 		BD529FBF973641B3AA7AFFAC /* CircularReaderButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FA3FF46EF90EA17B85BAC58 /* CircularReaderButton.swift */; };
@@ -53,6 +55,8 @@
 		D1DE22B93465E527BF6E269E /* KokoroModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0A85E80C5FB8D44CF46D49 /* KokoroModelManager.swift */; };
 		D6E62A17CE2F4DF65053087E /* ScrollTextView+Analysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D63BC5A3B0EBAD515446C8 /* ScrollTextView+Analysis.swift */; };
 		D7164D53BD9E535AF1349312 /* BrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428A5E9F86C5B23D0F561258 /* BrowserView.swift */; };
+		D7C094ECC30D3A1FBC79C9BE /* ShareImportInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7B170E85927B4CFA359516 /* ShareImportInbox.swift */; };
+		BA01234567890ABCDEF01234 /* BackgroundArticleImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0FEDCBA9876543210FEDCB /* BackgroundArticleImporter.swift */; };
 		DFC5DA7DA543B46EDFFDAEAD /* ScrollTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD95C47247F9A942E420D6A3 /* ScrollTextView.swift */; };
 		E9A40FF5626A9FB4BC13F6A9 /* TrackpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = A87BCCC8BD100C4230F823EF /* TrackpadSurface.swift */; };
 		F214942FD7EDC02E62BA74ED /* voices.npz in Resources */ = {isa = PBXBuildFile; fileRef = 79C757C174C85CC26D561DFD /* voices.npz */; };
@@ -67,6 +71,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		012F5355A597472F01D3BF7B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 11411B869AA4F318B1E2DF60 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 543395D8273BCE4392B3EFDD;
+			remoteInfo = SpinShareExtension;
+		};
 		8CF1E5E3157BB2E7522972F9 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 11411B869AA4F318B1E2DF60 /* Project object */;
@@ -84,6 +95,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		3EE491177A9A327478F216E7 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				A6E996CA805D2CD2CA4FCB5A /* SpinShareExtension.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9C9A397C9FB015A8D5BB4CB1 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -110,6 +132,7 @@
 		244CC314B9E59A9C97420A20 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		26EF7A685AF5D8A97408288B /* KokoroDownloadSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroDownloadSheet.swift; sourceTree = "<group>"; };
 		280B8B3DC648705C646B316F /* SpinUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpinUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		2C21D9542600473ECAB810F5 /* SpinShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = SpinShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		31D63BC5A3B0EBAD515446C8 /* ScrollTextView+Analysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Analysis.swift"; sourceTree = "<group>"; };
 		38EE546C017635A71B6AF744 /* GesturesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GesturesSettingsView.swift; sourceTree = "<group>"; };
 		40C85DCFECDF1DB621AD739E /* ScrollTextView+Pagination.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Pagination.swift"; sourceTree = "<group>"; };
@@ -138,8 +161,11 @@
 		A87BCCC8BD100C4230F823EF /* TrackpadSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackpadSurface.swift; sourceTree = "<group>"; };
 		A9F9EDFD087441380ACB497E /* EpubLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubLibraryView.swift; sourceTree = "<group>"; };
 		AE6230E51A9B4BFB88212B85 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		AE7B170E85927B4CFA359516 /* ShareImportInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareImportInbox.swift; sourceTree = "<group>"; };
+		BA0FEDCBA9876543210FEDCB /* BackgroundArticleImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundArticleImporter.swift; sourceTree = "<group>"; };
 		B8C2821EE55C5AD6773ED71C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paginator.swift; sourceTree = "<group>"; };
+		BDF935D8A4DCF55959D3DF36 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		BE14765183FA3E297A1DC153 /* KokoroTTSEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroTTSEngine.swift; sourceTree = "<group>"; };
 		BF805B39867A0BCE8A172ECC /* ScrollTextView+AttributedText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+AttributedText.swift"; sourceTree = "<group>"; };
 		C80906963464D9A5584A9C14 /* ReadabilitySanitized.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.javascript; path = ReadabilitySanitized.js; sourceTree = "<group>"; };
@@ -153,6 +179,7 @@
 		E55BEE1BE155E70B87D6E48C /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
 		E700A7CF2FF7006E8FE18AFE /* ScrollTextView+Highlights.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Highlights.swift"; sourceTree = "<group>"; };
 		EB5B4B3142548203F05FB763 /* WebArticle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebArticle.swift; sourceTree = "<group>"; };
+		ECA98E616EBA4C903F570570 /* Spin.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Spin.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -210,6 +237,14 @@
 			path = Controls;
 			sourceTree = "<group>";
 		};
+		8617FEDACB7BF0028304B3BB /* SpinShareExtension */ = {
+			isa = PBXGroup;
+			children = (
+				BDF935D8A4DCF55959D3DF36 /* ShareViewController.swift */,
+			);
+			path = SpinShareExtension;
+			sourceTree = "<group>";
+		};
 		88EC726508C4C6E1C6F55502 /* SpinTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -256,6 +291,9 @@
 				E700A7CF2FF7006E8FE18AFE /* ScrollTextView+Highlights.swift */,
 				40C85DCFECDF1DB621AD739E /* ScrollTextView+Pagination.swift */,
 				824245CC5F13EACD7CFCB8F8 /* SettingsView.swift */,
+				AE7B170E85927B4CFA359516 /* ShareImportInbox.swift */,
+				BA0FEDCBA9876543210FEDCB /* BackgroundArticleImporter.swift */,
+				ECA98E616EBA4C903F570570 /* Spin.entitlements */,
 				1E6DBEF2C370158A139D205E /* SpinApp.swift */,
 				EB5B4B3142548203F05FB763 /* WebArticle.swift */,
 				7E637E8AF81824F91E4AECC1 /* WebArticleExtractor.swift */,
@@ -279,6 +317,7 @@
 			isa = PBXGroup;
 			children = (
 				8EE26347464DA498A93972D8 /* Spin */,
+				8617FEDACB7BF0028304B3BB /* SpinShareExtension */,
 				88EC726508C4C6E1C6F55502 /* SpinTests */,
 				90CB941DF4055CB1E35EDBD6 /* SpinUITests */,
 				F09D4FC3231AE27AAAE7796B /* Products */,
@@ -289,6 +328,7 @@
 			isa = PBXGroup;
 			children = (
 				5379D0CFF1B4BE3E9175B6D1 /* Spin.app */,
+				2C21D9542600473ECAB810F5 /* SpinShareExtension.appex */,
 				E4698ECE0A5FF93A040B5291 /* SpinTests.xctest */,
 				88EC997BEDF2681558457F31 /* SpinUITests.xctest */,
 			);
@@ -298,6 +338,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		543395D8273BCE4392B3EFDD /* SpinShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0D3AB49327DB3E7932092AB /* Build configuration list for PBXNativeTarget "SpinShareExtension" */;
+			buildPhases = (
+				FEEC9976417D12D072D15056 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SpinShareExtension;
+			packageProductDependencies = (
+			);
+			productName = SpinShareExtension;
+			productReference = 2C21D9542600473ECAB810F5 /* SpinShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		6A3727CE31FBB7AB16F74EA2 /* SpinTests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 569AF66956BEFC0D7A4B70E7 /* Build configuration list for PBXNativeTarget "SpinTests" */;
@@ -323,11 +380,13 @@
 				6574B46424269A10B9964311 /* Sources */,
 				9D52833E515154AAA542B929 /* Resources */,
 				192829E854EC275AC67D4FB0 /* Frameworks */,
+				3EE491177A9A327478F216E7 /* Embed Foundation Extensions */,
 				9C9A397C9FB015A8D5BB4CB1 /* Embed Frameworks */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				4B3ACAAF08D09E0881D33390 /* PBXTargetDependency */,
 			);
 			name = Spin;
 			packageProductDependencies = (
@@ -367,6 +426,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1620;
 				TargetAttributes = {
+					543395D8273BCE4392B3EFDD = {
+						DevelopmentTeam = 72P6RBSM9C;
+						ProvisioningStyle = Automatic;
+					};
 					77DA0374B3416EEC25AA99BC = {
 						DevelopmentTeam = 72P6RBSM9C;
 						ProvisioningStyle = Automatic;
@@ -397,6 +460,7 @@
 			projectRoot = "";
 			targets = (
 				77DA0374B3416EEC25AA99BC /* Spin */,
+				543395D8273BCE4392B3EFDD /* SpinShareExtension */,
 				6A3727CE31FBB7AB16F74EA2 /* SpinTests */,
 				ADD116A5CD319106F7F3BC9D /* SpinUITests */,
 			);
@@ -480,6 +544,8 @@
 				0FF0FBCF5AAA35EB8FE6C585 /* ScrollTextView+Pagination.swift in Sources */,
 				DFC5DA7DA543B46EDFFDAEAD /* ScrollTextView.swift in Sources */,
 				3D3B61240264B1470699CFA0 /* SettingsView.swift in Sources */,
+				D7C094ECC30D3A1FBC79C9BE /* ShareImportInbox.swift in Sources */,
+				BA01234567890ABCDEF01234 /* BackgroundArticleImporter.swift in Sources */,
 				0B7CBA310B11C5BB31FC9422 /* SpinApp.swift in Sources */,
 				E9A40FF5626A9FB4BC13F6A9 /* TrackpadSurface.swift in Sources */,
 				745DDCAB063E41875C4C71E6 /* WebArticle.swift in Sources */,
@@ -487,9 +553,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		FEEC9976417D12D072D15056 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6D724996EDA24E0E67F18E82 /* ShareViewController.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		4B3ACAAF08D09E0881D33390 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 543395D8273BCE4392B3EFDD /* SpinShareExtension */;
+			targetProxy = 012F5355A597472F01D3BF7B /* PBXContainerItemProxy */;
+		};
 		6CC1D6E02A43F5E922D7ED03 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 77DA0374B3416EEC25AA99BC /* Spin */;
@@ -507,6 +586,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Spin/Spin.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 72P6RBSM9C;
@@ -516,7 +596,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreader;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.ponder;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -527,6 +607,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = Spin/Spin.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 72P6RBSM9C;
@@ -536,7 +617,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.spinreader;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.ponder;
 				SDKROOT = iphoneos;
 				SWIFT_VERSION = 6.0.3;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -615,6 +696,27 @@
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Spin.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Spin";
 			};
 			name = Release;
+		};
+		649A95D5D5C95F2E8DD64747 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SpinShareExtension/SpinShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72P6RBSM9C;
+				INFOPLIST_FILE = SpinShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Spin Reader";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.ponder.ShareExtension;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0.3;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 		7696426CB16B6D42B79C7A53 /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -730,6 +832,27 @@
 			};
 			name = Release;
 		};
+		F52738A5494DC2FF7B23C01A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = SpinShareExtension/SpinShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 72P6RBSM9C;
+				INFOPLIST_FILE = SpinShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Spin Reader";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.tareqismail.ponder.ShareExtension;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 6.0.3;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -747,6 +870,15 @@
 			buildConfigurations = (
 				7696426CB16B6D42B79C7A53 /* Debug */,
 				ED55CEEA242CC039820FFD1C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C0D3AB49327DB3E7932092AB /* Build configuration list for PBXNativeTarget "SpinShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				649A95D5D5C95F2E8DD64747 /* Debug */,
+				F52738A5494DC2FF7B23C01A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;
