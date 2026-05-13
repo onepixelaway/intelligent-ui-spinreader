@@ -44,6 +44,7 @@ targets:
         ENABLE_TESTABILITY: YES
         DEVELOPMENT_TEAM: 72P6RBSM9C
         CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
         PRODUCT_BUNDLE_IDENTIFIER: com.tareqismail.ponder
         CODE_SIGN_ENTITLEMENTS: Spin/Spin.entitlements
     info:
@@ -75,6 +76,7 @@ targets:
         SWIFT_VERSION: 6.0.3
         DEVELOPMENT_TEAM: 72P6RBSM9C
         CODE_SIGN_STYLE: Automatic
+        CODE_SIGN_IDENTITY: Apple Development
         PRODUCT_BUNDLE_IDENTIFIER: com.tareqismail.ponder.ShareExtension
         CODE_SIGN_ENTITLEMENTS: SpinShareExtension/SpinShareExtension.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: Spin Reader

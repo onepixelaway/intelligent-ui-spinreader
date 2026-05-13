@@ -1,6 +1,73 @@
 import Foundation
 import SwiftUI
+import UIKit
 import WebKit
+
+/// Copy-friendly diagnostics when Share Sheet → app import fails (for bug reports).
+struct ShareImportDiagnostic: Equatable {
+    let sourceURL: URL
+    let loadedPageURL: URL?
+    let underlyingErrorDescription: String
+    let errorTypeName: String
+    let nsErrorDomain: String
+    let nsErrorCode: Int
+
+    init(sourceURL: URL, loadedPageURL: URL?, error: Error) {
+        self.sourceURL = sourceURL
+        self.loadedPageURL = loadedPageURL
+        self.underlyingErrorDescription = error.localizedDescription
+        self.errorTypeName = String(describing: Swift.type(of: error))
+        let ns = error as NSError
+        self.nsErrorDomain = ns.domain
+        self.nsErrorCode = ns.code
+    }
+}
+
+extension ShareImportDiagnostic {
+    /// Short text for alert body.
+    var userVisibleSummary: String {
+        var lines = [underlyingErrorDescription]
+        lines.append("")
+        lines.append("Tap Copy diagnostic report to copy details you can paste into a bug report.")
+        return lines.joined(separator: "\n")
+    }
+
+    /// Multi-line blob for Messages / Cursor / GitHub issue.
+    var clipboardReport: String {
+        let bundle = Bundle.main
+        let short =
+            bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "(unknown)"
+        let build =
+            bundle.infoDictionary?["CFBundleVersion"] as? String ?? "(unknown)"
+
+        let fmt = ISO8601DateFormatter()
+        fmt.formatOptions = [.withInternetDateTime]
+
+        var lines: [String] = [
+            "Spin Reader share/import diagnostic",
+            "Generated (local time): \(fmt.string(from: Date()))",
+            "\(ShareImportDiagnostic.appVersionLine(short: short, build: build))",
+            "OS: \(UIDevice.current.systemName) \(UIDevice.current.systemVersion)",
+            "",
+            "Source URL: \(sourceURL.absoluteString)",
+            "WKWebView URL after load attempt: \(loadedPageURL?.absoluteString ?? "(nil)")",
+            "",
+            "Error type: \(errorTypeName)",
+            "localizedDescription: \(underlyingErrorDescription)",
+        ]
+
+        lines.append("NSError domain: \(nsErrorDomain)")
+        lines.append("NSError code: \(nsErrorCode)")
+
+        lines.append("")
+        lines.append("(End of diagnostic; paste everything above)")
+        return lines.joined(separator: "\n")
+    }
+
+    private static func appVersionLine(short: String, build: String) -> String {
+        "App: \(short) build \(build)"
+    }
+}
 
 @MainActor
 final class BackgroundArticleImporter: NSObject, ObservableObject {
@@ -8,7 +75,7 @@ final class BackgroundArticleImporter: NSObject, ObservableObject {
         case idle
         case importing(progress: Double)
         case success
-        case failure
+        case failure(ShareImportDiagnostic)
     }
 
     @Published var phase: Phase = .idle
@@ -58,7 +125,12 @@ final class BackgroundArticleImporter: NSObject, ObservableObject {
             try await store.save(article)
             phase = .success
         } catch {
-            phase = .failure
+            let diagnostic = ShareImportDiagnostic(
+                sourceURL: url,
+                loadedPageURL: webView.url,
+                error: error
+            )
+            phase = .failure(diagnostic)
         }
 
         cleanup()

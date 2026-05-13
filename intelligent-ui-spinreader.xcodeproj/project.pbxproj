@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 77;
+	objectVersion = 54;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -52,11 +52,11 @@
 		B6531C56E7F53620DF034242 /* ScrollTextView+Highlights.swift in Sources */ = {isa = PBXBuildFile; fileRef = E700A7CF2FF7006E8FE18AFE /* ScrollTextView+Highlights.swift */; };
 		BD529FBF973641B3AA7AFFAC /* CircularReaderButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FA3FF46EF90EA17B85BAC58 /* CircularReaderButton.swift */; };
 		CA7DF7CC3E265CA53357B6D6 /* PasteTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C0930C1F39BF29BAD51EB /* PasteTextView.swift */; };
+		CD5B48FB961743327AD10389 /* BackgroundArticleImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9782143EEA3BF0F1332FA651 /* BackgroundArticleImporter.swift */; };
 		D1DE22B93465E527BF6E269E /* KokoroModelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC0A85E80C5FB8D44CF46D49 /* KokoroModelManager.swift */; };
 		D6E62A17CE2F4DF65053087E /* ScrollTextView+Analysis.swift in Sources */ = {isa = PBXBuildFile; fileRef = 31D63BC5A3B0EBAD515446C8 /* ScrollTextView+Analysis.swift */; };
 		D7164D53BD9E535AF1349312 /* BrowserView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 428A5E9F86C5B23D0F561258 /* BrowserView.swift */; };
 		D7C094ECC30D3A1FBC79C9BE /* ShareImportInbox.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE7B170E85927B4CFA359516 /* ShareImportInbox.swift */; };
-		BA01234567890ABCDEF01234 /* BackgroundArticleImporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA0FEDCBA9876543210FEDCB /* BackgroundArticleImporter.swift */; };
 		DFC5DA7DA543B46EDFFDAEAD /* ScrollTextView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD95C47247F9A942E420D6A3 /* ScrollTextView.swift */; };
 		E9A40FF5626A9FB4BC13F6A9 /* TrackpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = A87BCCC8BD100C4230F823EF /* TrackpadSurface.swift */; };
 		F214942FD7EDC02E62BA74ED /* voices.npz in Resources */ = {isa = PBXBuildFile; fileRef = 79C757C174C85CC26D561DFD /* voices.npz */; };
@@ -154,6 +154,7 @@
 		88EC997BEDF2681558457F31 /* SpinUITests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = SpinUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		8A98CD6C3F8B0DBFC2670BD3 /* ReadableItem+Classification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ReadableItem+Classification.swift"; sourceTree = "<group>"; };
 		96839001ED8847AB3E31287E /* PanelActionsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelActionsSettingsView.swift; sourceTree = "<group>"; };
+		9782143EEA3BF0F1332FA651 /* BackgroundArticleImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundArticleImporter.swift; sourceTree = "<group>"; };
 		9890C234F5B38111DBBA0AE5 /* ReaderSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReaderSettings.swift; sourceTree = "<group>"; };
 		9965582666A149C761267CDE /* ScrollInputViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollInputViews.swift; sourceTree = "<group>"; };
 		9EC98AFB877549811CD73826 /* EpubParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubParser.swift; sourceTree = "<group>"; };
@@ -162,7 +163,6 @@
 		A9F9EDFD087441380ACB497E /* EpubLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpubLibraryView.swift; sourceTree = "<group>"; };
 		AE6230E51A9B4BFB88212B85 /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
 		AE7B170E85927B4CFA359516 /* ShareImportInbox.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareImportInbox.swift; sourceTree = "<group>"; };
-		BA0FEDCBA9876543210FEDCB /* BackgroundArticleImporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundArticleImporter.swift; sourceTree = "<group>"; };
 		B8C2821EE55C5AD6773ED71C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		BB7FB5F5E3BDAB6C10CBC24A /* Paginator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Paginator.swift; sourceTree = "<group>"; };
 		BDF935D8A4DCF55959D3DF36 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
@@ -205,20 +205,12 @@
 			path = "Preview Content";
 			sourceTree = "<group>";
 		};
-		1C3E5663CCA630D45763DA24 /* KokoroTTS */ = {
-			isa = PBXGroup;
-			children = (
-			);
-			path = KokoroTTS;
-			sourceTree = "<group>";
-		};
 		3AE181C481C1863CB7148DCB /* Resources */ = {
 			isa = PBXGroup;
 			children = (
 				C80906963464D9A5584A9C14 /* ReadabilitySanitized.js */,
 				1E5CAA4D526A26418C07CB5A /* UXTeamofOne.epub */,
 				79C757C174C85CC26D561DFD /* voices.npz */,
-				1C3E5663CCA630D45763DA24 /* KokoroTTS */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -258,6 +250,7 @@
 			children = (
 				244CC314B9E59A9C97420A20 /* AppDelegate.swift */,
 				B8C2821EE55C5AD6773ED71C /* Assets.xcassets */,
+				9782143EEA3BF0F1332FA651 /* BackgroundArticleImporter.swift */,
 				428A5E9F86C5B23D0F561258 /* BrowserView.swift */,
 				16C5E5F3D7E21E592A851242 /* Config.swift */,
 				D4640923A2F464C7435628CE /* EmojiColorExtractor.swift */,
@@ -292,7 +285,6 @@
 				40C85DCFECDF1DB621AD739E /* ScrollTextView+Pagination.swift */,
 				824245CC5F13EACD7CFCB8F8 /* SettingsView.swift */,
 				AE7B170E85927B4CFA359516 /* ShareImportInbox.swift */,
-				BA0FEDCBA9876543210FEDCB /* BackgroundArticleImporter.swift */,
 				ECA98E616EBA4C903F570570 /* Spin.entitlements */,
 				1E6DBEF2C370158A139D205E /* SpinApp.swift */,
 				EB5B4B3142548203F05FB763 /* WebArticle.swift */,
@@ -349,8 +341,6 @@
 			dependencies = (
 			);
 			name = SpinShareExtension;
-			packageProductDependencies = (
-			);
 			productName = SpinShareExtension;
 			productReference = 2C21D9542600473ECAB810F5 /* SpinShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -367,8 +357,6 @@
 				6CC1D6E02A43F5E922D7ED03 /* PBXTargetDependency */,
 			);
 			name = SpinTests;
-			packageProductDependencies = (
-			);
 			productName = SpinTests;
 			productReference = E4698ECE0A5FF93A040B5291 /* SpinTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -411,8 +399,6 @@
 				F849B12023AE2380F0CA037A /* PBXTargetDependency */,
 			);
 			name = SpinUITests;
-			packageProductDependencies = (
-			);
 			productName = SpinUITests;
 			productReference = 88EC997BEDF2681558457F31 /* SpinUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -440,6 +426,7 @@
 				};
 			};
 			buildConfigurationList = E44DDBF95332A980FFDFC3EA /* Build configuration list for PBXProject "intelligent-ui-spinreader" */;
+			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -447,15 +434,12 @@
 				en,
 			);
 			mainGroup = E535285C9A6207D7264C9A0E;
-			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				28F1A23BA2094EA27E1F6E24 /* XCRemoteSwiftPackageReference "kokoro-ios" */,
 				2208CDB6FC58EA96E89944B0 /* XCRemoteSwiftPackageReference "MLXUtilsLibrary" */,
 				8D882C1D384CEAD969C8C90C /* XCRemoteSwiftPackageReference "OpenAI" */,
 				EBE3D92551CB31D49C88EB2C /* XCRemoteSwiftPackageReference "mlx-swift" */,
 			);
-			preferredProjectObjectVersion = 77;
-			productRefGroup = F09D4FC3231AE27AAAE7796B /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -506,6 +490,7 @@
 			files = (
 				FF5496F6CDEB3D5355CFDA96 /* ActionPill.swift in Sources */,
 				04C3910CBE1B91E63E7ED7A2 /* AppDelegate.swift in Sources */,
+				CD5B48FB961743327AD10389 /* BackgroundArticleImporter.swift in Sources */,
 				D7164D53BD9E535AF1349312 /* BrowserView.swift in Sources */,
 				BD529FBF973641B3AA7AFFAC /* CircularReaderButton.swift in Sources */,
 				4164ABF4568234949AD132AF /* Config.swift in Sources */,
@@ -545,7 +530,6 @@
 				DFC5DA7DA543B46EDFFDAEAD /* ScrollTextView.swift in Sources */,
 				3D3B61240264B1470699CFA0 /* SettingsView.swift in Sources */,
 				D7C094ECC30D3A1FBC79C9BE /* ShareImportInbox.swift in Sources */,
-				BA01234567890ABCDEF01234 /* BackgroundArticleImporter.swift in Sources */,
 				0B7CBA310B11C5BB31FC9422 /* SpinApp.swift in Sources */,
 				E9A40FF5626A9FB4BC13F6A9 /* TrackpadSurface.swift in Sources */,
 				745DDCAB063E41875C4C71E6 /* WebArticle.swift in Sources */,
@@ -587,7 +571,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Spin/Spin.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 72P6RBSM9C;
 				ENABLE_TESTABILITY = YES;
@@ -608,7 +592,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = Spin/Spin.entitlements;
-				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 72P6RBSM9C;
 				ENABLE_TESTABILITY = YES;
@@ -701,6 +685,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = SpinShareExtension/SpinShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 72P6RBSM9C;
 				INFOPLIST_FILE = SpinShareExtension/Info.plist;
@@ -836,6 +821,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = SpinShareExtension/SpinShareExtension.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 72P6RBSM9C;
 				INFOPLIST_FILE = SpinShareExtension/Info.plist;

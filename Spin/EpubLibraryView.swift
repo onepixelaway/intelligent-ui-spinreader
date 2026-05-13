@@ -13,6 +13,7 @@ struct EpubLibraryView: View {
     @State private var showBrowser = false
     @State private var showPasteText = false
     @State private var errorMessage: String?
+    @State private var shareImportDiagnostic: ShareImportDiagnostic?
     @State private var isImportingArticle = false
     @State private var isJiggling = false
     @State private var bookPendingDeletion: EpubBook?
@@ -177,6 +178,23 @@ struct EpubLibraryView: View {
                 }
             )
             .alert(
+                "Couldn't import article",
+                isPresented: shareImportDiagnosticBinding,
+                actions: {
+                    Button("Copy diagnostic report") {
+                        if let shareImportDiagnostic {
+                            UIPasteboard.general.string = shareImportDiagnostic.clipboardReport
+                        }
+                    }
+                    Button("OK", role: .cancel) {
+                        shareImportDiagnostic = nil
+                    }
+                },
+                message: {
+                    Text(shareImportDiagnostic?.userVisibleSummary ?? "")
+                }
+            )
+            .alert(
                 bookPendingDeletion.map { "Delete \"\($0.title)\"?" } ?? "Delete book?",
                 isPresented: deleteAlertBinding,
                 presenting: bookPendingDeletion
@@ -207,6 +225,11 @@ struct EpubLibraryView: View {
             shareInbox.clear()
             Task { await backgroundImporter.importArticle(from: url, into: articleStore) }
         }
+        .onChange(of: backgroundImporter.phase) { _, phase in
+            if case .failure(let diagnostic) = phase {
+                shareImportDiagnostic = diagnostic
+            }
+        }
     }
 
     @ViewBuilder
@@ -236,6 +259,13 @@ struct EpubLibraryView: View {
         Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
+        )
+    }
+
+    private var shareImportDiagnosticBinding: Binding<Bool> {
+        Binding(
+            get: { shareImportDiagnostic != nil },
+            set: { if !$0 { shareImportDiagnostic = nil } }
         )
     }
 
@@ -747,7 +777,7 @@ private struct ImportToast: View {
                     .frame(width: 16, height: 16)
             }
         case .failure:
-            pillBody(label: "Couldn't import article", progress: nil) {
+            pillBody(label: "Couldn't import (see alert)", progress: nil) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(.white.opacity(0.85))
