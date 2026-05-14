@@ -35,6 +35,39 @@ struct WebArticle: Identifiable, Hashable, Sendable, Codable {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         return docs.appendingPathComponent(coverImagePath)
     }
+
+    /// First `http`/`https` image from readable content (for library hero when no saved cover).
+    var firstRemotePreviewImageURL: URL? {
+        for item in items {
+            if case .image(let url, _, _) = item,
+               url.scheme == "http" || url.scheme == "https" { return url }
+        }
+        return nil
+    }
+
+    /// Plain-text snippet from early paragraphs for list previews.
+    var previewSnippet: String {
+        var chunks: [String] = []
+        var total = 0
+        let maxChars = 240
+        outer: for item in items {
+            let text: String?
+            switch item {
+            case .paragraph(let t): text = t
+            case .paragraphWithFootnotes(let t, _): text = t
+            case .richParagraph(let rich): text = rich.attributedString.string
+            default: text = nil
+            }
+            guard let t = text?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { continue }
+            chunks.append(t)
+            total += t.count
+            if total >= maxChars { break outer }
+        }
+        let joined = chunks.joined(separator: " ")
+        guard joined.count > maxChars else { return joined }
+        let end = joined.index(joined.startIndex, offsetBy: maxChars)
+        return String(joined[..<end]) + "…"
+    }
 }
 
 @MainActor

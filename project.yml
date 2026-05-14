@@ -51,7 +51,7 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
+        CFBundleVersion: "16"
         UIBackgroundModes:
           - audio
         UILaunchStoryboardName: LaunchScreen
@@ -84,7 +84,7 @@ targets:
       path: SpinShareExtension/Info.plist
       properties:
         CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
+        CFBundleVersion: "16"
         CFBundleDisplayName: Spin Reader
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
