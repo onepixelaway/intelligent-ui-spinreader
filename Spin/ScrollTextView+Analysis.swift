@@ -207,14 +207,10 @@ extension ScrollTextView {
             let openAI = OpenAI(apiToken: key)
             let prompt = "Find a short 5-10 word question you may have based on the following text: \(text)"
 
-            let userMessage = ChatQuery.ChatCompletionMessageParam.ChatCompletionUserMessageParam(
-                content: .string(prompt),
-                name: nil
-            )
-            let message = ChatQuery.ChatCompletionMessageParam.user(userMessage)
+            let message = ChatQuery.ChatCompletionMessageParam.user(.init(content: .string(prompt)))
             let query = ChatQuery(messages: [message], model: .gpt3_5Turbo)
             let result = try await openAI.chats(query: query)
-            questionText = result.choices.first?.message.content?.string
+            questionText = result.choices.first?.message.content
         } catch is CancellationError {
         } catch {
             print("Failed to perform OpenAI query: \(error.localizedDescription)")
