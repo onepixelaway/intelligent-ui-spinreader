@@ -61,6 +61,7 @@
 		E9A40FF5626A9FB4BC13F6A9 /* TrackpadSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = A87BCCC8BD100C4230F823EF /* TrackpadSurface.swift */; };
 		F214942FD7EDC02E62BA74ED /* voices.npz in Resources */ = {isa = PBXBuildFile; fileRef = 79C757C174C85CC26D561DFD /* voices.npz */; };
 		F2B26A4D534154D490750E03 /* ScrollState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E8B463DE1593C722957A035 /* ScrollState.swift */; };
+		F4252D358B1BFBDC8DC8C438 /* XBookmarksSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2929CAA470142EF6FC4852F4 /* XBookmarksSync.swift */; };
 		F62F73300990A3E10BB7ECB7 /* GesturesSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38EE546C017635A71B6AF744 /* GesturesSettingsView.swift */; };
 		F83589C8749C2020027AD0DD /* Preview Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 60954BBD2DD7CE2BAE639828 /* Preview Assets.xcassets */; };
 		F8FFCCED2F28AA90380CBF58 /* ControlPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DF9AEE3F3F5F968AF732828 /* ControlPanel.swift */; };
@@ -132,6 +133,7 @@
 		244CC314B9E59A9C97420A20 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		26EF7A685AF5D8A97408288B /* KokoroDownloadSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KokoroDownloadSheet.swift; sourceTree = "<group>"; };
 		280B8B3DC648705C646B316F /* SpinUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpinUITestsLaunchTests.swift; sourceTree = "<group>"; };
+		2929CAA470142EF6FC4852F4 /* XBookmarksSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = XBookmarksSync.swift; sourceTree = "<group>"; };
 		2C21D9542600473ECAB810F5 /* SpinShareExtension.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = SpinShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		31D63BC5A3B0EBAD515446C8 /* ScrollTextView+Analysis.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScrollTextView+Analysis.swift"; sourceTree = "<group>"; };
 		38EE546C017635A71B6AF744 /* GesturesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GesturesSettingsView.swift; sourceTree = "<group>"; };
@@ -289,6 +291,7 @@
 				1E6DBEF2C370158A139D205E /* SpinApp.swift */,
 				EB5B4B3142548203F05FB763 /* WebArticle.swift */,
 				7E637E8AF81824F91E4AECC1 /* WebArticleExtractor.swift */,
+				2929CAA470142EF6FC4852F4 /* XBookmarksSync.swift */,
 				73A96AC97C915EB3E44A0F60 /* Controls */,
 				0DD146B77B67F44A203920F7 /* Preview Content */,
 				3AE181C481C1863CB7148DCB /* Resources */,
@@ -534,6 +537,7 @@
 				E9A40FF5626A9FB4BC13F6A9 /* TrackpadSurface.swift in Sources */,
 				745DDCAB063E41875C4C71E6 /* WebArticle.swift in Sources */,
 				1FE8CCFD66F80A69AEF138CF /* WebArticleExtractor.swift in Sources */,
+				F4252D358B1BFBDC8DC8C438 /* XBookmarksSync.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

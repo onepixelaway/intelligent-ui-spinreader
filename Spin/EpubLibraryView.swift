@@ -228,7 +228,7 @@ struct EpubLibraryView: View {
                     .accessibilityLabel("Search")
 
                     NavigationLink {
-                        SettingsView()
+                        SettingsView(articleStore: articleStore)
                     } label: {
                         LibraryIconButtonImage(systemName: "gearshape")
                     }

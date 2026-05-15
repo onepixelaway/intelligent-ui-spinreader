@@ -86,6 +86,28 @@ final class BackgroundArticleImporter: NSObject, ObservableObject {
     private var isAwaitingNavigation: Bool = false
     private var dismissTask: Task<Void, Never>?
 
+    static func loadArticle(from url: URL) async throws -> WebArticle {
+        let config = WKWebViewConfiguration()
+        config.defaultWebpagePreferences.allowsContentJavaScript = true
+        config.allowsInlineMediaPlayback = true
+        let webView = WKWebView(
+            frame: CGRect(x: 0, y: 0, width: 375, height: 812),
+            configuration: config
+        )
+        let navigator = ArticleImportNavigator(webView: webView)
+        webView.customUserAgent = WebUserAgent.safari
+        webView.navigationDelegate = navigator
+        defer {
+            webView.stopLoading()
+            webView.navigationDelegate = nil
+            navigator.invalidate()
+        }
+
+        navigator.load(url)
+        await navigator.waitForNavigation(timeout: 5.0)
+        return try await extractArticle(from: webView, sourceURL: url)
+    }
+
     func importArticle(from url: URL, into store: WebArticleStore) async {
         dismissTask?.cancel()
         dismissTask = nil
@@ -183,6 +205,56 @@ final class BackgroundArticleImporter: NSObject, ObservableObject {
         webView = nil
         progressObservation?.invalidate()
         progressObservation = nil
+    }
+}
+
+@MainActor
+private final class ArticleImportNavigator: NSObject, WKNavigationDelegate {
+    private let webView: WKWebView
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isAwaitingNavigation = false
+
+    init(webView: WKWebView) {
+        self.webView = webView
+    }
+
+    func load(_ url: URL) {
+        isAwaitingNavigation = true
+        webView.load(URLRequest(url: url))
+    }
+
+    func waitForNavigation(timeout: TimeInterval) async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            continuation = cont
+            Task { [weak self] in
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                await MainActor.run { self?.resumeNavigation() }
+            }
+        }
+    }
+
+    func invalidate() {
+        resumeNavigation()
+    }
+
+    private func resumeNavigation() {
+        guard isAwaitingNavigation else { return }
+        isAwaitingNavigation = false
+        let cont = continuation
+        continuation = nil
+        cont?.resume()
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Task { @MainActor [weak self] in self?.resumeNavigation() }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        Task { @MainActor [weak self] in self?.resumeNavigation() }
+    }
+
+    nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        Task { @MainActor [weak self] in self?.resumeNavigation() }
     }
 }
 

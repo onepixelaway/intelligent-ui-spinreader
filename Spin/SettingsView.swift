@@ -57,6 +57,8 @@ func settingsSelectableRow<Content: View>(
 // MARK: - Settings Hub
 
 struct SettingsView: View {
+    @ObservedObject var articleStore: WebArticleStore
+
     var body: some View {
         List {
             Section {
@@ -90,6 +92,12 @@ struct SettingsView: View {
                     title: "AI Actions",
                     destination: PanelActionsSettingsView()
                 )
+                settingsCategory(
+                    icon: "bookmark",
+                    iconColor: .black,
+                    title: "X Bookmarks",
+                    destination: XBookmarksSettingsView(articleStore: articleStore)
+                )
             }
         }
         .listStyle(.insetGrouped)
@@ -121,6 +129,163 @@ struct SettingsView: View {
                 Spacer()
             }
             .contentShape(Rectangle())
+        }
+    }
+}
+
+// MARK: - X Bookmarks Settings
+
+struct XBookmarksSettingsView: View {
+    @ObservedObject var articleStore: WebArticleStore
+    @StateObject private var syncManager = XBookmarksSyncManager()
+    @State private var showDisconnectConfirmation = false
+
+    var body: some View {
+        List {
+            accountSection
+            syncSection
+            developerSection
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.automatic)
+        .navigationTitle("X Bookmarks")
+        .navigationBarTitleDisplayMode(.automatic)
+        .confirmationDialog(
+            "Disconnect X?",
+            isPresented: $showDisconnectConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Disconnect", role: .destructive) {
+                syncManager.disconnect()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Your saved articles stay in Ponder. Only the X connection is removed.")
+        }
+        .alert("X Bookmarks", isPresented: Binding(
+            get: { syncManager.errorMessage != nil },
+            set: { if !$0 { syncManager.errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(syncManager.errorMessage ?? "")
+        }
+    }
+
+    private var accountSection: some View {
+        Section {
+            if syncManager.isConnected {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(syncManager.displayName.isEmpty ? "Connected" : syncManager.displayName)
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                        if !syncManager.username.isEmpty {
+                            Text("@\(syncManager.username)")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                }
+
+                Button(role: .destructive) {
+                    showDisconnectConfirmation = true
+                } label: {
+                    HStack {
+                        Image(systemName: "xmark.circle")
+                        Text("Disconnect X")
+                    }
+                }
+                .disabled(syncManager.isWorking)
+            } else {
+                Button {
+                    Task { await syncManager.connect() }
+                } label: {
+                    HStack {
+                        Image(systemName: "person.crop.circle.badge.plus")
+                        Text(syncManager.isWorking ? "Connecting..." : "Connect X")
+                        Spacer()
+                        if syncManager.isWorking {
+                            ProgressView()
+                        }
+                    }
+                }
+                .disabled(syncManager.isWorking || XBookmarksConfig.oauthClientID.isEmpty)
+            }
+        } header: {
+            Text("Account")
+        } footer: {
+            Text("Spin asks X for read-only bookmark access and stores the sign-in token in the device keychain.")
+        }
+    }
+
+    private var syncSection: some View {
+        Section {
+            Button {
+                Task { await syncManager.syncBookmarks(into: articleStore) }
+            } label: {
+                HStack {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text(syncManager.isWorking ? "Syncing..." : "Sync Bookmarks")
+                    Spacer()
+                    if syncManager.isWorking {
+                        ProgressView()
+                    }
+                }
+            }
+            .disabled(!syncManager.isConnected || syncManager.isWorking)
+
+            if !syncManager.progressText.isEmpty {
+                Text(syncManager.progressText)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            if !syncManager.lastSummary.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Last Sync")
+                        .font(.footnote.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(syncManager.lastSummary.statusLine)
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                }
+                .padding(.vertical, 2)
+            }
+        } header: {
+            Text("Sync")
+        } footer: {
+            Text("Linked bookmarks are saved as readable articles. Bookmarks without a link are saved as readable post snapshots.")
+        }
+    }
+
+    private var developerSection: some View {
+        Section {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("OAuth callback URL")
+                        .font(.body)
+                        .foregroundStyle(.primary)
+                    Text(XBookmarksConfig.redirectURI)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = XBookmarksConfig.redirectURI
+                } label: {
+                    Image(systemName: "doc.on.doc")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Copy callback URL")
+            }
+        } header: {
+            Text("X Developer App")
+        } footer: {
+            Text("Register this URL under your X app’s OAuth 2.0 settings. The Client ID is embedded in the app (Info.plist key XOAuthClientID).")
         }
     }
 }

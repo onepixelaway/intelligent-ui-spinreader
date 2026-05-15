@@ -61,6 +61,8 @@ targets:
           - CFBundleURLName: com.tareqismail.ponder
             CFBundleURLSchemes:
               - spinreader
+        # OAuth 2.0 public client ID (PKCE). Paste from X Developer Portal User auth settings.
+        XOAuthClientID: "QXptdFJFQVc0ZnhWc3lIQTFoYXo6MTpjaQ"
 
   SpinShareExtension:
     type: app-extension
