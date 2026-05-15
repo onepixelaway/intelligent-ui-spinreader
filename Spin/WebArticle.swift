@@ -111,6 +111,13 @@ final class WebArticleStore: ObservableObject {
         articles = loaded.sorted(by: byRecency)
     }
 
+    func containsArticle(sourceURL: URL) -> Bool {
+        let target = sourceURL.normalizedArticleURLString
+        return articles.contains { article in
+            article.sourceURL?.normalizedArticleURLString == target
+        }
+    }
+
     func save(_ article: WebArticle) async throws {
         let dir = directory
         try await Task.detached {
@@ -138,6 +145,22 @@ final class WebArticleStore: ObservableObject {
 }
 
 private func byRecency(_ a: WebArticle, _ b: WebArticle) -> Bool { a.savedAt > b.savedAt }
+
+private extension URL {
+    var normalizedArticleURLString: String {
+        guard var components = URLComponents(url: self, resolvingAgainstBaseURL: false) else {
+            return absoluteString
+        }
+        components.scheme = components.scheme?.lowercased()
+        components.host = components.host?.lowercased()
+        if components.path.count > 1 {
+            components.path = components.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            components.path = "/" + components.path
+        }
+        components.fragment = nil
+        return components.url?.absoluteString ?? absoluteString
+    }
+}
 
 private func makeArticleDecoder() -> JSONDecoder {
     let decoder = JSONDecoder()

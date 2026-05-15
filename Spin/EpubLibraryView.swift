@@ -15,6 +15,7 @@ struct EpubLibraryView: View {
     @State private var errorMessage: String?
     @State private var shareImportDiagnostic: ShareImportDiagnostic?
     @State private var isImportingArticle = false
+    @State private var isHandlingSharedArticleImport = false
     @State private var isJiggling = false
     @State private var bookPendingDeletion: EpubBook?
     @State private var navigationPath = NavigationPath()
@@ -22,6 +23,8 @@ struct EpubLibraryView: View {
     private static func articleBookID(_ article: WebArticle) -> String {
         "article:\(article.id.uuidString)"
     }
+
+    private static let sampleArticleURL = URL(string: "https://sfalexandria.com/posts/farzas-creations/")!
 
     /// Any books or saved articles (placeholders alone do not count).
     private var hasLibraryContent: Bool {
@@ -35,37 +38,16 @@ struct EpubLibraryView: View {
     var body: some View {
         NavigationStack(path: $navigationPath) {
             ZStack {
-                Color.black.ignoresSafeArea()
+                LibraryTheme.appBackground.ignoresSafeArea()
 
                 if library.isLoading && !hasLibraryContent {
                     ProgressView()
                         .tint(.white.opacity(0.6))
-                } else if !hasLibraryContent {
-                    emptyState
                 } else {
                     libraryScrollContent
-                        .overlay(alignment: .bottomTrailing) {
-                            if !isJiggling {
-                                addMenu {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 24, weight: .semibold))
-                                        .foregroundColor(.black)
-                                        .frame(width: 56, height: 56)
-                                        .background(Color.white)
-                                        .clipShape(Circle())
-                                        .shadow(color: .black.opacity(0.35), radius: 8, x: 0, y: 4)
-                                }
-                                .padding(.bottom, 32)
-                                .padding(.trailing, 24)
-                                .transition(.opacity)
-                            }
-                        }
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                libraryHeader
-            }
             .navigationDestination(for: EpubBook.self) { book in
                 ChapterListView(book: book)
             }
@@ -177,39 +159,21 @@ struct EpubLibraryView: View {
             if articleStore.articles.isEmpty {
                 await articleStore.loadFromDisk()
             }
+            await seedSampleArticleIfNeeded()
         }
         .onChange(of: shareInbox.pendingURL, initial: true) { _, url in
             guard let url else { return }
             shareInbox.clear()
-            Task { await backgroundImporter.importArticle(from: url, into: articleStore) }
+            isHandlingSharedArticleImport = true
+            Task { @MainActor in
+                await backgroundImporter.importArticle(from: url, into: articleStore)
+                isHandlingSharedArticleImport = false
+            }
         }
         .onChange(of: backgroundImporter.phase) { _, phase in
             if case .failure(let diagnostic) = phase {
                 shareImportDiagnostic = diagnostic
             }
-        }
-    }
-
-    @ViewBuilder
-    private func addMenu<TriggerLabel: View>(@ViewBuilder label: () -> TriggerLabel) -> some View {
-        Menu {
-            Button {
-                showBrowser = true
-            } label: {
-                Label("Save from the web", systemImage: "globe")
-            }
-            Button {
-                showPasteText = true
-            } label: {
-                Label("Paste Text", systemImage: "doc.on.clipboard")
-            }
-            Button {
-                showImporter = true
-            } label: {
-                Label("Import ePub file", systemImage: "doc")
-            }
-        } label: {
-            label()
         }
     }
 
@@ -234,38 +198,11 @@ struct EpubLibraryView: View {
         )
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "books.vertical")
-                .font(.system(size: 48, weight: .light))
-                .foregroundColor(.gray.opacity(0.4))
-            Text("Build your library")
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(.white.opacity(0.85))
-            Text("Save articles from the web or import an .epub file to start reading.")
-                .font(.system(size: 14))
-                .foregroundColor(.gray.opacity(0.6))
-                .multilineTextAlignment(.center)
-
-            addMenu {
-                Text("Add a book")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.black)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Color.white)
-                    .clipShape(Capsule())
-            }
-            .padding(.top, 8)
-        }
-        .padding(.horizontal, 32)
-    }
-
     private var libraryHeader: some View {
         HStack(alignment: .center) {
             Text("Ponder")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(.white.opacity(0.9))
+                .font(LibraryTheme.appTitleFont)
+                .foregroundColor(.white)
             Spacer(minLength: 12)
             if isJiggling {
                 Button {
@@ -274,38 +211,50 @@ struct EpubLibraryView: View {
                     Text("Done")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
+                        .frame(height: LibraryLayout.iconButtonSize)
+                        .padding(.horizontal, 18)
+                        .background(
+                            Capsule()
+                                .stroke(LibraryTheme.iconButtonBorder, lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
             } else {
-                NavigationLink {
-                    SettingsView()
-                } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 18, weight: .regular))
-                        .foregroundColor(.white.opacity(0.7))
+                HStack(spacing: 12) {
+                    Button {} label: {
+                        LibraryIconButtonImage(systemName: "magnifyingglass")
+                    }
+                    .buttonStyle(LibraryIconButtonStyle())
+                    .accessibilityLabel("Search")
+
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        LibraryIconButtonImage(systemName: "gearshape")
+                    }
+                    .buttonStyle(LibraryIconButtonStyle())
+                    .accessibilityLabel("Settings")
                 }
-                .buttonStyle(.plain)
             }
         }
         .padding(.horizontal, LibraryLayout.gutter)
-        .padding(.top, 4)
-        .padding(.bottom, 8)
-        .background(Color.black)
     }
 
     private var libraryScrollContent: some View {
         GeometryReader { proxy in
             let screenWidth = proxy.size.width
-            let cardWidth = max(0, screenWidth - LibraryLayout.gutter * 2)
             ScrollView {
-                VStack(alignment: .leading, spacing: 28) {
-                    booksCarouselSection
-                    articlesStackSection(cardWidth: cardWidth)
+                VStack(alignment: .leading, spacing: 32) {
+                    libraryHeader
+                    addNewSection
+                    booksCarouselSection(screenWidth: screenWidth)
+                    articlesStackSection
                 }
-                .padding(.top, 8)
+                .padding(.top, 24)
                 .padding(.bottom, 32)
                 .frame(width: screenWidth, alignment: .leading)
             }
+            .scrollIndicators(.hidden)
             .background(
                 Color.clear
                     .contentShape(Rectangle())
@@ -318,33 +267,62 @@ struct EpubLibraryView: View {
         }
     }
 
-    private var booksCarouselSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
+    private var addNewSection: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            sectionHeader("Add new")
+
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 3),
+                alignment: .center,
+                spacing: 10
+            ) {
+                ActionTile(title: "Write\ntext", systemImage: "textformat") {
+                    showPasteText = true
+                }
+                ActionTile(title: "Upload\na file", systemImage: "book") {
+                    showImporter = true
+                }
+                ActionTile(title: "Paste\na link", systemImage: "globe") {
+                    showBrowser = true
+                }
+            }
+            .padding(.horizontal, LibraryLayout.gutter)
+        }
+    }
+
+    private func booksCarouselSection(screenWidth: CGFloat) -> some View {
+        let cardWidth = max(280, screenWidth * LibraryLayout.bookCarouselWidthRatio)
+
+        return VStack(alignment: .leading, spacing: 14) {
             sectionHeader("Books")
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(alignment: .top, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
                     ForEach(Array(library.books.enumerated()), id: \.element.id) { index, book in
-                        bookCarouselCell(book: book, index: index)
+                        bookCarouselCell(book: book, index: index, cardWidth: cardWidth)
                     }
                     ForEach(0..<bookCarouselPlaceholderCount, id: \.self) { slot in
                         BookCarouselPlaceholder()
+                            .frame(width: cardWidth, height: LibraryLayout.bookCardHeight)
                             .id("placeholder-\(slot)")
                     }
                 }
-                .padding(.horizontal, LibraryLayout.gutter)
+                .scrollTargetLayout()
+                .padding(.leading, LibraryLayout.bookScrollerLeading)
+                .padding(.trailing, LibraryLayout.gutter)
             }
+            .scrollTargetBehavior(.viewAligned)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     @ViewBuilder
-    private func articlesStackSection(cardWidth: CGFloat) -> some View {
+    private var articlesStackSection: some View {
         if !articleStore.articles.isEmpty {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 14) {
                 sectionHeader("Articles")
-                VStack(spacing: 18) {
+                LazyVStack(spacing: 24) {
                     ForEach(Array(articleStore.articles.enumerated()), id: \.element.id) { index, article in
-                        articleRowCell(article: article, index: index, cardWidth: cardWidth)
+                        articleRowCell(article: article, index: index)
                     }
                 }
                 .padding(.horizontal, LibraryLayout.gutter)
@@ -354,15 +332,16 @@ struct EpubLibraryView: View {
 
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 17, weight: .semibold))
+            .font(LibraryTheme.sectionHeadingFont)
             .foregroundColor(.white)
             .padding(.horizontal, LibraryLayout.gutter)
     }
 
     @ViewBuilder
-    private func bookCarouselCell(book: EpubBook, index: Int) -> some View {
+    private func bookCarouselCell(book: EpubBook, index: Int, cardWidth: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
             BookCarouselCard(book: book)
+                .frame(width: cardWidth, height: LibraryLayout.bookCardHeight)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if !isJiggling {
@@ -389,9 +368,9 @@ struct EpubLibraryView: View {
     }
 
     @ViewBuilder
-    private func articleRowCell(article: WebArticle, index: Int, cardWidth: CGFloat) -> some View {
+    private func articleRowCell(article: WebArticle, index: Int) -> some View {
         ZStack(alignment: .topLeading) {
-            ArticlePreviewCard(article: article, width: cardWidth)
+            ArticlePreviewCard(article: article)
                 .contentShape(Rectangle())
                 .onTapGesture {
                     if !isJiggling {
@@ -486,6 +465,14 @@ struct EpubLibraryView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    @MainActor
+    private func seedSampleArticleIfNeeded() async {
+        guard shareInbox.pendingURL == nil else { return }
+        guard !isHandlingSharedArticleImport else { return }
+        guard !articleStore.containsArticle(sourceURL: Self.sampleArticleURL) else { return }
+        await backgroundImporter.importArticle(from: Self.sampleArticleURL, into: articleStore)
+    }
 }
 
 private struct JiggleModifier: ViewModifier {
@@ -519,37 +506,148 @@ private struct JiggleModifier: ViewModifier {
 
 private enum LibraryLayout {
     static let gutter: CGFloat = 24
-    static let bookCarouselCardWidth: CGFloat = 150
-    static let articleHeroAspect: CGFloat = 2.2
-    static let articleCornerRadius: CGFloat = 14
+    static let bookScrollerLeading: CGFloat = 12
+    static let bookCarouselWidthRatio: CGFloat = 0.78
+    static let bookCardHeight: CGFloat = 120
+    static let bookCoverWidth: CGFloat = 88
+    static let actionTileHeight: CGFloat = 84
+    static let iconButtonSize: CGFloat = 44
+    static let articleHeroHeight: CGFloat = 160
+    static let cornerRadius: CGFloat = 16
+}
+
+private enum LibraryTheme {
+    static let appBackground = Color(hex: 0x0A0A0A)
+    static let cardSurface = Color(hex: 0x18181B).opacity(0.4)
+    static let tileSurface = Color(hex: 0x27272A).opacity(0.6)
+    static let iconButtonBorder = Color(hex: 0x3F3F46).opacity(0.8)
+    static let textSecondary = Color(hex: 0xA1A1AA)
+    static let accentByline = Color(hex: 0xFDE68A).opacity(0.8)
+    static let articleSurface = Color(hex: 0x2A241C)
+
+    static let appTitleFont = Font.system(size: 34, weight: .bold)
+    static let sectionHeadingFont = Font.system(size: 22, weight: .bold)
+    static let cardTitleFont = Font.system(size: 17, weight: .semibold)
+    static let articleTitleFont = Font.system(size: 18, weight: .semibold)
+    static let captionFont = Font.system(size: 13, weight: .medium)
+}
+
+private extension Color {
+    init(hex: UInt32) {
+        self.init(
+            red: Double((hex >> 16) & 0xFF) / 255.0,
+            green: Double((hex >> 8) & 0xFF) / 255.0,
+            blue: Double(hex & 0xFF) / 255.0
+        )
+    }
+}
+
+private struct LibraryIconButtonImage: View {
+    let systemName: String
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 20, weight: .regular))
+            .symbolRenderingMode(.monochrome)
+            .foregroundColor(.white.opacity(0.92))
+            .frame(width: LibraryLayout.iconButtonSize, height: LibraryLayout.iconButtonSize)
+    }
+}
+
+private struct LibraryIconButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                Circle()
+                    .fill(configuration.isPressed ? Color.white.opacity(0.06) : Color.clear)
+            )
+            .overlay(
+                Circle()
+                    .stroke(LibraryTheme.iconButtonBorder, lineWidth: 1)
+            )
+    }
+}
+
+private struct PressableScaleButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(.spring(response: 0.3, dampingFraction: 0.85), value: configuration.isPressed)
+    }
+}
+
+private struct ActionTile: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 28, weight: .regular))
+                    .symbolRenderingMode(.monochrome)
+                    .foregroundColor(.white)
+                    .frame(height: 34)
+
+                Spacer(minLength: 4)
+
+                Text(title)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.white)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.86)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .frame(height: LibraryLayout.actionTileHeight)
+            .background(
+                RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous)
+                    .fill(LibraryTheme.tileSurface)
+            )
+            .contentShape(RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous))
+        }
+        .buttonStyle(PressableScaleButtonStyle())
+    }
 }
 
 private struct BookCarouselCard: View {
     let book: EpubBook
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 12) {
             coverImage
-                .frame(width: LibraryLayout.bookCarouselCardWidth)
-                .aspectRatio(2.0 / 3.0, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: .black.opacity(0.4), radius: 8, x: 0, y: 4)
+                .frame(width: LibraryLayout.bookCoverWidth, height: LibraryLayout.bookCardHeight)
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
-            Text(book.title)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.white)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
-                .frame(width: LibraryLayout.bookCarouselCardWidth, alignment: .leading)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(book.title)
+                    .font(LibraryTheme.cardTitleFont)
+                    .foregroundColor(.white)
+                    .lineLimit(3)
+                    .multilineTextAlignment(.leading)
+                    .lineSpacing(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-            if !book.author.isEmpty {
-                Text(book.author)
-                    .font(.system(size: 11))
-                    .foregroundColor(.gray.opacity(0.6))
+                Spacer(minLength: 8)
+
+                Text(book.author.isEmpty ? "Unknown Author" : book.author)
+                    .font(LibraryTheme.captionFont)
+                    .foregroundColor(LibraryTheme.textSecondary)
                     .lineLimit(1)
-                    .frame(width: LibraryLayout.bookCarouselCardWidth, alignment: .leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous)
+                .fill(LibraryTheme.cardSurface)
+        )
+        .contentShape(RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous))
     }
 
     @ViewBuilder
@@ -570,73 +668,63 @@ private struct BookCarouselCard: View {
 
 private struct BookCarouselPlaceholder: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color(white: 0.16))
-                .aspectRatio(2.0 / 3.0, contentMode: .fit)
-                .frame(width: LibraryLayout.bookCarouselCardWidth)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(Color.white.opacity(0.06), lineWidth: 1)
-                )
+                .frame(width: LibraryLayout.bookCoverWidth, height: LibraryLayout.bookCardHeight)
 
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color(white: 0.18))
-                .frame(width: 100, height: 11)
-
-            RoundedRectangle(cornerRadius: 4, style: .continuous)
-                .fill(Color(white: 0.14))
-                .frame(width: 72, height: 9)
+            VStack(alignment: .leading, spacing: 10) {
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 160, height: 16)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color.white.opacity(0.12))
+                    .frame(width: 118, height: 16)
+                Spacer()
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(Color.white.opacity(0.1))
+                    .frame(width: 92, height: 12)
+            }
+            .padding(.vertical, 16)
         }
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous)
+                .fill(LibraryTheme.cardSurface)
+        )
     }
 }
 
 private struct ArticlePreviewCard: View {
     let article: WebArticle
-    let width: CGFloat
     @State private var localCover: UIImage?
-
-    private var heroHeight: CGFloat { (width / LibraryLayout.articleHeroAspect).rounded() }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             heroImage
-                .frame(width: width, height: heroHeight)
+                .frame(maxWidth: .infinity)
+                .frame(height: LibraryLayout.articleHeroHeight)
                 .clipped()
-                .overlay(alignment: .bottomLeading) {
-                    sourceBadge.padding(10)
-                }
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(article.bylineDisplay)
+                    .font(LibraryTheme.captionFont)
+                    .foregroundColor(LibraryTheme.accentByline)
+                    .lineLimit(1)
+
                 Text(article.title)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(LibraryTheme.articleTitleFont)
                     .foregroundColor(.white)
-                    .lineLimit(2)
+                    .lineLimit(3)
                     .multilineTextAlignment(.leading)
+                    .lineSpacing(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
-
-                if !article.previewSnippet.isEmpty {
-                    Text(article.previewSnippet)
-                        .font(.system(size: 13, weight: .regular))
-                        .foregroundColor(Color.white.opacity(0.64))
-                        .lineLimit(3)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
-            .padding(.horizontal, 22)
-            .padding(.top, 20)
-            .padding(.bottom, 22)
-            .frame(width: width, alignment: .leading)
+            .padding(20)
         }
-        .frame(width: width)
-        .background(Color(white: 0.07))
-        .clipShape(RoundedRectangle(cornerRadius: LibraryLayout.articleCornerRadius, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: LibraryLayout.articleCornerRadius, style: .continuous)
-                .stroke(Color.white.opacity(0.08), lineWidth: 0.5)
-        )
-        .shadow(color: .black.opacity(0.35), radius: 14, x: 0, y: 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LibraryTheme.articleSurface)
+        .clipShape(RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous))
         .task(id: article.id) {
             await loadLocalCover()
         }
@@ -668,31 +756,6 @@ private struct ArticlePreviewCard: View {
         }
     }
 
-    @ViewBuilder
-    private var sourceBadge: some View {
-        if let host = article.sourceURL?.displayHost {
-            HStack(spacing: 6) {
-                FaviconView(host: host)
-                    .frame(width: 14, height: 14)
-                Text(host)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(.white)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(Capsule().fill(Color.black.opacity(0.6)))
-        } else {
-            Text("Pasted")
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(0.5)
-                .foregroundColor(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(Color.black.opacity(0.55)))
-        }
-    }
-
     private var heroPlaceholder: some View {
         let colors = deterministicGradient(for: article.title + (article.sourceURL?.host ?? ""))
         return ZStack {
@@ -715,6 +778,19 @@ private struct ArticlePreviewCard: View {
     }
 }
 
+private extension WebArticle {
+    var bylineDisplay: String {
+        let trimmedAuthor = author.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedAuthor.isEmpty {
+            return trimmedAuthor
+        }
+        if let host = sourceURL?.displayHost, !host.isEmpty {
+            return host
+        }
+        return "Ponder"
+    }
+}
+
 private func downsampledImage(at url: URL, maxPixelSize: Int) -> UIImage? {
     let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
     guard let source = CGImageSourceCreateWithURL(url as CFURL, sourceOptions) else { return nil }
@@ -726,61 +802,6 @@ private func downsampledImage(at url: URL, maxPixelSize: Int) -> UIImage? {
     ] as CFDictionary
     guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options) else { return nil }
     return UIImage(cgImage: cgImage)
-}
-
-@MainActor
-private final class FaviconCache {
-    static let shared = FaviconCache()
-    private var images: [String: UIImage] = [:]
-    private var inflight: [String: Task<UIImage?, Never>] = [:]
-
-    func image(for host: String) -> UIImage? { images[host] }
-
-    func load(host: String) async -> UIImage? {
-        if let cached = images[host] { return cached }
-        if let task = inflight[host] { return await task.value }
-        guard let url = URL(string: "https://www.google.com/s2/favicons?domain=\(host)&sz=64") else {
-            return nil
-        }
-        let task = Task<UIImage?, Never> {
-            do {
-                let (data, _) = try await URLSession.shared.data(from: url)
-                return UIImage(data: data)
-            } catch {
-                return nil
-            }
-        }
-        inflight[host] = task
-        let image = await task.value
-        inflight[host] = nil
-        if let image { images[host] = image }
-        return image
-    }
-}
-
-private struct FaviconView: View {
-    let host: String
-    @State private var image: UIImage?
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image).resizable().scaledToFit()
-            } else {
-                Image(systemName: "globe")
-                    .resizable()
-                    .scaledToFit()
-                    .foregroundColor(.white.opacity(0.7))
-            }
-        }
-        .task(id: host) {
-            if let cached = FaviconCache.shared.image(for: host) {
-                image = cached
-                return
-            }
-            image = await FaviconCache.shared.load(host: host)
-        }
-    }
 }
 
 private struct PlaceholderCover: View {
