@@ -65,7 +65,7 @@ extension ScrollTextView {
     }
 
     func titleSize(isPrimary: Bool) -> CGFloat {
-        isPrimary ? readerSettings.titleSize * 2 : readerSettings.titleSize
+        isPrimary ? readerSettings.titleSize * 1.4 : readerSettings.titleSize
     }
 
     func nsHeaderText(_ text: String, size: CGFloat, isPrimary: Bool = false) -> NSAttributedString {
@@ -83,10 +83,19 @@ extension ScrollTextView {
                 font = UIFont.systemFont(ofSize: size, weight: .bold)
             }
         }
+        let para: NSParagraphStyle
+        if isPrimary {
+            let primaryPara = NSMutableParagraphStyle()
+            primaryPara.minimumLineHeight = size * 1.1
+            primaryPara.maximumLineHeight = size * 1.1
+            para = primaryPara
+        } else {
+            para = paragraphStyle(for: size)
+        }
         var attrs: [NSAttributedString.Key: Any] = [
             .font: font,
             .foregroundColor: UIColor(white: 0.92, alpha: 1.0),
-            .paragraphStyle: paragraphStyle(for: size)
+            .paragraphStyle: para
         ]
         if kern != 0 {
             attrs[.kern] = kern
