@@ -642,14 +642,12 @@ private struct ActionTile: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Image(systemName: systemImage)
                     .font(.system(size: 28, weight: .regular))
                     .symbolRenderingMode(.monochrome)
                     .foregroundColor(.white)
                     .frame(height: 34)
-
-                Spacer(minLength: 4)
 
                 Text(title)
                     .font(.system(size: 15, weight: .medium))
