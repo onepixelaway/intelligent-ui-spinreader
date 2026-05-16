@@ -570,7 +570,7 @@ private enum LibraryLayout {
     static let bookCardHeight: CGFloat = 120
     static let bookCardInteriorPadding: CGFloat = 10
     static let bookCoverWidth: CGFloat = 88
-    static let actionTileHeight: CGFloat = 84
+    static let actionTileHeight: CGFloat = 98
     static let iconButtonSize: CGFloat = 44
     static let articleHeroHeight: CGFloat = 160
     static let cornerRadius: CGFloat = 16
@@ -578,12 +578,12 @@ private enum LibraryLayout {
 
 private enum LibraryTheme {
     static let appBackground = Color(hex: 0x0A0A0A)
-    static let cardSurface = Color(hex: 0x18181B).opacity(0.4)
     static let tileSurface = Color(hex: 0x27272A).opacity(0.6)
+    static let cardSurface = Self.tileSurface
+    static let articleSurface = Self.tileSurface
     static let iconButtonBorder = Color(hex: 0x3F3F46).opacity(0.8)
     static let textSecondary = Color(hex: 0xA1A1AA)
     static let accentByline = Color(hex: 0xA1A1AA)
-    static let articleSurface = Color(hex: 0x18181B).opacity(0.4)
 
     static let appTitleFont = Font.custom("DMSans-Black", size: 34)
     static let sectionHeadingFont = Font.custom("DMSans-Black", size: 22)
@@ -645,13 +645,13 @@ private struct ActionTile: View {
         Button(action: action) {
             VStack(spacing: 4) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 28, weight: .regular))
+                    .font(.system(size: 25, weight: .regular))
                     .symbolRenderingMode(.monochrome)
                     .foregroundColor(.white)
                     .frame(height: 34)
 
                 Text(title)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
