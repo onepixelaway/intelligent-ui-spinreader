@@ -591,7 +591,7 @@ private enum LibraryTheme {
     static let appTitleTracking: CGFloat = -0.75
     static let sectionHeadingFont = Font.custom("DMSans-Bold", size: 22)
     static let cardTitleFont = Font.custom("DMSans-Bold", size: 17)
-    static let articleTitleFont = Font.custom("DMSans-Bold", size: 18)
+    static let articleTitleFont = Font.custom("DMSans-Bold", size: 20)
     static let headingTracking: CGFloat = -0.4
     static let captionFont = Font.system(size: 13, weight: .medium)
 }
