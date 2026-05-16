@@ -842,8 +842,7 @@ private struct PlaybackSpeedOverlay: View {
                     .foregroundColor(.white.opacity(0.45))
 
                 Text("Reading Speed")
-                    .font(.custom("DMSans-Bold", size: 24))
-                    .tracking(-0.4)
+                    .dmSansBold(size: 24)
                     .foregroundColor(.white.opacity(0.95))
 
                 Text(PlaybackSpeedPreference.label(for: speed))

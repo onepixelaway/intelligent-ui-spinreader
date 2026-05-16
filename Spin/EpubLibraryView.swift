@@ -578,21 +578,33 @@ private enum LibraryLayout {
     static let cornerRadius: CGFloat = 16
 }
 
+enum AppTypography {
+    static let dmSansBold = "DMSans-Bold"
+    static let dmSansBlack = "DMSans-Black"
+    static let headingTracking: CGFloat = -0.4
+}
+
+extension View {
+    func dmSansBold(size: CGFloat, tracking: CGFloat = AppTypography.headingTracking) -> some View {
+        self
+            .font(.custom(AppTypography.dmSansBold, size: size))
+            .tracking(tracking)
+    }
+}
+
 private enum LibraryTheme {
     static let appBackground = Color(hex: 0x0A0A0A)
-    static let tileSurface = Color(hex: 0x27272A).opacity(0.6)
-    static let cardSurface = Self.tileSurface
-    static let articleSurface = Self.tileSurface
+    static let cardSurface = Color(hex: 0x27272A).opacity(0.6)
     static let iconButtonBorder = Color(hex: 0x3F3F46).opacity(0.8)
     static let textSecondary = Color(hex: 0xA1A1AA)
     static let accentByline = Color(hex: 0xA1A1AA)
 
-    static let appTitleFont = Font.custom("DMSans-Black", size: 34)
+    static let appTitleFont = Font.custom(AppTypography.dmSansBlack, size: 34)
     static let appTitleTracking: CGFloat = -0.75
-    static let sectionHeadingFont = Font.custom("DMSans-Bold", size: 22)
-    static let cardTitleFont = Font.custom("DMSans-Bold", size: 17)
-    static let articleTitleFont = Font.custom("DMSans-Bold", size: 20)
-    static let headingTracking: CGFloat = -0.4
+    static let sectionHeadingFont = Font.custom(AppTypography.dmSansBold, size: 22)
+    static let cardTitleFont = Font.custom(AppTypography.dmSansBold, size: 17)
+    static let articleTitleFont = Font.custom(AppTypography.dmSansBold, size: 20)
+    static let headingTracking = AppTypography.headingTracking
     static let captionFont = Font.system(size: 13, weight: .medium)
 }
 
@@ -655,7 +667,7 @@ private struct ActionTile: View {
                     .frame(height: 34)
 
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(LibraryTheme.captionFont)
                     .foregroundColor(.white)
                     .multilineTextAlignment(.center)
                     .lineLimit(2)
@@ -669,7 +681,7 @@ private struct ActionTile: View {
             .frame(height: LibraryLayout.actionTileHeight)
             .background(
                 RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous)
-                    .fill(LibraryTheme.tileSurface)
+                    .fill(LibraryTheme.cardSurface)
             )
             .contentShape(RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous))
         }
@@ -794,7 +806,7 @@ private struct ArticlePreviewCard: View {
             .padding(20)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LibraryTheme.articleSurface)
+        .background(LibraryTheme.cardSurface)
         .clipShape(RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous))
         .task(id: article.id) {
             await loadLocalCover()
