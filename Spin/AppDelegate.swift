@@ -13,13 +13,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     private func configureNavigationBarAppearance() {
-        let titleFont = UIFont(name: "DMSans-Black", size: 17) ?? UIFont.systemFont(ofSize: 17, weight: .bold)
-        let largeTitleFont = UIFont(name: "DMSans-Black", size: 34) ?? UIFont.systemFont(ofSize: 34, weight: .bold)
+        let titleFont = UIFont(name: "DMSans-Bold", size: 17) ?? UIFont.systemFont(ofSize: 17, weight: .semibold)
+        let largeTitleFont = UIFont(name: "DMSans-Bold", size: 34) ?? UIFont.systemFont(ofSize: 34, weight: .semibold)
 
         let appearance = UINavigationBarAppearance()
         appearance.configureWithDefaultBackground()
-        appearance.titleTextAttributes = [.font: titleFont]
-        appearance.largeTitleTextAttributes = [.font: largeTitleFont]
+        appearance.titleTextAttributes = [.font: titleFont, .kern: -0.4]
+        appearance.largeTitleTextAttributes = [.font: largeTitleFont, .kern: -0.5]
 
         UINavigationBar.appearance().standardAppearance = appearance
         UINavigationBar.appearance().scrollEdgeAppearance = appearance

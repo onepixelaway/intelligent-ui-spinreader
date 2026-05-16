@@ -67,7 +67,8 @@ private struct CompletionSequence: View {
 
             if index < words.count {
                 Text(words[index])
-                    .font(.custom("DMSans-Black", size: 48))
+                    .font(.custom("DMSans-Bold", size: 48))
+                    .tracking(-0.4)
                     .foregroundColor(.white)
                     .opacity(visible ? 1 : 0)
             }

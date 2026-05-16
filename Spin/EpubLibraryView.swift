@@ -203,6 +203,7 @@ struct EpubLibraryView: View {
         HStack(alignment: .center) {
             Text("Ponder")
                 .font(LibraryTheme.appTitleFont)
+                .tracking(LibraryTheme.appTitleTracking)
                 .foregroundColor(.white)
             Spacer(minLength: 12)
             if isJiggling {
@@ -390,6 +391,7 @@ struct EpubLibraryView: View {
     private func sectionHeader(_ title: String) -> some View {
         Text(title)
             .font(LibraryTheme.sectionHeadingFont)
+            .tracking(LibraryTheme.headingTracking)
             .foregroundColor(.white)
             .padding(.horizontal, LibraryLayout.gutter)
     }
@@ -586,9 +588,11 @@ private enum LibraryTheme {
     static let accentByline = Color(hex: 0xA1A1AA)
 
     static let appTitleFont = Font.custom("DMSans-Black", size: 34)
-    static let sectionHeadingFont = Font.custom("DMSans-Black", size: 22)
-    static let cardTitleFont = Font.custom("DMSans-Black", size: 17)
-    static let articleTitleFont = Font.custom("DMSans-Black", size: 18)
+    static let appTitleTracking: CGFloat = -0.75
+    static let sectionHeadingFont = Font.custom("DMSans-Bold", size: 22)
+    static let cardTitleFont = Font.custom("DMSans-Bold", size: 17)
+    static let articleTitleFont = Font.custom("DMSans-Bold", size: 18)
+    static let headingTracking: CGFloat = -0.4
     static let captionFont = Font.system(size: 13, weight: .medium)
 }
 
@@ -688,6 +692,7 @@ private struct BookCarouselCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text(book.title)
                     .font(LibraryTheme.cardTitleFont)
+                    .tracking(LibraryTheme.headingTracking)
                     .foregroundColor(.white)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
@@ -779,6 +784,7 @@ private struct ArticlePreviewCard: View {
 
                 Text(article.title)
                     .font(LibraryTheme.articleTitleFont)
+                    .tracking(LibraryTheme.headingTracking)
                     .foregroundColor(.white)
                     .lineLimit(3)
                     .multilineTextAlignment(.leading)
