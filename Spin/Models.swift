@@ -819,8 +819,15 @@ final class ReaderSpeechCoordinator: NSObject, ObservableObject, @preconcurrency
             .throttle(for: .milliseconds(100), scheduler: DispatchQueue.main, latest: true)
             .sink { [weak self] state in
                 guard let self else { return }
-                if case .downloading(let received, let total) = state {
+                switch state {
+                case .downloading(let received, let total):
                     self.kokoroPreparation = .downloading(received: received, total: total)
+                case .completed:
+                    self.kokoroPreparation = .loadingModel
+                case .failed(let message):
+                    self.kokoroPreparation = .error(message)
+                case .idle:
+                    break
                 }
             }
 

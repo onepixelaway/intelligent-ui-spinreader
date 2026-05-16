@@ -210,7 +210,7 @@ extension ScrollTextView {
             let message = ChatQuery.ChatCompletionMessageParam.user(.init(content: .string(prompt)))
             let query = ChatQuery(messages: [message], model: .gpt3_5Turbo)
             let result = try await openAI.chats(query: query)
-            questionText = result.choices.first?.message.content
+            questionText = result.choices.first?.message.content?.string
         } catch is CancellationError {
         } catch {
             print("Failed to perform OpenAI query: \(error.localizedDescription)")
