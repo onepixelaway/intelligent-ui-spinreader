@@ -2,6 +2,17 @@ import SwiftUI
 import UIKit
 
 extension ScrollTextView {
+    var firstTitleIndex: Int? {
+        items.firstIndex(where: {
+            if case .title = $0 { return true }
+            return false
+        })
+    }
+
+    func isPrimaryTitle(at index: Int) -> Bool {
+        firstTitleIndex == index
+    }
+
     func attributedTextForItem(_ item: ReadableItem) -> NSAttributedString {
         switch item {
         case .paragraph(let text):
@@ -18,10 +29,10 @@ extension ScrollTextView {
 
     // Exact NSAttributedString that HighlightableTextView renders.
     // Returns nil for items that are not rendered via HighlightableTextView.
-    func renderedAttributedText(for item: ReadableItem) -> NSAttributedString? {
+    func renderedAttributedText(for item: ReadableItem, at index: Int) -> NSAttributedString? {
         switch item {
         case .title(let text):
-            return nsStyledText(text, size: readerSettings.titleSize, weight: .bold)
+            return nsHeaderText(text, size: titleSize(isPrimary: isPrimaryTitle(at: index)), isPrimary: isPrimaryTitle(at: index))
         case .byline(let text):
             return nsStyledText(text, size: readerSettings.bylineSize, weight: .semibold)
         case .paragraph(let text):
@@ -29,7 +40,7 @@ extension ScrollTextView {
         case .richParagraph(let rt):
             return nsRichAttributedText(rt, size: readerSettings.paragraphSize)
         case .subheading(let text):
-            return nsStyledText(text, size: readerSettings.titleSize - 4, weight: .bold)
+            return nsHeaderText(text, size: readerSettings.titleSize - 4)
         case .listItem(let text, let ordered, let listIdx):
             let prefix = ordered ? "\(listIdx). " : "\u{2022} "
             return nsStyledText(prefix + text, size: readerSettings.paragraphSize, weight: .regular)
@@ -40,25 +51,63 @@ extension ScrollTextView {
 
     // Text attributes used only for measuring page breaks. This includes custom SwiftUI text
     // renderers like block quotes so they can still avoid mid-line clipping.
-    func paginationAttributedText(for item: ReadableItem) -> NSAttributedString? {
+    func paginationAttributedText(for item: ReadableItem, at index: Int) -> NSAttributedString? {
         switch item {
         case .blockquote(let text), .callout(let text):
             return nsBlockquoteText(text)
         case .paragraphWithFootnotes(let text, _):
             return nsStyledText(text, size: readerSettings.paragraphSize, weight: .regular)
         case .title, .byline, .paragraph, .richParagraph, .subheading, .listItem:
-            return renderedAttributedText(for: item)
+            return renderedAttributedText(for: item, at: index)
         case .image, .code, .divider, .chapterTOC:
             return nil
         }
     }
 
-    private func styledFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
-        var font = UIFont.systemFont(ofSize: size, weight: weight)
-        if let descriptor = font.fontDescriptor.withDesign(readerSettings.fontFamily.uiDesign) {
-            font = UIFont(descriptor: descriptor, size: size)
+    func titleSize(isPrimary: Bool) -> CGFloat {
+        isPrimary ? readerSettings.titleSize * 2 : readerSettings.titleSize
+    }
+
+    func nsHeaderText(_ text: String, size: CGFloat, isPrimary: Bool = false) -> NSAttributedString {
+        let font: UIFont
+        var kern: CGFloat = 0
+        if isPrimary {
+            font = UIFont(name: "DMSans-Black", size: size) ?? UIFont.systemFont(ofSize: size, weight: .black)
+            kern = -0.4
+        } else {
+            switch readerSettings.readerHeaderFont {
+            case .dmSansBold:
+                font = UIFont(name: "DMSans-Bold", size: size) ?? UIFont.systemFont(ofSize: size, weight: .bold)
+                kern = -0.4
+            case .systemDefault:
+                font = UIFont.systemFont(ofSize: size, weight: .bold)
+            }
         }
-        return font
+        var attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor(white: 0.92, alpha: 1.0),
+            .paragraphStyle: paragraphStyle(for: size)
+        ]
+        if kern != 0 {
+            attrs[.kern] = kern
+        }
+        return NSAttributedString(string: text, attributes: attrs)
+    }
+
+    private func styledFont(size: CGFloat, weight: UIFont.Weight) -> UIFont {
+        switch readerSettings.readerBodyFont {
+        case .systemSF:
+            return UIFont.systemFont(ofSize: size, weight: weight)
+        case .systemSerif:
+            var font = UIFont.systemFont(ofSize: size, weight: weight)
+            if let descriptor = font.fontDescriptor.withDesign(.serif) {
+                font = UIFont(descriptor: descriptor, size: size)
+            }
+            return font
+        case .dmSansRegular:
+            let name = weight.rawValue >= UIFont.Weight.semibold.rawValue ? "DMSans-Bold" : "DMSans-Regular"
+            return UIFont(name: name, size: size) ?? UIFont.systemFont(ofSize: size, weight: weight)
+        }
     }
 
     private func paragraphStyle(for size: CGFloat) -> NSParagraphStyle {

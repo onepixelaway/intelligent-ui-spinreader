@@ -138,6 +138,36 @@ enum ReaderLineSpacing: String, CaseIterable, Identifiable {
     }
 }
 
+enum ReaderHeaderFont: String, CaseIterable, Identifiable {
+    case dmSansBold
+    case systemDefault
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .dmSansBold: return "DM Sans"
+        case .systemDefault: return "System"
+        }
+    }
+}
+
+enum ReaderBodyFont: String, CaseIterable, Identifiable {
+    case systemSF
+    case systemSerif
+    case dmSansRegular
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .systemSF: return "SF"
+        case .systemSerif: return "Serif"
+        case .dmSansRegular: return "DM Sans"
+        }
+    }
+}
+
 enum ReaderMargins: String, CaseIterable, Identifiable {
     case narrow
     case normal
@@ -182,6 +212,8 @@ final class ReaderSettings: ObservableObject {
         static let highlightEmojis = "reader.highlightEmojis"
         static let invertTrackpadSwipe = "reader.invertTrackpadSwipe"
         static let invertHighlightSwipe = "reader.invertHighlightSwipe"
+        static let headerFont = "reader.headerFont"
+        static let bodyFont = "reader.bodyFont"
     }
 
     @Published var fontSize: Double {
@@ -252,6 +284,18 @@ final class ReaderSettings: ObservableObject {
             UserDefaults.standard.set(invertHighlightSwipe, forKey: Keys.invertHighlightSwipe)
         }
     }
+    @Published var readerHeaderFont: ReaderHeaderFont {
+        didSet {
+            guard readerHeaderFont != oldValue else { return }
+            UserDefaults.standard.set(readerHeaderFont.rawValue, forKey: Keys.headerFont)
+        }
+    }
+    @Published var readerBodyFont: ReaderBodyFont {
+        didSet {
+            guard readerBodyFont != oldValue else { return }
+            UserDefaults.standard.set(readerBodyFont.rawValue, forKey: Keys.bodyFont)
+        }
+    }
 
     init() {
         let defaults = UserDefaults.standard
@@ -282,6 +326,8 @@ final class ReaderSettings: ObservableObject {
         }
         self.invertTrackpadSwipe = defaults.bool(forKey: Keys.invertTrackpadSwipe)
         self.invertHighlightSwipe = defaults.bool(forKey: Keys.invertHighlightSwipe)
+        self.readerHeaderFont = defaults.string(forKey: Keys.headerFont).flatMap(ReaderHeaderFont.init(rawValue:)) ?? .dmSansBold
+        self.readerBodyFont = defaults.string(forKey: Keys.bodyFont).flatMap(ReaderBodyFont.init(rawValue:)) ?? .systemSF
     }
 
     var titleSize: CGFloat { CGFloat(fontSize) + 9 }

@@ -50,7 +50,7 @@ private struct ReaderAppearanceSettingsContent: View {
             }
 
             sizeSection
-            optionSection("Font", options: ReaderFontFamily.allCases, selection: $settings.fontFamily, label: \.label)
+            typographySection
             optionSection("Line spacing", options: ReaderLineSpacing.allCases, selection: $settings.lineSpacing, label: \.label)
             optionSection("Margins", options: ReaderMargins.allCases, selection: $settings.margins, label: \.label)
             aiQuestionsToggle
@@ -77,6 +77,24 @@ private struct ReaderAppearanceSettingsContent: View {
                 Text("A")
                     .font(.system(size: 22))
                     .foregroundColor(.white.opacity(0.45))
+            }
+        }
+    }
+
+    private var typographySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("Typography")
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Header")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.4))
+                segmentedControl(options: ReaderHeaderFont.allCases, selection: $settings.readerHeaderFont, label: \.label)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Body")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.white.opacity(0.4))
+                segmentedControl(options: ReaderBodyFont.allCases, selection: $settings.readerBodyFont, label: \.label)
             }
         }
     }

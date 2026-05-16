@@ -5,7 +5,8 @@ extension ScrollTextView {
     func readableItemView(_ item: ReadableItem, index: Int) -> some View {
         switch item {
         case .title(let text):
-            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.titleSize, weight: .bold), itemIndex: index)
+            let primary = isPrimaryTitle(at: index)
+            highlightableBlock(text, attributedText: nsHeaderText(text, size: titleSize(isPrimary: primary), isPrimary: primary), itemIndex: index)
         case .byline(let text):
             highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.bylineSize, weight: .semibold), itemIndex: index)
         case .paragraph(let text):
@@ -13,7 +14,7 @@ extension ScrollTextView {
         case .richParagraph(let rt):
             highlightableBlock(rt.attributedString.string, attributedText: nsRichAttributedText(rt, size: readerSettings.paragraphSize), itemIndex: index)
         case .subheading(let text):
-            highlightableBlock(text, attributedText: nsStyledText(text, size: readerSettings.titleSize - 4, weight: .bold), itemIndex: index)
+            highlightableBlock(text, attributedText: nsHeaderText(text, size: readerSettings.titleSize - 4), itemIndex: index)
         case .listItem(let text, let ordered, let listIdx):
             let prefix = ordered ? "\(listIdx). " : "\u{2022} "
             let fullText = prefix + text

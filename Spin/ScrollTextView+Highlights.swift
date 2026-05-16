@@ -190,7 +190,7 @@ extension ScrollTextView {
         let item = items[index]
         guard item.isHighlightableBody || item.isWholeItemHighlightable else { return nil }
 
-        let text = renderedAttributedText(for: item)?.string ?? textForAnalysis(item)
+        let text = renderedAttributedText(for: item, at: index)?.string ?? textForAnalysis(item)
         guard !text.isEmpty else { return nil }
         let cid = contentIDForItem(at: index)
         let sentences = item.isHighlightableBody ? tokenizeSentences(in: text) : []
@@ -469,7 +469,7 @@ extension ScrollTextView {
               frame.height > 0,
               lastPaginationViewportWidth > 0 else { return nil }
         let item = items[itemIndex]
-        guard let attributed = paginationAttributedText(for: item) else { return nil }
+        guard let attributed = paginationAttributedText(for: item, at: itemIndex) else { return nil }
         guard characterIndex >= 0, characterIndex < attributed.length else { return nil }
 
         let width = paginationTextWidth(for: item, viewportWidth: lastPaginationViewportWidth)
@@ -494,7 +494,7 @@ extension ScrollTextView {
               let frame = contentFrame(for: itemIndex),
               frame.height > 0 else { return nil }
         let item = items[itemIndex]
-        guard let attributedText = renderedAttributedText(for: item) else { return nil }
+        guard let attributedText = renderedAttributedText(for: item, at: itemIndex) else { return nil }
 
         let paragraphWidth = viewport.width - 2 * horizontalPadding(for: item)
         guard paragraphWidth > 0 else { return nil }
@@ -585,7 +585,7 @@ extension ScrollTextView {
     func firstVisiblePlaybackLocation(viewport: CGRect) -> PlaybackTextLocation? {
         let candidates = items.indices
             .compactMap { index -> (index: Int, frame: CGRect)? in
-                guard renderedAttributedText(for: items[index]) != nil,
+                guard renderedAttributedText(for: items[index], at: index) != nil,
                       let frame = contentFrame(for: index),
                       frame.height > 0,
                       viewport.intersects(frame) else { return nil }
@@ -599,7 +599,7 @@ extension ScrollTextView {
             }
 
         for candidate in candidates {
-            guard let text = renderedAttributedText(for: items[candidate.index])?.string else { continue }
+            guard let text = renderedAttributedText(for: items[candidate.index], at: candidate.index)?.string else { continue }
             // Items that start at or below the viewport top are read from the first word.
             // Items that extend above the viewport need a per-line lookup; skip the candidate
             // if visibility detection fails so we don't read text that is offscreen.
@@ -629,7 +629,7 @@ extension ScrollTextView {
 
         var segments: [PlaybackTextSegment] = []
         for itemIndex in items.indices where itemIndex >= location.itemIndex {
-            guard let text = renderedAttributedText(for: items[itemIndex])?.string else { continue }
+            guard let text = renderedAttributedText(for: items[itemIndex], at: itemIndex)?.string else { continue }
             let nsText = text as NSString
             guard nsText.length > 0 else { continue }
 
@@ -685,7 +685,7 @@ extension ScrollTextView {
     func playbackHighlightTargetPage(_ highlight: PlaybackTextHighlight, viewport: CGRect) -> Int? {
         guard let range = highlight.wordRange,
               items.indices.contains(highlight.itemIndex),
-              let attributedText = renderedAttributedText(for: items[highlight.itemIndex]),
+              let attributedText = renderedAttributedText(for: items[highlight.itemIndex], at: highlight.itemIndex),
               attributedText.length > 0,
               let frame = contentFrame(for: highlight.itemIndex) else { return nil }
 
@@ -858,7 +858,7 @@ extension ScrollTextView {
         var maxLineY: CGFloat = 0
 
         for itemIndex in items.indices {
-            guard let attributed = renderedAttributedText(for: items[itemIndex]) else { continue }
+            guard let attributed = renderedAttributedText(for: items[itemIndex], at: itemIndex) else { continue }
             let textWidth = viewport.width - 2 * horizontalPadding(for: items[itemIndex])
             let measuredLines = Paginator.measureLines(for: attributed, width: Double(textWidth))
             if measuredLines.count > debugLineCount {

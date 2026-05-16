@@ -277,6 +277,18 @@ struct ScrollTextView: View {
                     viewportWidth: Double(viewportWidth)
                 )
             }
+            .onChange(of: readerSettings.readerHeaderFont) { _, _ in
+                recomputePageStartsWithCurrentFrames(
+                    viewportHeight: Double(viewportHeight),
+                    viewportWidth: Double(viewportWidth)
+                )
+            }
+            .onChange(of: readerSettings.readerBodyFont) { _, _ in
+                recomputePageStartsWithCurrentFrames(
+                    viewportHeight: Double(viewportHeight),
+                    viewportWidth: Double(viewportWidth)
+                )
+            }
             .onChange(of: readerSettings.highlightColors) { _, newValue in
                 if !newValue.contains(selectedHighlightColor) {
                     selectedHighlightColor = newValue.first ?? .yellow

@@ -28,7 +28,7 @@ extension ScrollTextView {
                 guard itemsSnapshot.indices.contains(idx) else { return nil }
                 let item = itemsSnapshot[idx]
                 guard item.isSplittable,
-                      let attributed = paginationAttributedText(for: item) else { return nil }
+                      let attributed = paginationAttributedText(for: item, at: idx) else { return nil }
                 let measuredLines = Paginator.measureLines(
                     for: attributed,
                     width: paginationTextWidth(for: item, viewportWidth: viewportWidth)
