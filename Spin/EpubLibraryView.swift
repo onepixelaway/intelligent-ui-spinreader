@@ -581,8 +581,8 @@ private enum LibraryTheme {
     static let tileSurface = Color(hex: 0x27272A).opacity(0.6)
     static let iconButtonBorder = Color(hex: 0x3F3F46).opacity(0.8)
     static let textSecondary = Color(hex: 0xA1A1AA)
-    static let accentByline = Color(hex: 0xFDE68A).opacity(0.8)
-    static let articleSurface = Color(hex: 0x2A241C)
+    static let accentByline = Color(hex: 0xA1A1AA)
+    static let articleSurface = Color(hex: 0x18181B).opacity(0.4)
 
     static let appTitleFont = Font.system(size: 34, weight: .bold)
     static let sectionHeadingFont = Font.system(size: 22, weight: .bold)
