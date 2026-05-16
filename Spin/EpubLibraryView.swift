@@ -585,10 +585,10 @@ private enum LibraryTheme {
     static let accentByline = Color(hex: 0xA1A1AA)
     static let articleSurface = Color(hex: 0x18181B).opacity(0.4)
 
-    static let appTitleFont = Font.system(size: 34, weight: .bold)
-    static let sectionHeadingFont = Font.system(size: 22, weight: .bold)
-    static let cardTitleFont = Font.system(size: 17, weight: .semibold)
-    static let articleTitleFont = Font.system(size: 18, weight: .semibold)
+    static let appTitleFont = Font.custom("DMSans-Black", size: 34)
+    static let sectionHeadingFont = Font.custom("DMSans-Black", size: 22)
+    static let cardTitleFont = Font.custom("DMSans-Black", size: 17)
+    static let articleTitleFont = Font.custom("DMSans-Black", size: 18)
     static let captionFont = Font.system(size: 13, weight: .medium)
 }
 

@@ -14,7 +14,7 @@ struct HighlightsListView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("Highlights")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(.custom("DMSans-Black", size: 17))
                     .foregroundColor(.white)
                 Spacer()
                 Button { dismiss() } label: {

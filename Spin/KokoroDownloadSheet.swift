@@ -33,7 +33,7 @@ struct KokoroDownloadSheet: View {
         case .awaitingDownloadConsent:
             VStack(spacing: 12) {
                 Text("Kokoro TTS")
-                    .font(.system(size: 22, weight: .semibold))
+                    .font(.custom("DMSans-Black", size: 22))
                     .foregroundColor(.white)
                 Text("This neural voice requires a one-time download of the Kokoro model (~312 MB). Use Wi-Fi for the best experience.")
                     .font(.system(size: 14))
@@ -60,7 +60,7 @@ struct KokoroDownloadSheet: View {
         case .downloading(let received, let total):
             VStack(spacing: 16) {
                 Text("Downloading model")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.custom("DMSans-Black", size: 18))
                     .foregroundColor(.white)
 
                 ProgressView(value: progressValue(received: received, total: total))
@@ -93,7 +93,7 @@ struct KokoroDownloadSheet: View {
                     .font(.system(size: 32))
                     .foregroundColor(.orange.opacity(0.85))
                 Text("Download failed")
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(.custom("DMSans-Black", size: 18))
                     .foregroundColor(.white)
                 Text(message)
                     .font(.system(size: 13))

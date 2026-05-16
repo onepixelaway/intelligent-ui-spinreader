@@ -67,7 +67,7 @@ private struct CompletionSequence: View {
 
             if index < words.count {
                 Text(words[index])
-                    .font(.system(size: 48, weight: .heavy))
+                    .font(.custom("DMSans-Black", size: 48))
                     .foregroundColor(.white)
                     .opacity(visible ? 1 : 0)
             }
@@ -117,7 +117,7 @@ private struct SplashScreen: View {
 
             VStack(spacing: 14) {
                 Text("Ponder")
-                    .font(.system(size: 60, weight: .heavy, design: .default))
+                    .font(.custom("DMSans-Black", size: 60))
                     .foregroundColor(.white)
                     .tracking(-1)
 

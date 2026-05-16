@@ -37,7 +37,7 @@ private struct ReaderAppearanceSettingsContent: View {
             if let dismissAction {
                 HStack {
                     Text("Reader")
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.custom("DMSans-Black", size: 17))
                         .foregroundColor(.white)
                     Spacer()
                     Button(action: dismissAction) {

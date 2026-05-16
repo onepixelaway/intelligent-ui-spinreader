@@ -70,7 +70,7 @@ struct BrowserView: View {
     private var header: some View {
         ZStack {
             Text("Save Article from Web")
-                .font(.system(size: 17, weight: .bold))
+                .font(.custom("DMSans-Black", size: 17))
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity, alignment: .center)
 
