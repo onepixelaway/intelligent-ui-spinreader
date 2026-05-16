@@ -568,6 +568,7 @@ private enum LibraryLayout {
     static let floatingSkyHeightRatio: CGFloat = 0.67
     static let scrollCoordinateSpaceName = "library-scroll"
     static let bookCardHeight: CGFloat = 120
+    static let bookCardInteriorPadding: CGFloat = 10
     static let bookCoverWidth: CGFloat = 88
     static let actionTileHeight: CGFloat = 84
     static let iconButtonSize: CGFloat = 44
@@ -678,7 +679,10 @@ private struct BookCarouselCard: View {
     var body: some View {
         HStack(spacing: 12) {
             coverImage
-                .frame(width: LibraryLayout.bookCoverWidth, height: LibraryLayout.bookCardHeight)
+                .frame(
+                    width: LibraryLayout.bookCoverWidth,
+                    height: LibraryLayout.bookCardHeight - (LibraryLayout.bookCardInteriorPadding * 2)
+                )
                 .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
 
             VStack(alignment: .leading, spacing: 0) {
@@ -690,7 +694,7 @@ private struct BookCarouselCard: View {
                     .lineSpacing(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer(minLength: 8)
+                Spacer(minLength: 10)
 
                 Text(book.author.isEmpty ? "Unknown Author" : book.author)
                     .font(LibraryTheme.captionFont)
@@ -700,6 +704,7 @@ private struct BookCarouselCard: View {
             }
         }
         .padding(.horizontal, 12)
+        .padding(.vertical, LibraryLayout.bookCardInteriorPadding)
         .background(
             RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous)
                 .fill(LibraryTheme.cardSurface)
@@ -728,7 +733,10 @@ private struct BookCarouselPlaceholder: View {
         HStack(spacing: 12) {
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(Color(white: 0.16))
-                .frame(width: LibraryLayout.bookCoverWidth, height: LibraryLayout.bookCardHeight)
+                .frame(
+                    width: LibraryLayout.bookCoverWidth,
+                    height: LibraryLayout.bookCardHeight - (LibraryLayout.bookCardInteriorPadding * 2)
+                )
 
             VStack(alignment: .leading, spacing: 10) {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
@@ -742,9 +750,9 @@ private struct BookCarouselPlaceholder: View {
                     .fill(Color.white.opacity(0.1))
                     .frame(width: 92, height: 12)
             }
-            .padding(.vertical, 16)
         }
         .padding(.horizontal, 12)
+        .padding(.vertical, LibraryLayout.bookCardInteriorPadding)
         .background(
             RoundedRectangle(cornerRadius: LibraryLayout.cornerRadius, style: .continuous)
                 .fill(LibraryTheme.cardSurface)
