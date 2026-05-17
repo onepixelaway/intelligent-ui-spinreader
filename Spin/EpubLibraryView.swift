@@ -1452,6 +1452,25 @@ private enum FloatingBooksSceneFactory {
         foreEdge.position = SCNVector3(0.83, -0.02, 0)
         root.addChildNode(foreEdge)
 
+        // Page line separators on the fore-edge and top/bottom edges
+        let pageLineColor = pageColor.scaledBrightness(0.62)
+        let pageLineMaterial = material(diffuse: pageLineColor, roughness: 0.9, specularIntensity: 0.02)
+        let pageCount = 22
+        let pageHeight: CGFloat = 2.17
+        let lineThickness: CGFloat = 0.009
+        let spacing = pageHeight / CGFloat(pageCount)
+        for i in 0..<pageCount {
+            let yOffset = -pageHeight / 2 + spacing * CGFloat(i)
+            // Fore-edge lines
+            let foreLine = boxNode(width: 0.048, height: lineThickness, length: 0.27, chamferRadius: 0, materials: [pageLineMaterial])
+            foreLine.position = SCNVector3(0.83, yOffset - 0.02, 0)
+            root.addChildNode(foreLine)
+            // Top page face lines
+            let topLine = boxNode(width: 1.46, height: lineThickness, length: 0.30, chamferRadius: 0, materials: [pageLineMaterial])
+            topLine.position = SCNVector3(0.09, yOffset - 0.02, 0)
+            root.addChildNode(topLine)
+        }
+
         let groove = boxNode(width: 0.026, height: 2.26, length: 0.016, chamferRadius: 0.008, materials: [trimMaterial])
         groove.position = SCNVector3(-0.61, 0, 0.222)
         root.addChildNode(groove)
