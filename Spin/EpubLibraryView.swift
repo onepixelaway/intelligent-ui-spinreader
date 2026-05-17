@@ -1443,12 +1443,13 @@ private enum FloatingBooksSceneFactory {
         spine.position = SCNVector3(-0.81, 0, 0)
         root.addChildNode(spine)
 
+        let foreEdgeMaterial = material(diffuse: stripeTexture, roughness: 0.84, specularIntensity: 0.06)
         let foreEdge = boxNode(
             width: 0.045,
             height: 2.17,
             length: 0.27,
             chamferRadius: 0.018,
-            materials: [pageMaterial]
+            materials: [foreEdgeMaterial]
         )
         foreEdge.position = SCNVector3(0.83, -0.02, 0)
         root.addChildNode(foreEdge)
@@ -1510,15 +1511,15 @@ private enum FloatingBooksSceneFactory {
     }
 
     private static func makePageStripeTexture(baseColor: UIColor, lineCount: Int) -> UIImage {
-        let size = CGSize(width: 64, height: 512)
+        let size = CGSize(width: 64, height: 1024)
         let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { ctx in
             baseColor.setFill()
             ctx.fill(CGRect(origin: .zero, size: size))
-            let lineColor = baseColor.scaledBrightness(0.52)
+            let lineColor = baseColor.scaledBrightness(0.32)
             lineColor.setFill()
             let stripeHeight = size.height / CGFloat(lineCount)
-            let lineThickness = max(1.0, stripeHeight * 0.28)
+            let lineThickness = max(1.5, stripeHeight * 0.35)
             for i in 0..<lineCount {
                 let y = CGFloat(i) * stripeHeight
                 ctx.fill(CGRect(x: 0, y: y, width: size.width, height: lineThickness))
