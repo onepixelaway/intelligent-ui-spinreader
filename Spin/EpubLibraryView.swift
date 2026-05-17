@@ -1400,7 +1400,7 @@ private enum FloatingBooksSceneFactory {
             specularIntensity: 0
         )
         let pageMaterial = material(diffuse: pageColor, roughness: 0.82, specularIntensity: 0.08)
-        let stripeTexture = Self.makePageStripeTexture(baseColor: pageColor, lineCount: 40)
+        let stripeTexture = Self.makePageStripeTexture(baseColor: pageColor, lineCount: 6)
         let pageSideMaterial = material(diffuse: stripeTexture, roughness: 0.84, specularIntensity: 0.06)
 
         let pages = boxNode(
@@ -1522,7 +1522,7 @@ private enum FloatingBooksSceneFactory {
             let lineColor = baseColor.scaledBrightness(0.32)
             lineColor.setFill()
             let stripeWidth = size.width / CGFloat(lineCount)
-            let lineThickness = max(1.5, stripeWidth * 0.35)
+            let lineThickness = max(1.0, stripeWidth * 0.15)
             for i in 0..<lineCount {
                 let x = CGFloat(i) * stripeWidth
                 ctx.fill(CGRect(x: x, y: 0, width: lineThickness, height: size.height))
