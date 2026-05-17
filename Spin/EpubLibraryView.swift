@@ -1268,7 +1268,7 @@ private enum FloatingBooksSceneFactory {
         let key = SCNNode()
         key.light = SCNLight()
         key.light?.type = .directional
-        key.light?.color = UIColor(red: 0.88, green: 0.92, blue: 1, alpha: 1)
+        key.light?.color = UIColor(red: 0.96, green: 0.96, blue: 0.96, alpha: 1)
         key.light?.intensity = 430
         key.light?.castsShadow = true
         key.light?.shadowRadius = 9
@@ -1278,7 +1278,7 @@ private enum FloatingBooksSceneFactory {
         let rim = SCNNode()
         rim.light = SCNLight()
         rim.light?.type = .omni
-        rim.light?.color = UIColor(red: 0.73, green: 0.82, blue: 1, alpha: 1)
+        rim.light?.color = UIColor(red: 0.82, green: 0.82, blue: 0.82, alpha: 1)
         rim.light?.intensity = 140
         rim.position = SCNVector3(-3.3, -2.0, 3.6)
         scene.rootNode.addChildNode(rim)
@@ -1339,7 +1339,7 @@ private enum FloatingBooksSceneFactory {
                 scale = Float(0.22 + random(&state) * 0.18)
             }
 
-            let palette: [UInt32] = [0x111821, 0x18202A, 0x1D242C, 0x151C24, 0x20262E, 0x121619]
+            let palette: [UInt32] = [0x1E1E1E, 0x242424, 0x2A2A2A, 0x202020, 0x282828, 0x1C1C1C]
             let phase = Float(index) / Float(count)
             let xRange: CGFloat = isForeground ? 5.7 : (isFar ? 7.2 : 6.4)
             let spinDirection: Float = index.isMultiple(of: 2) ? 1 : -1
@@ -1380,11 +1380,11 @@ private enum FloatingBooksSceneFactory {
 
         _ = seed
         let coverMaterial = material(
-            diffuse: coverColor.scaledBrightness(0.72),
+            diffuse: coverColor.scaledBrightness(0.90),
             roughness: 1,
-            diffuseIntensity: 0.4,
+            diffuseIntensity: 0.6,
             specularIntensity: 0,
-            multiply: UIColor(white: 0.62, alpha: 1)
+            multiply: UIColor(white: 0.75, alpha: 1)
         )
         let spineMaterial = material(
             diffuse: spineColor.scaledBrightness(0.7),
