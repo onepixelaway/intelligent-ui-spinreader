@@ -1252,7 +1252,7 @@ private enum FloatingBooksSceneFactory {
         camera.fieldOfView = 46
         camera.zNear = 0.1
         camera.zFar = 100
-        camera.wantsHDR = true
+        camera.wantsHDR = false
         camera.wantsExposureAdaptation = false
         cameraNode.camera = camera
         cameraNode.position = SCNVector3(0, 0, 8.2)
