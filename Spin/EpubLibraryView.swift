@@ -1511,18 +1511,21 @@ private enum FloatingBooksSceneFactory {
     }
 
     private static func makePageStripeTexture(baseColor: UIColor, lineCount: Int) -> UIImage {
-        let size = CGSize(width: 64, height: 1024)
+        // SceneKit maps U→Z (depth) and V→Y (height) on the +X fore-edge face,
+        // so vertical stripes in the image (constant X bands) appear as
+        // horizontal page lines on the face.
+        let size = CGSize(width: 1024, height: 64)
         let renderer = UIGraphicsImageRenderer(size: size)
         return renderer.image { ctx in
             baseColor.setFill()
             ctx.fill(CGRect(origin: .zero, size: size))
             let lineColor = baseColor.scaledBrightness(0.32)
             lineColor.setFill()
-            let stripeHeight = size.height / CGFloat(lineCount)
-            let lineThickness = max(1.5, stripeHeight * 0.35)
+            let stripeWidth = size.width / CGFloat(lineCount)
+            let lineThickness = max(1.5, stripeWidth * 0.35)
             for i in 0..<lineCount {
-                let y = CGFloat(i) * stripeHeight
-                ctx.fill(CGRect(x: 0, y: y, width: size.width, height: lineThickness))
+                let x = CGFloat(i) * stripeWidth
+                ctx.fill(CGRect(x: x, y: 0, width: lineThickness, height: size.height))
             }
         }
     }
