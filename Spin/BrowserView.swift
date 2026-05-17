@@ -55,8 +55,9 @@ struct BrowserView: View {
             if let initial = initialURL {
                 addressText = initial.absoluteString
                 model.load(url: initial)
-            } else {
-                Task { await prefillFromClipboardIfAvailable() }
+            } else if let pasted = clipboardURL() {
+                addressText = pasted.absoluteString
+                model.load(url: pasted)
             }
         }
         .onChange(of: model.currentURL) { _, newURL in
@@ -222,28 +223,10 @@ struct BrowserView: View {
             ?? URL(string: "https://www.google.com")!
     }
 
-    private func prefillFromClipboardIfAvailable() async {
-        let hasURL = await withCheckedContinuation { continuation in
-            UIPasteboard.general.detectPatterns(for: [.probableWebURL]) { result in
-                switch result {
-                case .success(let patterns):
-                    continuation.resume(returning: patterns.contains(.probableWebURL))
-                case .failure:
-                    continuation.resume(returning: false)
-                }
-            }
-        }
-        guard hasURL, let url = clipboardURL() else { return }
-        addressText = url.absoluteString
-        model.load(url: url)
-    }
-
     private func clipboardURL() -> URL? {
         let pb = UIPasteboard.general
-        let candidate: URL? = pb.hasURLs
-            ? pb.url
-            : pb.string.flatMap { URL(string: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-        guard let url = candidate, let scheme = url.scheme?.lowercased(),
+        guard pb.hasURLs, let url = pb.url,
+              let scheme = url.scheme?.lowercased(),
               scheme == "http" || scheme == "https" else { return nil }
         return url
     }
