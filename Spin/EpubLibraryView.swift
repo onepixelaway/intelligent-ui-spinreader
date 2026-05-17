@@ -1400,7 +1400,8 @@ private enum FloatingBooksSceneFactory {
             specularIntensity: 0
         )
         let pageMaterial = material(diffuse: pageColor, roughness: 0.82, specularIntensity: 0.08)
-        let pageSideMaterial = material(diffuse: pageColor.scaledBrightness(0.82), roughness: 0.84, specularIntensity: 0.06)
+        let stripeTexture = Self.makePageStripeTexture(baseColor: pageColor, lineCount: 40)
+        let pageSideMaterial = material(diffuse: stripeTexture, roughness: 0.84, specularIntensity: 0.06)
 
         let pages = boxNode(
             width: 1.46,
@@ -1452,19 +1453,6 @@ private enum FloatingBooksSceneFactory {
         foreEdge.position = SCNVector3(0.83, -0.02, 0)
         root.addChildNode(foreEdge)
 
-        // Page line separators on the fore-edge only (stacked along height, running in Z)
-        let pageLineColor = pageColor.scaledBrightness(0.58)
-        let pageLineMaterial = material(diffuse: pageLineColor, roughness: 0.9, specularIntensity: 0.02)
-        let pageCount = 28
-        let pageHeight: CGFloat = 2.17
-        let lineThickness: CGFloat = 0.008
-        let spacing = pageHeight / CGFloat(pageCount)
-        for i in 0..<pageCount {
-            let yOffset = -pageHeight / 2 + spacing * CGFloat(i)
-            let foreLine = boxNode(width: 0.01, height: lineThickness, length: 0.28, chamferRadius: 0, materials: [pageLineMaterial])
-            foreLine.position = SCNVector3(0.835, yOffset - 0.02, 0)
-            root.addChildNode(foreLine)
-        }
 
         let groove = boxNode(width: 0.026, height: 2.26, length: 0.016, chamferRadius: 0.008, materials: [trimMaterial])
         groove.position = SCNVector3(-0.61, 0, 0.222)
@@ -1519,6 +1507,23 @@ private enum FloatingBooksSceneFactory {
 
         node.runAction(.repeatForever(rise), forKey: "floating-rise")
         node.runAction(.repeatForever(rotation), forKey: "floating-rotation")
+    }
+
+    private static func makePageStripeTexture(baseColor: UIColor, lineCount: Int) -> UIImage {
+        let size = CGSize(width: 64, height: 512)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        return renderer.image { ctx in
+            baseColor.setFill()
+            ctx.fill(CGRect(origin: .zero, size: size))
+            let lineColor = baseColor.scaledBrightness(0.52)
+            lineColor.setFill()
+            let stripeHeight = size.height / CGFloat(lineCount)
+            let lineThickness = max(1.0, stripeHeight * 0.28)
+            for i in 0..<lineCount {
+                let y = CGFloat(i) * stripeHeight
+                ctx.fill(CGRect(x: 0, y: y, width: size.width, height: lineThickness))
+            }
+        }
     }
 
     private static func material(
